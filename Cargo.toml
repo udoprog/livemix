@@ -1,0 +1,9 @@
+[package]
+name = "livemix"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pw-sys = { package = "pipewire-sys", version = "0.8.0" }
+spa-sys = { package = "libspa-sys", version = "0.8.0" }
+libspa = "0.8.0"
