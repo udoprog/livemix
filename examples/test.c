@@ -17,7 +17,7 @@
  
 #define BUFFER_SAMPLES  128
 #define MAX_BUFFERS     32
-#define SINE_FREQ       (440 * 2)
+#define SINE_FREQ       440
 #define VOLUME          0.01
 
 PW_LOG_TOPIC_STATIC(livemix, "livemix");
@@ -81,6 +81,7 @@ static void update_volume(struct data *data)
         spa_pod_builder_pop(&b, &f[0]);
  
         data->volume_accum += M_PI_M2f / 1000.0f;
+
         if (data->volume_accum >= M_PI_M2f)
                 data->volume_accum -= M_PI_M2f;
 }
@@ -153,7 +154,7 @@ static int impl_port_enum_params(void *object, int seq,
                                  uint32_t id, uint32_t start, uint32_t num,
                                  const struct spa_pod *filter)
 {
-        pw_log_info("port_enum_params: direction:%d, port_id:%d, id:%d", direction, port_id, id);
+        pw_log_trace("port_enum_params: direction:%d, port_id:%d, id:%d", direction, port_id, id);
 
         struct data *d = object;
         struct spa_pod *param;
@@ -178,10 +179,15 @@ static int impl_port_enum_params(void *object, int seq,
                 param = spa_pod_builder_add_object(&b,
                         SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
                         SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_dsp),
-                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32P),
-                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(1),
-                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(48000));
+                        SPA_FORMAT_mediaSubtype,   SPA_POD_CHOICE_ENUM_Id(2, SPA_MEDIA_SUBTYPE_raw, SPA_MEDIA_SUBTYPE_dsp),
+                        SPA_FORMAT_AUDIO_format,   SPA_POD_CHOICE_ENUM_Id(5,
+                                                        SPA_AUDIO_FORMAT_S16,
+                                                        SPA_AUDIO_FORMAT_S16P,
+                                                        SPA_AUDIO_FORMAT_S16,
+                                                        SPA_AUDIO_FORMAT_F32P,
+                                                        SPA_AUDIO_FORMAT_F32),
+                        SPA_FORMAT_AUDIO_channels, SPA_POD_CHOICE_RANGE_Int(2, 1, INT32_MAX),
+                        SPA_FORMAT_AUDIO_rate,     SPA_POD_CHOICE_RANGE_Int(44100, 1, INT32_MAX));
                 break;
  
         case SPA_PARAM_Format:
@@ -357,7 +363,7 @@ static inline void reuse_buffer(struct data *d, uint32_t id)
         pw_log_trace("export-source %p: recycle buffer %d", d, id);
         spa_list_append(&d->empty, &d->buffers[id].link);
 }
- 
+
 static int impl_port_reuse_buffer(void *object, uint32_t port_id, uint32_t buffer_id)
 {
         pw_log_info("port_reuse_buffer");
@@ -368,6 +374,8 @@ static int impl_port_reuse_buffer(void *object, uint32_t port_id, uint32_t buffe
 
 static void fill_s16(struct data *d, void *dest, int avail)
 {
+        pw_log_trace("fill_s16 channels=%d, rate=%d, avail=%d", d->format.channels, d->format.rate, avail);
+
         int16_t *dst = dest;
         int n_samples = avail / (sizeof(int16_t) * d->format.channels);
         int i;
@@ -376,7 +384,7 @@ static void fill_s16(struct data *d, void *dest, int avail)
         for (i = 0; i < n_samples; i++) {
                 int16_t val;
  
-                d->accumulator += M_PI_M2f * SINE_FREQ / d->format.rate;
+                d->accumulator += (M_PI_M2f * SINE_FREQ) / d->format.rate;
                 if (d->accumulator >= M_PI_M2f)
                         d->accumulator -= M_PI_M2f;
  
@@ -389,6 +397,8 @@ static void fill_s16(struct data *d, void *dest, int avail)
 
 static void fill_f32(struct data *d, void *dest, int avail)
 {
+        pw_log_trace("fill_f32 channels=%d, rate=%d, avail=%d", d->format.channels, d->format.rate, avail);
+
         float *dst = dest;
         int n_samples = avail / (sizeof(float) * d->format.channels);
         int i;
@@ -397,20 +407,22 @@ static void fill_f32(struct data *d, void *dest, int avail)
         for (i = 0; i < n_samples; i++) {
                 float val;
  
-                d->accumulator += M_PI_M2f * SINE_FREQ / d->format.rate;
+                d->accumulator += (M_PI_M2f * SINE_FREQ) / d->format.rate;
+
                 if (d->accumulator >= M_PI_M2f)
                         d->accumulator -= M_PI_M2f;
  
                 val = sinf(d->accumulator) * VOLUME;
  
-                for (c = 0; c < d->format.channels; c++)
+                for (c = 0; c < d->format.channels; c++) {
                         *dst++ = val;
+                }
         }
 }
 
 static void fill_f32_planar(struct data *d, void *dest, int avail)
 {
-        pw_log_info("fill_f32_planar channels=%d, rate=%d, avail=%d", d->format.channels, d->format.rate, avail);
+        pw_log_trace("fill_f32_planar channels=%d, rate=%d, avail=%d", d->format.channels, d->format.rate, avail);
 
         float *dst = dest;
         int n_samples = avail / sizeof(float);
@@ -422,7 +434,7 @@ static void fill_f32_planar(struct data *d, void *dest, int avail)
         for (i = 0; i < until; i++) {
                 float val;
  
-                d->accumulator += M_PI_M2f * SINE_FREQ / d->format.rate;
+                d->accumulator += (M_PI_M2f * SINE_FREQ) / d->format.rate;
 
                 if (d->accumulator >= M_PI_M2f)
                         d->accumulator -= M_PI_M2f;
@@ -450,16 +462,18 @@ static int impl_node_process(void *object)
         uint32_t filled, offset;
         struct spa_data *od;
 
-        pw_log_info("process channels=%d, rate=%d", d->format.channels, d->format.rate);
+        pw_log_trace("process channels=%d, rate=%d", d->format.channels, d->format.rate);
  
         if (io->buffer_id < d->n_buffers) {
                 reuse_buffer(d, io->buffer_id);
                 io->buffer_id = SPA_ID_INVALID;
         }
+
         if (spa_list_is_empty(&d->empty)) {
                 pw_log_error("export-source %p: out of buffers", d);
                 return -EPIPE;
         }
+
         b = spa_list_first(&d->empty, struct buffer, link);
         spa_list_remove(&b->link);
  
@@ -492,7 +506,7 @@ static int impl_node_process(void *object)
         io->buffer_id = b->id;
         io->status = SPA_STATUS_HAVE_DATA;
  
-        // update_volume(d);
+        update_volume(d);
  
         return SPA_STATUS_HAVE_DATA;
 }
