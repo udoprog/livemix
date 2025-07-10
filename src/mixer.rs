@@ -1,9 +1,12 @@
+use core::cell::UnsafeCell;
+use core::f32::consts::PI;
 use core::ffi::{CStr, c_char, c_int, c_void};
 use core::mem;
+use core::mem::MaybeUninit;
 use core::pin::pin;
 use core::ptr;
-use std::f32::consts::PI;
-use std::mem::MaybeUninit;
+use core::ptr::NonNull;
+use std::pin::{self, Pin};
 
 use pw_sys::pw_stream_state;
 use spa_sys::spa_pod;
@@ -250,17 +253,85 @@ pub enum Task {
 struct RxData {
     rx: UnboundedReceiver<Task>,
     core: &'static pw::Core,
+    state: NonNull<MixerState>,
 }
 
 fn on_rx(data: *mut c_void, count: u64) {
     let data = unsafe { &mut *(data.cast::<RxData>()) };
+    let state = unsafe { data.state.as_mut() };
 
     while let Ok(task) = data.rx.try_recv() {
         tracing::info!("{task:?}");
 
         match task {
             Task::AddPlaybackStream => {
-                let stream = data.core.new_stream(c"audio-playback", pw::StreamKind::AudioPlayback);
+                let stream = data
+                    .core
+                    .new_stream(c"audio-playback", pw::StreamKind::AudioPlayback);
+
+                let stream_data = Box::new(PlaybackData {
+                    stream,
+                    count: 0,
+                    accumulator: 0.0,
+                });
+
+                let mut stream_listener = Box::pin(spa::Hook::empty());
+                let events = Box::pin(pw::StreamEvents::new().process(on_process_playback));
+
+                unsafe {
+                    stream.add_listener(stream_listener.as_mut(), events.as_ref(), &*stream_data);
+                }
+
+                // buffer and stream setup.
+                let mut buffer = Box::new([0u8; 1024]);
+
+                let mut builder = spa_sys::spa_pod_builder {
+                    data: buffer.as_mut_ptr().cast(),
+                    size: buffer.len() as _,
+                    _padding: 0,
+                    state: spa_sys::spa_pod_builder_state {
+                        offset: 0,
+                        flags: 0,
+                        frame: ptr::null_mut(),
+                    },
+                    callbacks: spa_sys::spa_callbacks {
+                        funcs: ptr::null(),
+                        data: ptr::null_mut(),
+                    },
+                };
+
+                let audio_info = spa_sys::spa_audio_info_raw {
+                    format: spa::AudioFormat::S16.into_raw(),
+                    flags: 0,
+                    rate: DEFAULT_RATE,
+                    channels: DEFAULT_CHANNELS,
+                    position: [0; 64],
+                };
+
+                unsafe {
+                    let info = spa_sys::spa_format_audio_raw_build(
+                        &mut builder,
+                        spa_sys::SPA_PARAM_EnumFormat,
+                        &audio_info,
+                    );
+
+                    let mut params: [*const spa_pod; 1] = [info];
+
+                    stream.connect(
+                        spa_sys::SPA_DIRECTION_OUTPUT,
+                        pw::ID_ANY,
+                        pw::StreamFlags::MAP_BUFFERS,
+                        &mut params,
+                    );
+                }
+
+                state.playback.push(PlaybackState {
+                    stream_data,
+                    stream_listener,
+                    events,
+                    buffer,
+                    stream,
+                });
             }
             Task::AddCaptureStream => {}
         }
@@ -318,10 +389,25 @@ pub fn setup() -> (Handle, Mixer) {
     (handle, mixer)
 }
 
+struct PlaybackState {
+    stream_data: Box<PlaybackData>,
+    stream_listener: Pin<Box<spa::Hook>>,
+    events: Pin<Box<pw::StreamEvents>>,
+    buffer: Box<[u8; 1024]>,
+    stream: &'static pw::Stream,
+}
+
+#[derive(Default)]
+struct MixerState {
+    playback: Vec<PlaybackState>,
+}
+
 impl Mixer {
     /// Run the mixer.
     pub fn run(self) {
         tracing::info!("{:?}", std::thread::current().id());
+
+        let mut state = MixerState::default();
 
         unsafe {
             let lp = self.main_loop.get_loop();
@@ -330,7 +416,11 @@ impl Mixer {
             let core = context.connect();
             let registry = core.registry();
 
-            let mut rx_data = RxData { rx: self.rx, core };
+            let mut rx_data = RxData {
+                rx: self.rx,
+                core,
+                state: NonNull::from(&mut state),
+            };
 
             self.rx_context.write(RxIndirect {
                 f: on_rx,
@@ -347,63 +437,6 @@ impl Mixer {
                     .global_remove(registry_event_global_remove)
             );
             registry.add_listener(registry_listener.as_mut(), events.as_ref(), &custom_data);
-
-            let stream = core.new_stream(c"audio-playback", pw::StreamKind::AudioPlayback);
-
-            let stream_data = PlaybackData {
-                stream,
-                count: 0,
-                accumulator: 0.0,
-            };
-
-            let mut playback_stream_listener = pin!(spa::Hook::empty());
-
-            let events = pin!(pw::StreamEvents::new().process(on_process_playback));
-
-            stream.add_listener(
-                playback_stream_listener.as_mut(),
-                events.as_ref(),
-                &stream_data,
-            );
-
-            // buffer and stream setup.
-            let mut buffer = [0u8; 1024];
-
-            let mut b = spa_sys::spa_pod_builder {
-                data: buffer.as_mut_ptr().cast(),
-                size: buffer.len() as _,
-                _padding: 0,
-                state: spa_sys::spa_pod_builder_state {
-                    offset: 0,
-                    flags: 0,
-                    frame: ptr::null_mut(),
-                },
-                callbacks: spa_sys::spa_callbacks {
-                    funcs: ptr::null(),
-                    data: ptr::null_mut(),
-                },
-            };
-
-            let audio_info = spa_sys::spa_audio_info_raw {
-                format: spa::AudioFormat::S16.into_raw(),
-                flags: 0,
-                rate: DEFAULT_RATE,
-                channels: DEFAULT_CHANNELS,
-                position: [0; 64],
-            };
-
-            let mut params: [*const spa_pod; 1] = [spa_sys::spa_format_audio_raw_build(
-                &mut b,
-                spa_sys::SPA_PARAM_EnumFormat,
-                &audio_info,
-            )];
-
-            stream.connect(
-                spa_sys::SPA_DIRECTION_OUTPUT,
-                pw::ID_ANY,
-                pw::StreamFlags::MAP_BUFFERS,
-                &mut params,
-            );
 
             let stream = core.new_stream(c"audio-capture", pw::StreamKind::AudioCapture);
 
@@ -480,10 +513,14 @@ impl Mixer {
 
             tracing::info!("Main loop exited with: {err:?}");
 
-            playback_stream_listener.remove();
             capture_stream_listener.remove();
             roundtrip_listener.remove();
             registry_listener.remove();
+
+            for playback in &mut state.playback {
+                playback.stream_listener.as_mut().remove();
+                playback.stream.destroy();
+            }
 
             stream.destroy();
             registry.destroy();

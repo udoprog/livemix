@@ -599,6 +599,7 @@ impl Stream {
     ) -> c_int {
         unsafe {
             let n_params = params.len() as u32;
+
             pw_stream_connect(
                 self.as_mut_ptr(),
                 direction,
