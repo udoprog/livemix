@@ -15,10 +15,11 @@
  
 #define M_PI_M2f (float)(M_PI + M_PI)
  
+#define DSP_RATE        44100
 #define BUFFER_SAMPLES  128
 #define MAX_BUFFERS     32
-#define SINE_FREQ       440
-#define VOLUME          0.01
+#define SINE_FREQ       440.0
+#define VOLUME          0.2
 
 PW_LOG_TOPIC_STATIC(livemix, "livemix");
 #define PW_LOG_TOPIC_DEFAULT livemix
@@ -97,7 +98,7 @@ static int impl_add_listener(void *object,
                 const struct spa_node_events *events,
                 void *data)
 {
-        pw_log_info("add_listener");
+        pw_log_trace("add_listener");
 
         struct data *d = object;
         struct spa_hook_list save;
@@ -179,15 +180,8 @@ static int impl_port_enum_params(void *object, int seq,
                 param = spa_pod_builder_add_object(&b,
                         SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
                         SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                        SPA_FORMAT_mediaSubtype,   SPA_POD_CHOICE_ENUM_Id(2, SPA_MEDIA_SUBTYPE_raw, SPA_MEDIA_SUBTYPE_dsp),
-                        SPA_FORMAT_AUDIO_format,   SPA_POD_CHOICE_ENUM_Id(5,
-                                                        SPA_AUDIO_FORMAT_S16,
-                                                        SPA_AUDIO_FORMAT_S16P,
-                                                        SPA_AUDIO_FORMAT_S16,
-                                                        SPA_AUDIO_FORMAT_F32P,
-                                                        SPA_AUDIO_FORMAT_F32),
-                        SPA_FORMAT_AUDIO_channels, SPA_POD_CHOICE_RANGE_Int(2, 1, INT32_MAX),
-                        SPA_FORMAT_AUDIO_rate,     SPA_POD_CHOICE_RANGE_Int(44100, 1, INT32_MAX));
+                        SPA_FORMAT_mediaSubtype,   SPA_POD_CHOICE_ENUM_Id(2, SPA_MEDIA_SUBTYPE_dsp, SPA_MEDIA_SUBTYPE_raw),
+                        SPA_FORMAT_AUDIO_format,   SPA_POD_CHOICE_ENUM_Id(3, SPA_AUDIO_FORMAT_S16, SPA_AUDIO_FORMAT_F32, SPA_AUDIO_FORMAT_F32P));
                 break;
  
         case SPA_PARAM_Format:
@@ -261,41 +255,50 @@ static int port_set_format(void *object,
                            enum spa_direction direction, uint32_t port_id,
                            uint32_t flags, const struct spa_pod *format)
 {
-        pw_log_info("port_set_format direction:%d, port_id:%d, flags:%d", direction, port_id, flags);
+        pw_log_info("port_set_format direction:%d, port_id:%d, flags:%d, format:%p", direction, port_id, flags, format);
 
         struct data *d = object;
+        int err;
+        uint32_t media_type, media_subtype;
 
         if (format == NULL) {
                 spa_zero(d->format);
         } else {
                 spa_debug_format(0, NULL, format);
 
-                if (spa_format_audio_raw_parse(format, &d->format) < 0) {
-                        pw_log_error("Failed to parse format");
-                        return -EINVAL;
+                if ((err = spa_format_parse(format, &media_type, &media_subtype)) < 0) {
+                        pw_log_error("Failed to parse");
+                        return err;
                 }
- 
-                if (d->format.format != SPA_AUDIO_FORMAT_S16 && d->format.format != SPA_AUDIO_FORMAT_F32 && d->format.format != SPA_AUDIO_FORMAT_F32P) {
-                        pw_log_error("Unsupported format");
+
+                if (media_type != SPA_MEDIA_TYPE_audio) {
+                        pw_log_error("Unsupported media type %d", media_type);
                         return -EINVAL;
                 }
 
-                if (d->format.rate == 0 ||
-                    d->format.channels == 0 ||
-                    d->format.channels > SPA_AUDIO_MAX_CHANNELS) {
-                        pw_log_error("rate %d channels %d", d->format.rate, d->format.channels);
-                        return -EINVAL;
+                switch (media_subtype) {
+                        case SPA_MEDIA_SUBTYPE_raw:
+                                if (spa_format_audio_raw_parse(format, &d->format) < 0) {
+                                        pw_log_error("Failed to parse format");
+                                        return -EINVAL;
+                                }
+                                break;
+                        case SPA_MEDIA_SUBTYPE_dsp:
+                                d->format.format = SPA_AUDIO_FORMAT_F32P;
+                                d->format.rate = DSP_RATE;
+                                d->format.channels = 1;
+                                break;
+                        default:
+                                pw_log_error("Unsupported media subtype %d", media_subtype);
+                                return -EINVAL;
                 }
+
+                pw_log_info("set format:%d, rate:%d, channels:%d",
+                             d->format.format,
+                             d->format.rate, d->format.channels);
         }
  
         d->info.change_mask = SPA_PORT_CHANGE_MASK_PARAMS;
-        if (format) {
-                d->params[3] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_READWRITE);
-                d->params[4] = SPA_PARAM_INFO(SPA_PARAM_Buffers, SPA_PARAM_INFO_READ);
-        } else {
-                d->params[3] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
-                d->params[4] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
-        }
         spa_node_emit_port_info(&d->hooks, SPA_DIRECTION_OUTPUT, 0, &d->info);
 
         return 0;
@@ -320,6 +323,8 @@ static int impl_port_use_buffers(void *object,
                 uint32_t flags,
                 struct spa_buffer **buffers, uint32_t n_buffers)
 {
+        pw_log_info("port_use_buffers direction:%d, port_id:%d, flags:%d, n_buffers:%d", direction, port_id, flags, n_buffers);
+
         struct data *d = object;
         uint32_t i;
  
@@ -360,13 +365,12 @@ static int impl_port_use_buffers(void *object,
  
 static inline void reuse_buffer(struct data *d, uint32_t id)
 {
-        pw_log_trace("export-source %p: recycle buffer %d", d, id);
+        pw_log_info("reuse_buffer: %p: recycle buffer %d", d, id);
         spa_list_append(&d->empty, &d->buffers[id].link);
 }
 
 static int impl_port_reuse_buffer(void *object, uint32_t port_id, uint32_t buffer_id)
 {
-        pw_log_info("port_reuse_buffer");
         struct data *d = object;
         reuse_buffer(d, buffer_id);
         return 0;
@@ -385,6 +389,7 @@ static void fill_s16(struct data *d, void *dest, int avail)
                 int16_t val;
  
                 d->accumulator += (M_PI_M2f * SINE_FREQ) / d->format.rate;
+
                 if (d->accumulator >= M_PI_M2f)
                         d->accumulator -= M_PI_M2f;
  
@@ -407,7 +412,7 @@ static void fill_f32(struct data *d, void *dest, int avail)
         for (i = 0; i < n_samples; i++) {
                 float val;
  
-                d->accumulator += (M_PI_M2f * SINE_FREQ) / d->format.rate;
+                d->accumulator += (M_PI_M2f * SINE_FREQ) / (float) d->format.rate;
 
                 if (d->accumulator >= M_PI_M2f)
                         d->accumulator -= M_PI_M2f;
@@ -422,32 +427,22 @@ static void fill_f32(struct data *d, void *dest, int avail)
 
 static void fill_f32_planar(struct data *d, void *dest, int avail)
 {
-        pw_log_trace("fill_f32_planar channels=%d, rate=%d, avail=%d", d->format.channels, d->format.rate, avail);
-
         float *dst = dest;
         int n_samples = avail / sizeof(float);
         int i;
-        uint32_t c;
 
-        int until = n_samples / d->format.channels;
- 
-        for (i = 0; i < until; i++) {
+        pw_log_info("fill_f32_planar channels=%d, rate=%d, avail=%d, n_samples=%d", d->format.channels, d->format.rate, avail, n_samples);
+
+        for (i = 0; i < n_samples; i++) {
                 float val;
  
-                d->accumulator += (M_PI_M2f * SINE_FREQ) / d->format.rate;
+                d->accumulator += (M_PI_M2f * SINE_FREQ) / (float) d->format.rate;
 
                 if (d->accumulator >= M_PI_M2f)
                         d->accumulator -= M_PI_M2f;
  
                 val = sinf(d->accumulator) * VOLUME;
-
-                float *local = dst;
- 
-                for (c = 0; c < d->format.channels; c++) {
-                        *local = val;
-                        local += until;
-                }
-
+                *dst = val;
                 dst += 1;
         }
 }
@@ -458,12 +453,12 @@ static int impl_node_process(void *object)
         struct buffer *b;
         int avail;
         struct spa_io_buffers *io = d->io;
-        uint32_t maxsize, index = 0;
-        uint32_t filled, offset;
+        uint32_t maxsize;
+        uint32_t offset;
         struct spa_data *od;
 
         pw_log_trace("process channels=%d, rate=%d", d->format.channels, d->format.rate);
- 
+
         if (io->buffer_id < d->n_buffers) {
                 reuse_buffer(d, io->buffer_id);
                 io->buffer_id = SPA_ID_INVALID;
@@ -478,25 +473,33 @@ static int impl_node_process(void *object)
         spa_list_remove(&b->link);
  
         od = b->buffer->datas;
- 
+
         maxsize = od[0].maxsize;
- 
-        filled = 0;
-        index = 0;
-        avail = maxsize - filled;
-        offset = index % maxsize;
- 
-        if (offset + avail > maxsize)
-                avail = maxsize - offset;
+        offset = 0;
  
         if (d->format.format == SPA_AUDIO_FORMAT_S16) {
-                fill_s16(d, SPA_PTROFF(b->ptr, offset, void), avail);
+                if (d->format.channels > 0 && d->format.rate > 0) {
+                        fill_s16(d, SPA_PTROFF(b->ptr, offset, void), maxsize);
+                        avail = maxsize;
+                } else {
+                        avail = 0;
+                }
         } else if (d->format.format == SPA_AUDIO_FORMAT_F32) {
-                fill_f32(d, SPA_PTROFF(b->ptr, offset, void), avail);
+                if (d->format.channels > 0 && d->format.rate > 0) {
+                        fill_f32(d, SPA_PTROFF(b->ptr, offset, void), maxsize);
+                        avail = maxsize;
+                } else {
+                        avail = 0;
+                }
         } else if (d->format.format == SPA_AUDIO_FORMAT_F32P) {
-                fill_f32_planar(d, SPA_PTROFF(b->ptr, offset, void), avail);
+                fill_f32_planar(d, SPA_PTROFF(b->ptr, offset, void), maxsize);
+                        avail = maxsize;
         } else {
                 pw_log_error("unsupported generation");
+        }
+
+        if (avail == 0) {
+                return SPA_STATUS_OK;
         }
  
         od[0].chunk->offset = 0;
@@ -592,6 +595,8 @@ int main(int argc, char *argv[])
         data.info.props = &data.dict;
         data.info.params = data.params;
         data.info.n_params = 5;
+
+        spa_zero(data.format);
  
         spa_list_init(&data.empty);
         spa_hook_list_init(&data.hooks);
