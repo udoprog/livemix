@@ -12,10 +12,11 @@
 #include <spa/debug/format.h>
  
 #include <pipewire/pipewire.h>
+#include <pipewire/impl.h>
  
 #define M_PI_M2f (float)(M_PI + M_PI)
  
-#define DSP_RATE        44100
+#define DSP_RATE        48000
 #define BUFFER_SAMPLES  128
 #define MAX_BUFFERS     32
 #define SINE_FREQ       440.0
@@ -41,13 +42,34 @@ struct data {
  
         struct pw_core *core;
         struct spa_hook core_listener;
+
+        uint64_t change_mask_all;
+        struct spa_port_info port_info;
+#define PORT_EnumFormat	0
+#define PORT_Meta	1
+#define PORT_IO		2
+#define PORT_Format	3
+#define PORT_Buffers	4
+#define PORT_Latency	5
+#define PORT_Tag	6
+#define N_PORT_PARAMS	7
+        struct spa_param_info port_params[N_PORT_PARAMS];
+        struct spa_dict_item port_items[2];
+        struct spa_dict port_dict;
  
-        uint64_t info_all;
-        struct spa_port_info info;
-        struct spa_dict_item items[2];
-        struct spa_dict dict;
-        struct spa_param_info params[5];
- 
+	enum spa_direction port_direction;
+        uint64_t port_change_mask_all;
+	struct spa_node_info node_info;
+#define NODE_PropInfo		0
+#define NODE_Props		1
+#define NODE_EnumFormat		2
+#define NODE_Format		3
+#define NODE_ProcessLatency	4
+#define N_NODE_PARAMS		5
+        struct spa_param_info node_params[N_NODE_PARAMS];
+        struct spa_dict_item node_items[2];
+        struct spa_dict node_dict;
+	struct pw_impl_node *node;
         struct spa_node impl_node;
         struct spa_hook_list hooks;
         struct spa_io_buffers *io;
@@ -63,7 +85,7 @@ struct data {
         float accumulator;
         float volume_accum;
 };
- 
+
 static void update_volume(struct data *data)
 {
         struct spa_pod_builder b = { 0, };
@@ -86,7 +108,51 @@ static void update_volume(struct data *data)
         if (data->volume_accum >= M_PI_M2f)
                 data->volume_accum -= M_PI_M2f;
 }
- 
+
+static void emit_node_info(struct data *d, bool full)
+{
+	uint32_t i;
+	uint64_t old = full ? d->node_info.change_mask : 0;
+	if (full)
+		d->node_info.change_mask = d->change_mask_all;
+	if (d->node_info.change_mask != 0) {
+		if (d->node_info.change_mask & SPA_NODE_CHANGE_MASK_PARAMS) {
+			for (i = 0; i < d->node_info.n_params; i++) {
+				if (d->node_params[i].user > 0) {
+					d->node_params[i].flags ^= SPA_PARAM_INFO_SERIAL;
+					d->node_params[i].user = 0;
+				}
+			}
+		}
+		spa_node_emit_info(&d->hooks, &d->node_info);
+	}
+	d->node_info.change_mask = old;
+}
+
+static void emit_port_info(struct data *d, bool full)
+{
+	uint32_t i;
+	uint64_t old = full ? d->port_info.change_mask : 0;
+
+	if (full)
+		d->port_info.change_mask = d->port_change_mask_all;
+
+	if (d->port_info.change_mask != 0) {
+		if (d->port_info.change_mask & SPA_PORT_CHANGE_MASK_PARAMS) {
+			for (i = 0; i < d->port_info.n_params; i++) {
+				if (d->port_params[i].user > 0) {
+					d->port_params[i].flags ^= SPA_PARAM_INFO_SERIAL;
+					d->port_params[i].user = 0;
+				}
+			}
+		}
+
+		spa_node_emit_port_info(&d->hooks, d->port_direction, 0, &d->port_info);
+	}
+
+	d->port_info.change_mask = old;
+}
+
 static int impl_send_command(void *object, const struct spa_command *command)
 {
         pw_log_info("send_command");
@@ -102,14 +168,11 @@ static int impl_add_listener(void *object,
 
         struct data *d = object;
         struct spa_hook_list save;
-        uint64_t old;
  
         spa_hook_list_isolate(&d->hooks, &save, listener, events, data);
  
-        old = d->info.change_mask;
-        d->info.change_mask = d->info_all;
-        spa_node_emit_port_info(&d->hooks, SPA_DIRECTION_OUTPUT, 0, &d->info);
-        d->info.change_mask = old;
+	emit_node_info(d, true);
+	emit_port_info(d, true);
  
         spa_hook_list_join(&d->hooks, &save);
         return 0;
@@ -258,39 +321,15 @@ static int port_set_format(void *object,
         pw_log_info("port_set_format direction:%d, port_id:%d, flags:%d, format:%p", direction, port_id, flags, format);
 
         struct data *d = object;
-        int err;
-        uint32_t media_type, media_subtype;
 
         if (format == NULL) {
                 spa_zero(d->format);
         } else {
                 spa_debug_format(0, NULL, format);
 
-                if ((err = spa_format_parse(format, &media_type, &media_subtype)) < 0) {
-                        pw_log_error("Failed to parse");
-                        return err;
-                }
-
-                if (media_type != SPA_MEDIA_TYPE_audio) {
-                        pw_log_error("Unsupported media type %d", media_type);
+                if (spa_format_audio_raw_parse(format, &d->format) < 0) {
+                        pw_log_error("Failed to parse format");
                         return -EINVAL;
-                }
-
-                switch (media_subtype) {
-                        case SPA_MEDIA_SUBTYPE_raw:
-                                if (spa_format_audio_raw_parse(format, &d->format) < 0) {
-                                        pw_log_error("Failed to parse format");
-                                        return -EINVAL;
-                                }
-                                break;
-                        case SPA_MEDIA_SUBTYPE_dsp:
-                                d->format.format = SPA_AUDIO_FORMAT_F32P;
-                                d->format.rate = DSP_RATE;
-                                d->format.channels = 1;
-                                break;
-                        default:
-                                pw_log_error("Unsupported media subtype %d", media_subtype);
-                                return -EINVAL;
                 }
 
                 pw_log_info("set format:%d, rate:%d, channels:%d",
@@ -298,9 +337,10 @@ static int port_set_format(void *object,
                              d->format.rate, d->format.channels);
         }
  
-        d->info.change_mask = SPA_PORT_CHANGE_MASK_PARAMS;
-        spa_node_emit_port_info(&d->hooks, SPA_DIRECTION_OUTPUT, 0, &d->info);
+        d->port_info.change_mask = SPA_PORT_CHANGE_MASK_PARAMS;
 
+	emit_node_info(d, false);
+	emit_port_info(d, false);
         return 0;
 }
  
@@ -528,9 +568,10 @@ static const struct spa_node_methods impl_node = {
         .process = impl_node_process,
 };
  
-static void make_node(struct data *data)
+static int make_node(struct data *data)
 {
         struct pw_properties *props;
+	struct pw_impl_factory *factory;
  
         props = pw_properties_new(PW_KEY_NODE_AUTOCONNECT, "false",
                                   PW_KEY_NODE_EXCLUSIVE, "true",
@@ -539,17 +580,35 @@ static void make_node(struct data *data)
                                   PW_KEY_MEDIA_CATEGORY, "Playback",
                                   PW_KEY_MEDIA_ROLE, "Music",
                                   NULL);
+
         if (data->path)
                 pw_properties_set(props, PW_KEY_TARGET_OBJECT, data->path);
  
-        data->impl_node.iface = (struct spa_interface) {
-                        SPA_TYPE_INTERFACE_Node,
-                        SPA_VERSION_NODE,
-                        (struct spa_callbacks) { &impl_node, data },
-                };
-        pw_core_export(data->core, SPA_TYPE_INTERFACE_Node,
-                        &props->dict, &data->impl_node, 0);
-        pw_properties_free(props);
+        data->impl_node.iface = SPA_INTERFACE_INIT(SPA_TYPE_INTERFACE_Node, SPA_VERSION_NODE, &impl_node, data);
+
+        if (false) {
+                factory = pw_context_find_factory(data->context, "adapter");
+
+                if (factory == NULL) {
+                        pw_log_error("no adapter factory found");
+                        return -ENOENT;
+                }
+
+                pw_properties_setf(props, "adapt.follower.spa-node", "pointer:%p", &data->impl_node);
+                pw_properties_set(props, "object.register", "false");
+
+                data->node = pw_impl_factory_create_object(factory, NULL, PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, props, 0);
+
+                if (data->node == NULL) {
+                        return -errno;
+                }
+
+                pw_core_export(data->core, SPA_TYPE_INTERFACE_Node, NULL, &data->node, 0);
+        } else {
+                pw_core_export(data->core, SPA_TYPE_INTERFACE_Node, &props->dict, &data->impl_node, 0);
+        }
+
+        return 0;
 }
 
 static void on_core_error(void *data, uint32_t id, int seq, int res, const char *message)
@@ -578,23 +637,42 @@ int main(int argc, char *argv[])
         data.context = pw_context_new(pw_main_loop_get_loop(data.loop), NULL, 0);
         data.path = argc > 1 ? argv[1] : NULL;
  
-        data.info_all = SPA_PORT_CHANGE_MASK_FLAGS |
+        data.change_mask_all = 
+		SPA_NODE_CHANGE_MASK_FLAGS |
+		SPA_NODE_CHANGE_MASK_PROPS |
+		SPA_NODE_CHANGE_MASK_PARAMS;
+
+        data.node_info = SPA_NODE_INFO_INIT();
+        data.node_params[NODE_PropInfo] = SPA_PARAM_INFO(SPA_PARAM_PropInfo, 0);
+	data.node_params[NODE_Props] = SPA_PARAM_INFO(SPA_PARAM_Props, SPA_PARAM_INFO_WRITE);
+	data.node_params[NODE_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
+	data.node_params[NODE_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
+	data.node_params[NODE_ProcessLatency] = SPA_PARAM_INFO(SPA_PARAM_ProcessLatency, SPA_PARAM_INFO_READWRITE);
+        data.node_info.params = data.node_params;
+	data.node_info.n_params = N_NODE_PARAMS;
+	data.node_info.change_mask = data.change_mask_all;
+
+        data.port_direction = SPA_DIRECTION_OUTPUT;
+        data.port_change_mask_all = SPA_PORT_CHANGE_MASK_FLAGS |
                 SPA_PORT_CHANGE_MASK_PROPS |
                 SPA_PORT_CHANGE_MASK_PARAMS;
-        data.items[0] = SPA_DICT_ITEM_INIT(PW_KEY_FORMAT_DSP, "32 bit float mono audio");
-        data.items[1] = SPA_DICT_ITEM_INIT(PW_KEY_PORT_NAME, "generated_0");
-        data.dict = SPA_DICT_INIT_ARRAY(data.items);
-        data.params[0] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, SPA_PARAM_INFO_READ);
-        data.params[1] = SPA_PARAM_INFO(SPA_PARAM_Meta, SPA_PARAM_INFO_READ);
-        data.params[2] = SPA_PARAM_INFO(SPA_PARAM_IO, SPA_PARAM_INFO_READ);
-        data.params[3] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
-        data.params[4] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
 
-        data.info = SPA_PORT_INFO_INIT();
-        data.info.flags = 0;
-        data.info.props = &data.dict;
-        data.info.params = data.params;
-        data.info.n_params = 5;
+	data.port_params[PORT_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
+	data.port_params[PORT_Meta] = SPA_PARAM_INFO(SPA_PARAM_Meta, 0);
+	data.port_params[PORT_IO] = SPA_PARAM_INFO(SPA_PARAM_IO, 0);
+	data.port_params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
+	data.port_params[PORT_Buffers] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
+	data.port_params[PORT_Latency] = SPA_PARAM_INFO(SPA_PARAM_Latency, SPA_PARAM_INFO_WRITE);
+	data.port_params[PORT_Tag] = SPA_PARAM_INFO(SPA_PARAM_Tag, SPA_PARAM_INFO_WRITE);
+        data.port_info = SPA_PORT_INFO_INIT();
+        data.port_info.flags = 0;
+        data.port_items[0] = SPA_DICT_ITEM_INIT(PW_KEY_FORMAT_DSP, "32 bit float mono audio");
+        data.port_items[1] = SPA_DICT_ITEM_INIT(PW_KEY_PORT_NAME, "generated_0");
+        data.port_dict = SPA_DICT_INIT_ARRAY(data.port_items);
+        data.port_info.props = &data.port_dict;
+        data.port_info.params = data.port_params;
+        data.port_info.n_params = N_NODE_PARAMS;
+	data.port_info.change_mask = data.change_mask_all;
 
         spa_zero(data.format);
  
@@ -608,7 +686,10 @@ int main(int argc, char *argv[])
  
         pw_core_add_listener(data.core, &data.core_listener, &core_events, &data);
  
-        make_node(&data);
+        if (make_node(&data) != 0) {
+                pw_log_error("can't create node");
+                return -1;
+        }
 
         pw_main_loop_run(data.loop);
  
