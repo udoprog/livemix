@@ -10,13 +10,13 @@
 #include <spa/node/utils.h>
 #include <spa/pod/filter.h>
 #include <spa/debug/format.h>
+#include <spa/debug/pod.h>
  
 #include <pipewire/pipewire.h>
-#include <pipewire/impl.h>
  
 #define M_PI_M2f (float)(M_PI + M_PI)
  
-#define DSP_RATE        48000
+#define DSP_RATE        44100
 #define BUFFER_SAMPLES  128
 #define MAX_BUFFERS     32
 #define SINE_FREQ       440.0
@@ -42,9 +42,11 @@ struct data {
  
         struct pw_core *core;
         struct spa_hook core_listener;
-
-        uint64_t change_mask_all;
+ 
+        uint64_t port_change_mask_all;
         struct spa_port_info port_info;
+        struct spa_dict_item port_items[2];
+        struct spa_dict port_dict;
 #define PORT_EnumFormat	0
 #define PORT_Meta	1
 #define PORT_IO		2
@@ -54,22 +56,7 @@ struct data {
 #define PORT_Tag	6
 #define N_PORT_PARAMS	7
         struct spa_param_info port_params[N_PORT_PARAMS];
-        struct spa_dict_item port_items[2];
-        struct spa_dict port_dict;
  
-	enum spa_direction port_direction;
-        uint64_t port_change_mask_all;
-	struct spa_node_info node_info;
-#define NODE_PropInfo		0
-#define NODE_Props		1
-#define NODE_EnumFormat		2
-#define NODE_Format		3
-#define NODE_ProcessLatency	4
-#define N_NODE_PARAMS		5
-        struct spa_param_info node_params[N_NODE_PARAMS];
-        struct spa_dict_item node_items[2];
-        struct spa_dict node_dict;
-	struct pw_impl_node *node;
         struct spa_node impl_node;
         struct spa_hook_list hooks;
         struct spa_io_buffers *io;
@@ -84,8 +71,11 @@ struct data {
  
         float accumulator;
         float volume_accum;
-};
 
+        struct spa_pod *format_pod;
+        struct spa_pod *latency_pod;
+};
+ 
 static void update_volume(struct data *data)
 {
         struct spa_pod_builder b = { 0, };
@@ -108,51 +98,7 @@ static void update_volume(struct data *data)
         if (data->volume_accum >= M_PI_M2f)
                 data->volume_accum -= M_PI_M2f;
 }
-
-static void emit_node_info(struct data *d, bool full)
-{
-	uint32_t i;
-	uint64_t old = full ? d->node_info.change_mask : 0;
-	if (full)
-		d->node_info.change_mask = d->change_mask_all;
-	if (d->node_info.change_mask != 0) {
-		if (d->node_info.change_mask & SPA_NODE_CHANGE_MASK_PARAMS) {
-			for (i = 0; i < d->node_info.n_params; i++) {
-				if (d->node_params[i].user > 0) {
-					d->node_params[i].flags ^= SPA_PARAM_INFO_SERIAL;
-					d->node_params[i].user = 0;
-				}
-			}
-		}
-		spa_node_emit_info(&d->hooks, &d->node_info);
-	}
-	d->node_info.change_mask = old;
-}
-
-static void emit_port_info(struct data *d, bool full)
-{
-	uint32_t i;
-	uint64_t old = full ? d->port_info.change_mask : 0;
-
-	if (full)
-		d->port_info.change_mask = d->port_change_mask_all;
-
-	if (d->port_info.change_mask != 0) {
-		if (d->port_info.change_mask & SPA_PORT_CHANGE_MASK_PARAMS) {
-			for (i = 0; i < d->port_info.n_params; i++) {
-				if (d->port_params[i].user > 0) {
-					d->port_params[i].flags ^= SPA_PARAM_INFO_SERIAL;
-					d->port_params[i].user = 0;
-				}
-			}
-		}
-
-		spa_node_emit_port_info(&d->hooks, d->port_direction, 0, &d->port_info);
-	}
-
-	d->port_info.change_mask = old;
-}
-
+ 
 static int impl_send_command(void *object, const struct spa_command *command)
 {
         pw_log_info("send_command");
@@ -168,11 +114,14 @@ static int impl_add_listener(void *object,
 
         struct data *d = object;
         struct spa_hook_list save;
+        uint64_t old;
  
         spa_hook_list_isolate(&d->hooks, &save, listener, events, data);
  
-	emit_node_info(d, true);
-	emit_port_info(d, true);
+        old = d->port_info.change_mask;
+        d->port_info.change_mask = d->port_change_mask_all;
+        spa_node_emit_port_info(&d->hooks, SPA_DIRECTION_OUTPUT, 0, &d->port_info);
+        d->port_info.change_mask = old;
  
         spa_hook_list_join(&d->hooks, &save);
         return 0;
@@ -221,129 +170,57 @@ static int impl_port_enum_params(void *object, int seq,
         pw_log_trace("port_enum_params: direction:%d, port_id:%d, id:%d", direction, port_id, id);
 
         struct data *d = object;
-        struct spa_pod *param;
+        struct spa_result_node_params result;
+        struct spa_pod *param = NULL;
         struct spa_pod_builder b = { 0 };
         uint8_t buffer[1024];
-        struct spa_result_node_params result;
-        uint32_t count = 0;
- 
+        int emitted = 0;
+
         result.id = id;
         result.next = start;
-      next:
-        result.index = result.next;
-        result.next += 1;
- 
-        spa_pod_builder_init(&b, buffer, sizeof(buffer));
 
-        switch (id) {
-        case SPA_PARAM_EnumFormat:
-                if (result.index != 0)
-                        return 0;
+        while (true) {
+                param = NULL;
+                result.index = result.next++;
 
-                param = spa_pod_builder_add_object(&b,
-                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
-                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                        SPA_FORMAT_mediaSubtype,   SPA_POD_CHOICE_ENUM_Id(2, SPA_MEDIA_SUBTYPE_dsp, SPA_MEDIA_SUBTYPE_raw),
-                        SPA_FORMAT_AUDIO_format,   SPA_POD_CHOICE_ENUM_Id(3, SPA_AUDIO_FORMAT_S16, SPA_AUDIO_FORMAT_F32, SPA_AUDIO_FORMAT_F32P));
-                break;
- 
-        case SPA_PARAM_Format:
-                if (result.index != 0)
-                        return 0;
-                if (d->format.format == 0)
-                        return 0;
-                param = spa_format_audio_raw_build(&b, id, &d->format);
-                break;
- 
-        case SPA_PARAM_Buffers:
-                if (result.index != 0)
-                        return 0;
- 
-                param = spa_pod_builder_add_object(&b,
-                        SPA_TYPE_OBJECT_ParamBuffers, id,
-                        SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(1, 1, 32),
-                        SPA_PARAM_BUFFERS_blocks,  SPA_POD_Int(1),
-                        SPA_PARAM_BUFFERS_size,    SPA_POD_CHOICE_RANGE_Int(
-                                                        BUFFER_SAMPLES * sizeof(float), 32, INT32_MAX),
-                        SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(sizeof(float)));
-                break;
- 
-        case SPA_PARAM_Meta:
-                if (result.index != 0)
-                        return 0;
-
-                param = spa_pod_builder_add_object(&b,
-                        SPA_TYPE_OBJECT_ParamMeta, id,
-                        SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
-                        SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
-                break;
-        case SPA_PARAM_IO:
-                switch (result.index) {
-                case 0:
-                        param = spa_pod_builder_add_object(&b,
-                                SPA_TYPE_OBJECT_ParamIO, id,
-                                SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Buffers),
-                                SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_buffers)));
+                if (emitted >= num || result.index >= 2) {
                         break;
-                case 1:
-                        param = spa_pod_builder_add_object(&b,
-                                SPA_TYPE_OBJECT_ParamIO, id,
-                                SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Notify),
-                                SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_sequence) + 1024));
+                }
+
+                switch (id) {
+                case SPA_PARAM_Format:
+                        if (result.index == 0) {
+                                param = d->format_pod;
+                        }
+
+                        break;
+                case SPA_PARAM_Latency:
+                        if (result.index == 1) {
+                                param = d->latency_pod;
+                        }
+
                         break;
                 default:
-                        return 0;
+                        return -ENOENT;
                 }
-                break;
-        default:
-                pw_log_error("unknown param id %d", id);
-                return -ENOENT;
-        }
- 
-        if (spa_pod_filter(&b, &result.param, param, filter) < 0) {
-                goto next;
-        }
- 
-        spa_node_emit_result(&d->hooks, seq, 0, SPA_RESULT_TYPE_NODE_PARAMS, &result);
 
-        count += 1;
- 
-        if (count != num)
-                goto next;
- 
+                if (param == NULL) {
+                        continue;
+                }
+
+                spa_pod_builder_init(&b, buffer, sizeof(buffer));
+
+                if (spa_pod_filter(&b, &result.param, param, filter) < 0) {
+                        continue;
+                }
+
+                spa_node_emit_result(&d->hooks, seq, 0, SPA_RESULT_TYPE_NODE_PARAMS, &result);
+                emitted += 1;
+        }
+
         return 0;
 }
 
-static int port_set_format(void *object,
-                           enum spa_direction direction, uint32_t port_id,
-                           uint32_t flags, const struct spa_pod *format)
-{
-        pw_log_info("port_set_format direction:%d, port_id:%d, flags:%d, format:%p", direction, port_id, flags, format);
-
-        struct data *d = object;
-
-        if (format == NULL) {
-                spa_zero(d->format);
-        } else {
-                spa_debug_format(0, NULL, format);
-
-                if (spa_format_audio_raw_parse(format, &d->format) < 0) {
-                        pw_log_error("Failed to parse format");
-                        return -EINVAL;
-                }
-
-                pw_log_info("set format:%d, rate:%d, channels:%d",
-                             d->format.format,
-                             d->format.rate, d->format.channels);
-        }
- 
-        d->port_info.change_mask = SPA_PORT_CHANGE_MASK_PARAMS;
-
-	emit_node_info(d, false);
-	emit_port_info(d, false);
-        return 0;
-}
- 
 static int impl_port_set_param(void *object,
                                enum spa_direction direction, uint32_t port_id,
                                uint32_t id, uint32_t flags,
@@ -351,13 +228,52 @@ static int impl_port_set_param(void *object,
 {
         pw_log_info("port_set_param direction:%d, port_id:%d, id:%d, flags:%d", direction, port_id, id, flags);
 
-        if (id == SPA_PARAM_Format) {
-                return port_set_format(object, direction, port_id, flags, param);
+        if (param != NULL) {
+                spa_debug_pod(0, NULL, param);
         } else {
+                pw_log_debug("(nil)");
+        }
+
+        struct data *d = object;
+
+        switch (id) {
+        case SPA_PARAM_Format:
+                if (d->latency_pod != NULL) {
+                        free(d->latency_pod);
+                        d->latency_pod = NULL;
+                }
+
+                if (param != NULL) {
+                        d->format_pod = spa_pod_copy(param);
+                }
+
+                if (d->format_pod != NULL) {
+                        spa_format_audio_raw_parse(d->format_pod, &d->format);
+                } else {
+                        spa_zero(d->format);
+                }
+
+                break;
+        case SPA_PARAM_Latency:
+                if (d->latency_pod != NULL) {
+                        free(d->latency_pod);
+                        d->latency_pod = NULL;
+                }
+
+                if (param != NULL) {
+                        d->latency_pod = spa_pod_copy(param);
+                }
+
+                break;
+        default:
                 return -ENOENT;
         }
+
+        d->port_info.change_mask = SPA_PORT_CHANGE_MASK_PARAMS;
+        spa_node_emit_port_info(&d->hooks, SPA_DIRECTION_OUTPUT, 0, &d->port_info);
+        return 0;
 }
- 
+
 static int impl_port_use_buffers(void *object,
                 enum spa_direction direction, uint32_t port_id,
                 uint32_t flags,
@@ -491,10 +407,8 @@ static int impl_node_process(void *object)
 {
         struct data *d = object;
         struct buffer *b;
-        int avail;
         struct spa_io_buffers *io = d->io;
         uint32_t maxsize;
-        uint32_t offset;
         struct spa_data *od;
 
         pw_log_trace("process channels=%d, rate=%d", d->format.channels, d->format.rate);
@@ -515,45 +429,25 @@ static int impl_node_process(void *object)
         od = b->buffer->datas;
 
         maxsize = od[0].maxsize;
-        offset = 0;
  
-        if (d->format.format == SPA_AUDIO_FORMAT_S16) {
-                if (d->format.channels > 0 && d->format.rate > 0) {
-                        fill_s16(d, SPA_PTROFF(b->ptr, offset, void), maxsize);
-                        avail = maxsize;
-                } else {
-                        avail = 0;
-                }
-        } else if (d->format.format == SPA_AUDIO_FORMAT_F32) {
-                if (d->format.channels > 0 && d->format.rate > 0) {
-                        fill_f32(d, SPA_PTROFF(b->ptr, offset, void), maxsize);
-                        avail = maxsize;
-                } else {
-                        avail = 0;
-                }
-        } else if (d->format.format == SPA_AUDIO_FORMAT_F32P) {
-                fill_f32_planar(d, SPA_PTROFF(b->ptr, offset, void), maxsize);
-                        avail = maxsize;
+        if (d->format.rate != 0 && d->format.channels != 0) {
+                fill_f32(d, SPA_PTROFF(b->ptr, 0, void), maxsize);
         } else {
-                pw_log_error("unsupported generation");
-        }
-
-        if (avail == 0) {
+                reuse_buffer(d, b->id);
                 return SPA_STATUS_OK;
         }
- 
+
         od[0].chunk->offset = 0;
-        od[0].chunk->size = avail;
+        od[0].chunk->size = maxsize;
         od[0].chunk->stride = 0;
  
         io->buffer_id = b->id;
         io->status = SPA_STATUS_HAVE_DATA;
  
         update_volume(d);
- 
         return SPA_STATUS_HAVE_DATA;
 }
- 
+
 static const struct spa_node_methods impl_node = {
         SPA_VERSION_NODE_METHODS,
         .add_listener = impl_add_listener,
@@ -567,11 +461,10 @@ static const struct spa_node_methods impl_node = {
         .port_reuse_buffer = impl_port_reuse_buffer,
         .process = impl_node_process,
 };
- 
-static int make_node(struct data *data)
+
+static void make_node(struct data *data)
 {
         struct pw_properties *props;
-	struct pw_impl_factory *factory;
  
         props = pw_properties_new(PW_KEY_NODE_AUTOCONNECT, "false",
                                   PW_KEY_NODE_EXCLUSIVE, "true",
@@ -580,35 +473,17 @@ static int make_node(struct data *data)
                                   PW_KEY_MEDIA_CATEGORY, "Playback",
                                   PW_KEY_MEDIA_ROLE, "Music",
                                   NULL);
-
         if (data->path)
                 pw_properties_set(props, PW_KEY_TARGET_OBJECT, data->path);
  
-        data->impl_node.iface = SPA_INTERFACE_INIT(SPA_TYPE_INTERFACE_Node, SPA_VERSION_NODE, &impl_node, data);
-
-        if (false) {
-                factory = pw_context_find_factory(data->context, "adapter");
-
-                if (factory == NULL) {
-                        pw_log_error("no adapter factory found");
-                        return -ENOENT;
-                }
-
-                pw_properties_setf(props, "adapt.follower.spa-node", "pointer:%p", &data->impl_node);
-                pw_properties_set(props, "object.register", "false");
-
-                data->node = pw_impl_factory_create_object(factory, NULL, PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, props, 0);
-
-                if (data->node == NULL) {
-                        return -errno;
-                }
-
-                pw_core_export(data->core, SPA_TYPE_INTERFACE_Node, NULL, &data->node, 0);
-        } else {
-                pw_core_export(data->core, SPA_TYPE_INTERFACE_Node, &props->dict, &data->impl_node, 0);
-        }
-
-        return 0;
+        data->impl_node.iface = (struct spa_interface) {
+                        SPA_TYPE_INTERFACE_Node,
+                        SPA_VERSION_NODE,
+                        (struct spa_callbacks) { &impl_node, data },
+                };
+        pw_core_export(data->core, SPA_TYPE_INTERFACE_Node,
+                        &props->dict, &data->impl_node, 0);
+        pw_properties_free(props);
 }
 
 static void on_core_error(void *data, uint32_t id, int seq, int res, const char *message)
@@ -629,34 +504,21 @@ static const struct pw_core_events core_events = {
  
 int main(int argc, char *argv[])
 {
-        struct data data = { 0, };
- 
+        struct data data = { 0 };
+
         pw_init(&argc, &argv);
  
         data.loop = pw_main_loop_new(NULL);
         data.context = pw_context_new(pw_main_loop_get_loop(data.loop), NULL, 0);
         data.path = argc > 1 ? argv[1] : NULL;
  
-        data.change_mask_all = 
-		SPA_NODE_CHANGE_MASK_FLAGS |
-		SPA_NODE_CHANGE_MASK_PROPS |
-		SPA_NODE_CHANGE_MASK_PARAMS;
-
-        data.node_info = SPA_NODE_INFO_INIT();
-        data.node_params[NODE_PropInfo] = SPA_PARAM_INFO(SPA_PARAM_PropInfo, 0);
-	data.node_params[NODE_Props] = SPA_PARAM_INFO(SPA_PARAM_Props, SPA_PARAM_INFO_WRITE);
-	data.node_params[NODE_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
-	data.node_params[NODE_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
-	data.node_params[NODE_ProcessLatency] = SPA_PARAM_INFO(SPA_PARAM_ProcessLatency, SPA_PARAM_INFO_READWRITE);
-        data.node_info.params = data.node_params;
-	data.node_info.n_params = N_NODE_PARAMS;
-	data.node_info.change_mask = data.change_mask_all;
-
-        data.port_direction = SPA_DIRECTION_OUTPUT;
         data.port_change_mask_all = SPA_PORT_CHANGE_MASK_FLAGS |
                 SPA_PORT_CHANGE_MASK_PROPS |
                 SPA_PORT_CHANGE_MASK_PARAMS;
 
+        data.port_items[0] = SPA_DICT_ITEM_INIT(PW_KEY_FORMAT_DSP, "32 bit float mono audio");
+        data.port_items[1] = SPA_DICT_ITEM_INIT(PW_KEY_PORT_NAME, "generated_0");
+        data.port_dict = SPA_DICT_INIT_ARRAY(data.port_items);
 	data.port_params[PORT_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
 	data.port_params[PORT_Meta] = SPA_PARAM_INFO(SPA_PARAM_Meta, 0);
 	data.port_params[PORT_IO] = SPA_PARAM_INFO(SPA_PARAM_IO, 0);
@@ -664,15 +526,12 @@ int main(int argc, char *argv[])
 	data.port_params[PORT_Buffers] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
 	data.port_params[PORT_Latency] = SPA_PARAM_INFO(SPA_PARAM_Latency, SPA_PARAM_INFO_WRITE);
 	data.port_params[PORT_Tag] = SPA_PARAM_INFO(SPA_PARAM_Tag, SPA_PARAM_INFO_WRITE);
+
         data.port_info = SPA_PORT_INFO_INIT();
         data.port_info.flags = 0;
-        data.port_items[0] = SPA_DICT_ITEM_INIT(PW_KEY_FORMAT_DSP, "32 bit float mono audio");
-        data.port_items[1] = SPA_DICT_ITEM_INIT(PW_KEY_PORT_NAME, "generated_0");
-        data.port_dict = SPA_DICT_INIT_ARRAY(data.port_items);
         data.port_info.props = &data.port_dict;
         data.port_info.params = data.port_params;
-        data.port_info.n_params = N_NODE_PARAMS;
-	data.port_info.change_mask = data.change_mask_all;
+        data.port_info.n_params = N_PORT_PARAMS;
 
         spa_zero(data.format);
  
@@ -686,10 +545,7 @@ int main(int argc, char *argv[])
  
         pw_core_add_listener(data.core, &data.core_listener, &core_events, &data);
  
-        if (make_node(&data) != 0) {
-                pw_log_error("can't create node");
-                return -1;
-        }
+        make_node(&data);
 
         pw_main_loop_run(data.loop);
  
