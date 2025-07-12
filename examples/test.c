@@ -211,7 +211,7 @@ static int enum_params(void *object, int seq, uint32_t id, uint32_t start, uint3
                 param = NULL;
                 result.index = result.next++;
 
-                if (emitted >= num || result.index > 0) {
+                if (emitted >= num) {
                         break;
                 }
 
@@ -232,7 +232,13 @@ static int enum_params(void *object, int seq, uint32_t id, uint32_t start, uint3
                         break;
                 case SPA_PARAM_Format:
                         if (result.index == 0) {
-                                param = d->format_pod;
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_Format, id,
+                                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
+                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
+                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(1));
                         }
 
                         break;
@@ -241,6 +247,44 @@ static int enum_params(void *object, int seq, uint32_t id, uint32_t start, uint3
                                 param = d->latency_pod;
                         }
 
+                        break;
+                case SPA_PARAM_Buffers:
+                        if (result.index == 0) {
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamBuffers, id,
+                                        SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(1, 1, 32),
+                                        SPA_PARAM_BUFFERS_blocks,  SPA_POD_Int(1),
+                                        SPA_PARAM_BUFFERS_size,    SPA_POD_CHOICE_RANGE_Int(
+                                                                        BUFFER_SAMPLES * sizeof(float), 32, INT32_MAX),
+                                        SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(sizeof(float)));
+                        }
+                        break;
+        
+                case SPA_PARAM_Meta:
+                        if (result.index == 0) {
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamMeta, id,
+                                        SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
+                                        SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
+                        }
+                        break;
+                case SPA_PARAM_IO:
+                        switch (result.index) {
+                        case 0:
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamIO, id,
+                                        SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Buffers),
+                                        SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_buffers)));
+                                break;
+                        case 1:
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamIO, id,
+                                        SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Notify),
+                                        SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_sequence) + 1024));
+                                break;
+                        default:
+                                return 0;
+                        }
                         break;
                 default:
                         return -ENOENT;
