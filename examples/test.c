@@ -85,6 +85,7 @@ struct data {
 
         struct spa_pod *format_pod;
         struct spa_pod *latency_pod;
+        struct spa_pod *tag_pod;
 
 	struct pw_impl_node *node;
 	struct spa_hook node_listener;
@@ -166,7 +167,7 @@ static int impl_add_listener(void *object,
                 const struct spa_node_events *events,
                 void *data)
 {
-        pw_log_trace("add_listener");
+        pw_log_debug("add listener");
 
         struct data *d = object;
         struct spa_hook_list save;
@@ -188,134 +189,20 @@ static int impl_set_callbacks(void *object,
         return 0;
 }
 
-static int enum_params(void *object, int seq, uint32_t id, uint32_t start, uint32_t num, const struct spa_pod *filter) {
-        struct data *d = object;
-        struct spa_result_node_params result;
-        struct spa_pod *param = NULL;
-        struct spa_pod_builder b = { 0 };
-        uint8_t buffer[1024];
-        int emitted = 0;
-
-        pw_log_debug("enum_params: seq:%d, id:%d, start:%d, num:%d", seq, id, start, num);
-
-        if (filter != NULL) {
-                spa_debug_pod(0, NULL, filter);
-        } else {
-                pw_log_debug("(nil)");
-        }
-
-        result.id = id;
-        result.next = start;
-
-        while (true) {
-                param = NULL;
-                result.index = result.next++;
-
-                if (emitted >= num) {
-                        break;
-                }
-
-                spa_pod_builder_init(&b, buffer, sizeof(buffer));
-
-                switch (id) {
-                case SPA_PARAM_EnumFormat:
-                        if (result.index == 0) {
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
-                                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
-                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
-                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(1));
-                        }
-
-                        break;
-                case SPA_PARAM_Format:
-                        if (result.index == 0) {
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_Format, id,
-                                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
-                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
-                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(1));
-                        }
-
-                        break;
-                case SPA_PARAM_Latency:
-                        if (result.index == 0) {
-                                param = d->latency_pod;
-                        }
-
-                        break;
-                case SPA_PARAM_Buffers:
-                        if (result.index == 0) {
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_ParamBuffers, id,
-                                        SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(1, 1, 32),
-                                        SPA_PARAM_BUFFERS_blocks,  SPA_POD_Int(1),
-                                        SPA_PARAM_BUFFERS_size,    SPA_POD_CHOICE_RANGE_Int(
-                                                                        BUFFER_SAMPLES * sizeof(float), 32, INT32_MAX),
-                                        SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(sizeof(float)));
-                        }
-                        break;
-        
-                case SPA_PARAM_Meta:
-                        if (result.index == 0) {
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_ParamMeta, id,
-                                        SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
-                                        SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
-                        }
-                        break;
-                case SPA_PARAM_IO:
-                        switch (result.index) {
-                        case 0:
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_ParamIO, id,
-                                        SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Buffers),
-                                        SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_buffers)));
-                                break;
-                        case 1:
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_ParamIO, id,
-                                        SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Notify),
-                                        SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_sequence) + 1024));
-                                break;
-                        default:
-                                return 0;
-                        }
-                        break;
-                default:
-                        return -ENOENT;
-                }
-
-                if (param == NULL) {
-                        continue;
-                }
-
-                if (spa_pod_filter(&b, &result.param, param, filter) < 0) {
-                        continue;
-                }
-
-                spa_node_emit_result(&d->hooks, seq, 0, SPA_RESULT_TYPE_NODE_PARAMS, &result);
-                emitted += 1;
-        }
-
-        return 0;
-}
-
 static int impl_enum_params(void *object, int seq, uint32_t id, uint32_t start, uint32_t num,
 				 const struct spa_pod *filter)
 {
-        pw_log_trace("port_enum_params: seq:%d, id:%d", seq, id);
-	return enum_params(object, seq, id, start, num, filter);
+        struct data *d = object;
+        pw_log_trace("%p: enum params %d (%s) seq:%d",
+                d, id, spa_debug_type_find_name(spa_type_param, id), seq);
+        return -ENOENT;
 }
 
 static int impl_set_param(void *object, uint32_t id, uint32_t flags, const struct spa_pod *param) {
 	struct data *d = object;
 
-        pw_log_info("set_param id:%d", id);
+        pw_log_info("%p: set param id %d (%s) flags:%d",
+                d, id, spa_debug_type_find_name(spa_type_param, id), flags);
 
         if (param != NULL) {
                 spa_debug_pod(0, NULL, param);
@@ -360,8 +247,185 @@ static int impl_port_enum_params(void *object, int seq,
                                  uint32_t id, uint32_t start, uint32_t num,
                                  const struct spa_pod *filter)
 {
-        pw_log_trace("port_enum_params: seq:%d, direction:%d, port_id:%d, id:%d", seq, direction, port_id, id);
-        return enum_params(object, seq, id, start, num, filter);
+        struct data *d = object;
+        struct spa_result_node_params result;
+        struct spa_pod *param = NULL;
+        struct spa_pod_builder b = { 0 };
+        uint8_t buffer[1024];
+        int emitted = 0;
+        bool found = false;
+        bool done = false;
+
+        pw_log_debug("%p: param id %d (%s) start:%d num:%d",
+                d, id, spa_debug_type_find_name(spa_type_param, id), start, num);
+
+        if (filter != NULL) {
+                spa_debug_pod(0, NULL, filter);
+        } else {
+                pw_log_debug("(nil)");
+        }
+
+        result.id = id;
+        result.next = start;
+
+        while (!done) {
+                param = NULL;
+                result.index = result.next++;
+
+                pw_log_warn("spin:%d", result.index);
+
+                if (emitted >= num) {
+                        break;
+                }
+
+                spa_pod_builder_init(&b, buffer, sizeof(buffer));
+
+                switch (id) {
+                case SPA_PARAM_EnumFormat:
+                        found = true;
+
+                        switch (result.index) {
+                        case 0:
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+                                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
+                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
+                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(1));
+                                break;
+                        default:
+                                done = true;
+                                break;
+                        }
+
+                        break;
+                case SPA_PARAM_Format:
+                        found = true;
+
+                        switch (result.index) {
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+                                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
+                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
+                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(1));
+
+                                break;
+                        default:
+                                done = true;
+                                break;
+                        }
+
+                        break;
+                case SPA_PARAM_Latency:
+                        found = d->latency_pod != NULL;
+
+                        switch (result.index) {
+                        case 0:
+                                param = d->latency_pod;
+                                break;
+                        default:
+                                done = true;
+                                break;
+                        }
+
+                        break;
+                case SPA_PARAM_Tag:
+                        found = d->tag_pod != NULL;
+
+                        switch (result.index) {
+                        case 0:
+                                param = d->tag_pod;
+                                break;
+                        default:
+                                done = true;
+                                break;
+                        }
+
+                        break;
+                case SPA_PARAM_Buffers:
+                        found = true;
+
+                        switch (result.index) {
+                        case 0:
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamBuffers, id,
+                                        SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(1, 1, 32),
+                                        SPA_PARAM_BUFFERS_blocks,  SPA_POD_Int(1),
+                                        SPA_PARAM_BUFFERS_size,    SPA_POD_CHOICE_RANGE_Int(
+                                                                        BUFFER_SAMPLES * sizeof(float), 32, INT32_MAX),
+                                        SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(sizeof(float)));
+
+                                break;
+                        default:
+                                done = true;
+                                break;
+                        }
+
+                        break;
+        
+                case SPA_PARAM_Meta:
+                        found = true;
+
+                        if (result.index == 0) {
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamMeta, id,
+                                        SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
+                                        SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
+                        } else {
+                                done = true;
+                        }
+
+                        break;
+                case SPA_PARAM_IO:
+                        found = true;
+
+                        switch (result.index) {
+                        case 0:
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamIO, id,
+                                        SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Buffers),
+                                        SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_buffers)));
+                                break;
+                        case 1:
+                                param = spa_pod_builder_add_object(&b,
+                                        SPA_TYPE_OBJECT_ParamIO, id,
+                                        SPA_PARAM_IO_id, SPA_POD_Id(SPA_IO_Notify),
+                                        SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_sequence) + 1024));
+                                break;
+                        default:
+                                done = true;
+                                break;
+                        }
+
+                        break;
+                default:
+                        done = true;
+                        break;
+                }
+
+                if (param == NULL) {
+                        continue;
+                }
+
+                if (spa_pod_filter(&b, &result.param, param, filter) < 0) {
+                        continue;
+                }
+
+                pw_log_warn("emit");
+                spa_node_emit_result(&d->hooks, seq, 0, SPA_RESULT_TYPE_NODE_PARAMS, &result);
+                emitted += 1;
+        }
+
+        if (found) {
+                pw_log_warn("found:%d", found);
+                return 0;
+        }
+
+        pw_log_warn("enoent");
+        return -ENOENT;
 }
 
 static int impl_port_set_param(void *object,
@@ -369,7 +433,10 @@ static int impl_port_set_param(void *object,
                                uint32_t id, uint32_t flags,
                                const struct spa_pod *param)
 {
-        pw_log_info("port_set_param direction:%d, port_id:%d, id:%d, flags:%d", direction, port_id, id, flags);
+        struct data *d = object;
+
+        pw_log_info("%p: port_set_param %d (%s) direction:%d, port_id:%d, flags:%d",
+                d, id, spa_debug_type_find_name(spa_type_param, id), direction, port_id, flags);
 
         if (param != NULL) {
                 spa_debug_pod(0, NULL, param);
@@ -377,13 +444,11 @@ static int impl_port_set_param(void *object,
                 pw_log_debug("(nil)");
         }
 
-        struct data *d = object;
-
         switch (id) {
         case SPA_PARAM_Format:
-                if (d->latency_pod != NULL) {
-                        free(d->latency_pod);
-                        d->latency_pod = NULL;
+                if (d->format_pod != NULL) {
+                        free(d->format_pod);
+                        d->format_pod = NULL;
                 }
 
                 if (param != NULL) {
@@ -392,8 +457,10 @@ static int impl_port_set_param(void *object,
 
                 if (d->format_pod != NULL) {
                         spa_format_audio_raw_parse(d->format_pod, &d->format);
+                        d->port_params[PORT_Format].flags |= SPA_PARAM_INFO_READ;
                 } else {
                         spa_zero(d->format);
+                        d->port_params[PORT_Format].flags &= ~SPA_PARAM_INFO_READ;
                 }
 
                 break;
@@ -405,6 +472,24 @@ static int impl_port_set_param(void *object,
 
                 if (param != NULL) {
                         d->latency_pod = spa_pod_copy(param);
+                        d->port_params[PORT_Latency].flags |= SPA_PARAM_INFO_READ;
+                } else {
+                        d->port_params[PORT_Latency].flags &= ~SPA_PARAM_INFO_READ;
+                }
+
+                break;
+
+        case SPA_PARAM_Tag:
+                if (d->tag_pod != NULL) {
+                        free(d->tag_pod);
+                        d->tag_pod = NULL;
+                }
+
+                if (param != NULL) {
+                        d->tag_pod = spa_pod_copy(param);
+                        d->port_params[PORT_Tag].flags |= SPA_PARAM_INFO_READ;
+                } else {
+                        d->port_params[PORT_Tag].flags &= ~SPA_PARAM_INFO_READ;
                 }
 
                 break;
@@ -699,7 +784,7 @@ static int make_node(struct data *data)
                 return -errno;
         }
 
-	pw_impl_node_set_active(data->node, true);
+        pw_impl_node_set_active(data->node, true);
 
         data->proxy = pw_core_export(data->core, PW_TYPE_INTERFACE_Node, NULL, data->node, 0);
 
@@ -748,7 +833,6 @@ int main(int argc, char *argv[])
         data.props = pw_properties_new(
                 PW_KEY_MEDIA_NAME, "livemix",
                 PW_KEY_NODE_AUTOCONNECT, "false",
-                PW_KEY_NODE_EXCLUSIVE, "true",
                 PW_KEY_NODE_NAME, "livemix",
                 PW_KEY_MEDIA_TYPE, "Audio",
                 PW_KEY_MEDIA_CATEGORY, "Playback",
@@ -767,7 +851,7 @@ int main(int argc, char *argv[])
 	data.params[NODE_PropInfo] = SPA_PARAM_INFO(SPA_PARAM_PropInfo, 0);
 	data.params[NODE_Props] = SPA_PARAM_INFO(SPA_PARAM_Props, SPA_PARAM_INFO_WRITE);
 	data.params[NODE_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
-	data.params[NODE_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
+	data.params[NODE_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_READ);
 	data.params[NODE_ProcessLatency] = SPA_PARAM_INFO(SPA_PARAM_ProcessLatency, SPA_PARAM_INFO_READWRITE);
         data.info.props = &data.props->dict;
 	data.info.params = data.params;
@@ -784,7 +868,7 @@ int main(int argc, char *argv[])
 	data.port_params[PORT_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
 	data.port_params[PORT_Meta] = SPA_PARAM_INFO(SPA_PARAM_Meta, 0);
 	data.port_params[PORT_IO] = SPA_PARAM_INFO(SPA_PARAM_IO, 0);
-	data.port_params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
+	data.port_params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_READ);
 	data.port_params[PORT_Buffers] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
 	data.port_params[PORT_Latency] = SPA_PARAM_INFO(SPA_PARAM_Latency, SPA_PARAM_INFO_WRITE);
 	data.port_params[PORT_Tag] = SPA_PARAM_INFO(SPA_PARAM_Tag, SPA_PARAM_INFO_WRITE);
