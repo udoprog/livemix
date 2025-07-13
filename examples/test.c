@@ -287,7 +287,7 @@ static int impl_port_enum_params(void *object, int seq,
                         switch (result.index) {
                         case 0:
                                 param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+                                        SPA_TYPE_OBJECT_Format,    id,
                                         SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                                         SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
                                         SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
@@ -304,8 +304,9 @@ static int impl_port_enum_params(void *object, int seq,
                         found = true;
 
                         switch (result.index) {
+                        case 0:
                                 param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
+                                        SPA_TYPE_OBJECT_Format,    id,
                                         SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                                         SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
                                         SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
@@ -411,6 +412,7 @@ static int impl_port_enum_params(void *object, int seq,
                 }
 
                 if (spa_pod_filter(&b, &result.param, param, filter) < 0) {
+                        pw_log_warn("filter failed");
                         continue;
                 }
 
