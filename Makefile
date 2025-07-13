@@ -11,4 +11,4 @@ clean:
 	rm -f target/node
 
 run: target/node
-	PIPEWIRE_DEBUG=D target/node
+	target/node

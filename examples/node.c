@@ -36,9 +36,6 @@ struct buffer {
 
 struct port {
         struct spa_audio_info_raw format;
-        struct spa_pod *format_pod;
-        struct spa_pod *latency_pod;
-        struct spa_pod *tag_pod;
 
         struct spa_port_info port_info;
         struct pw_properties *port_props;
@@ -47,9 +44,7 @@ struct port {
 #define PORT_IO		2
 #define PORT_Format	3
 #define PORT_Buffers	4
-#define PORT_Latency	5
-#define PORT_Tag	6
-#define N_PORT_PARAMS	7
+#define N_PORT_PARAMS	5
         struct spa_param_info port_params[N_PORT_PARAMS];
 
         struct buffer buffers[MAX_BUFFERS];
@@ -81,13 +76,13 @@ struct data {
 #define NODE_Props		1
 #define NODE_EnumFormat		2
 #define NODE_Format		3
-#define NODE_ProcessLatency	4
-#define N_NODE_PARAMS		5
+#define N_NODE_PARAMS		4
         struct spa_param_info params[N_NODE_PARAMS];
 
         uint64_t port_change_mask_all;
-#define N_PORTS 16
-        struct port ports[N_PORTS];
+#define MAX_PORTS 16
+        struct port ports[MAX_PORTS];
+        uint32_t n_ports;
  
         struct spa_node impl_node;
         struct spa_hook_list hooks;
@@ -104,8 +99,10 @@ struct data {
 static void emit_node_info(struct data *d, bool full) {
 	uint32_t i;
 	uint64_t old = full ? d->info.change_mask : 0;
-	if (full)
+	if (full) {
 		d->info.change_mask = d->change_mask_all;
+        }
+
 	if (d->info.change_mask != 0) {
 		if (d->info.change_mask & SPA_NODE_CHANGE_MASK_PARAMS) {
 			for (i = 0; i < d->info.n_params; i++) {
@@ -115,8 +112,10 @@ static void emit_node_info(struct data *d, bool full) {
 				}
 			}
 		}
+
 		spa_node_emit_info(&d->hooks, &d->info);
 	}
+
 	d->info.change_mask = old;
 }
 
@@ -126,7 +125,7 @@ static void emit_port_info(struct data *d, bool full) {
         int n;
         struct port *port;
         
-        for (n = 0; n < N_PORTS; n++) {
+        for (n = 0; n < d->n_ports; n++) {
                 port = &d->ports[n];
                 old = full ? port->port_info.change_mask : 0;
 
@@ -187,8 +186,6 @@ static int impl_add_listener(void *object,
                 const struct spa_node_events *events,
                 void *data)
 {
-        pw_log_debug("add listener");
-
         struct data *d = object;
         struct spa_hook_list save;
  
@@ -226,8 +223,6 @@ static int impl_set_param(void *object, uint32_t id, uint32_t flags, const struc
 
         if (param != NULL) {
                 spa_debug_pod(0, NULL, param);
-        } else {
-                pw_log_debug("(nil)");
         }
 
 	emit_node_info(d, false);
@@ -247,7 +242,7 @@ static int impl_port_set_io(
 
         struct data *d = object;
 
-        if (port_id >= N_PORTS) {
+        if (port_id >= d->n_ports) {
                 pw_log_error("%p: invalid port id %d", d, port_id);
                 return -EINVAL;
         }
@@ -280,107 +275,72 @@ static int impl_port_enum_params(void *object, int seq,
         struct spa_pod_builder b = { 0 };
         uint8_t buffer[1024];
         int emitted = 0;
-        bool found = false;
-        bool done = false;
         
-        if (port_id >= N_PORTS) {
+        if (port_id >= d->n_ports) {
                 pw_log_error("%p: invalid port id %d", d, port_id);
                 return -EINVAL;
         }
 
         struct port *p = &d->ports[port_id];
 
-        pw_log_debug("%p: param id %d (%s) start:%d num:%d",
-                d, id, spa_debug_type_find_name(spa_type_param, id), start, num);
+        pw_log_info("%p: port_enum_params id %d (%s) start:%d num:%d port_id:%d",
+                d, id, spa_debug_type_find_name(spa_type_param, id), start, num, port_id);
 
         if (filter != NULL) {
                 spa_debug_pod(0, NULL, filter);
-        } else {
-                pw_log_debug("(nil)");
         }
 
         result.id = id;
         result.next = start;
 
-        while (!done) {
+        while (true) {
                 param = NULL;
-                result.index = result.next++;
-
+                
                 if (emitted >= num) {
                         break;
                 }
+
+                result.index = result.next++;
 
                 spa_pod_builder_init(&b, buffer, sizeof(buffer));
 
                 switch (id) {
                 case SPA_PARAM_EnumFormat:
-                        found = true;
-
                         switch (result.index) {
                         case 0:
                                 param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_Format,    id,
+                                        SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
                                         SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
                                         SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
-                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
-                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(2));
+                                        SPA_FORMAT_AUDIO_format,   SPA_POD_CHOICE_ENUM_Id(5,
+                                                                        SPA_AUDIO_FORMAT_S16,
+                                                                        SPA_AUDIO_FORMAT_S16P,
+                                                                        SPA_AUDIO_FORMAT_S16,
+                                                                        SPA_AUDIO_FORMAT_F32P,
+                                                                        SPA_AUDIO_FORMAT_F32),
+                                        SPA_FORMAT_AUDIO_channels, SPA_POD_CHOICE_RANGE_Int(2, 1, INT32_MAX),
+                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_CHOICE_RANGE_Int(44100, 1, INT32_MAX));
                                 break;
                         default:
-                                done = true;
-                                break;
+                                return 0;
                         }
 
                         break;
                 case SPA_PARAM_Format:
-                        found = true;
-
                         switch (result.index) {
                         case 0:
-                                param = spa_pod_builder_add_object(&b,
-                                        SPA_TYPE_OBJECT_Format,    id,
-                                        SPA_FORMAT_mediaType,      SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                                        SPA_FORMAT_mediaSubtype,   SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                                        SPA_FORMAT_AUDIO_format,   SPA_POD_Id(SPA_AUDIO_FORMAT_F32),
-                                        SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(DSP_RATE),
-                                        SPA_FORMAT_AUDIO_channels, SPA_POD_Int(2));
+                                if (p->format.format == SPA_AUDIO_FORMAT_UNKNOWN) {
+                                        return 0;
+                                }
 
+                                param = spa_format_audio_raw_build(&b, id, &p->format);
                                 break;
                         default:
-                                done = true;
-                                break;
-                        }
-
-                        break;
-                case SPA_PARAM_Latency:
-                        found = p->latency_pod != NULL;
-
-                        switch (result.index) {
-                        case 0:
-                                param = p->latency_pod;
-                                break;
-                        default:
-                                done = true;
-                                break;
-                        }
-
-                        break;
-                case SPA_PARAM_Tag:
-                        found = p->tag_pod != NULL;
-
-                        switch (result.index) {
-                        case 0:
-                                param = p->tag_pod;
-                                break;
-                        default:
-                                done = true;
-                                break;
+                                return 0;
                         }
 
                         break;
                 case SPA_PARAM_Buffers:
-                        found = true;
-
                         switch (result.index) {
                         case 0:
                                 param = spa_pod_builder_add_object(&b,
@@ -393,28 +353,24 @@ static int impl_port_enum_params(void *object, int seq,
 
                                 break;
                         default:
-                                done = true;
-                                break;
+                                return 0;
                         }
 
                         break;
-        
                 case SPA_PARAM_Meta:
-                        found = true;
-
-                        if (result.index == 0) {
+                        switch (result.index) {
+                        case 0:
                                 param = spa_pod_builder_add_object(&b,
                                         SPA_TYPE_OBJECT_ParamMeta, id,
                                         SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
                                         SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
-                        } else {
-                                done = true;
+                                break;
+                        default:
+                                return 0;
                         }
 
                         break;
                 case SPA_PARAM_IO:
-                        found = true;
-
                         switch (result.index) {
                         case 0:
                                 param = spa_pod_builder_add_object(&b,
@@ -429,18 +385,12 @@ static int impl_port_enum_params(void *object, int seq,
                                         SPA_PARAM_IO_size, SPA_POD_Int(sizeof(struct spa_io_sequence) + 1024));
                                 break;
                         default:
-                                done = true;
-                                break;
+                                return 0;
                         }
 
                         break;
                 default:
-                        done = true;
-                        break;
-                }
-
-                if (param == NULL) {
-                        continue;
+                        return -ENOENT;
                 }
 
                 if (spa_pod_filter(&b, &result.param, param, filter) < 0) {
@@ -452,11 +402,7 @@ static int impl_port_enum_params(void *object, int seq,
                 emitted += 1;
         }
 
-        if (found) {
-                return 0;
-        }
-
-        return -ENOENT;
+        return 0;
 }
 
 static int impl_port_set_param(void *object,
@@ -466,7 +412,7 @@ static int impl_port_set_param(void *object,
 {
         struct data *d = object;
 
-        if (port_id >= N_PORTS) {
+        if (port_id >= d->n_ports) {
                 return -EINVAL;
         }
 
@@ -477,56 +423,18 @@ static int impl_port_set_param(void *object,
 
         if (param != NULL) {
                 spa_debug_pod(0, NULL, param);
-        } else {
-                pw_log_debug("(nil)");
         }
 
         switch (id) {
         case SPA_PARAM_Format:
-                if (p->format_pod != NULL) {
-                        free(p->format_pod);
-                        p->format_pod = NULL;
-                }
-
                 if (param != NULL) {
-                        p->format_pod = spa_pod_copy(param);
-                }
-
-                if (p->format_pod != NULL) {
-                        spa_format_audio_raw_parse(p->format_pod, &p->format);
-                        p->port_params[PORT_Format].flags |= SPA_PARAM_INFO_READ;
+                        spa_format_audio_raw_parse(param, &p->format);
+                        d->params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_READWRITE);
+                        d->params[PORT_Buffers] = SPA_PARAM_INFO(SPA_PARAM_Buffers, SPA_PARAM_INFO_READ);
                 } else {
                         spa_zero(p->format);
-                        p->port_params[PORT_Format].flags &= ~SPA_PARAM_INFO_READ;
-                }
-
-                break;
-        case SPA_PARAM_Latency:
-                if (p->latency_pod != NULL) {
-                        free(p->latency_pod);
-                        p->latency_pod = NULL;
-                }
-
-                if (param != NULL) {
-                        p->latency_pod = spa_pod_copy(param);
-                        p->port_params[PORT_Latency].flags |= SPA_PARAM_INFO_READ;
-                } else {
-                        p->port_params[PORT_Latency].flags &= ~SPA_PARAM_INFO_READ;
-                }
-
-                break;
-
-        case SPA_PARAM_Tag:
-                if (p->tag_pod != NULL) {
-                        free(p->tag_pod);
-                        p->tag_pod = NULL;
-                }
-
-                if (param != NULL) {
-                        p->tag_pod = spa_pod_copy(param);
-                        p->port_params[PORT_Tag].flags |= SPA_PARAM_INFO_READ;
-                } else {
-                        p->port_params[PORT_Tag].flags &= ~SPA_PARAM_INFO_READ;
+                        d->params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
+                        d->params[PORT_Buffers] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
                 }
 
                 break;
@@ -546,21 +454,21 @@ static int impl_port_use_buffers(void *object,
                 uint32_t flags,
                 struct spa_buffer **buffers, uint32_t n_buffers)
 {
+        struct data *d = object;
+
         pw_log_info("port_use_buffers direction:%d, port_id:%d, flags:%d, n_buffers:%d", direction, port_id, flags, n_buffers);
 
-        if (port_id >= N_PORTS) {
+        if (port_id >= d->n_ports) {
                 return -EINVAL;
         }
 
-        struct data *d = object;
-        uint32_t i;
         struct port *p = &d->ports[port_id];
  
         if (n_buffers > MAX_BUFFERS) {
                 return -ENOSPC;
         }
  
-        for (i = 0; i < n_buffers; i++) {
+        for (uint32_t i = 0; i < n_buffers; i++) {
                 struct buffer *b = &p->buffers[i];
                 struct spa_data *datas = buffers[i]->datas;
  
@@ -603,7 +511,7 @@ static int impl_port_reuse_buffer(void *object, uint32_t port_id, uint32_t buffe
 {
         struct data *d = object;
 
-        if (port_id >= N_PORTS) {
+        if (port_id >= d->n_ports) {
                 pw_log_error("%p: invalid port id %d", d, port_id);
                 return -EINVAL;
         }
@@ -688,13 +596,15 @@ static void fill_f32_planar(struct data *d, void *dest, int avail)
 
 static int impl_node_process(void *object)
 {
+        pw_log_warn("impl_node_process");
+
         struct data *d = object;
         struct buffer *b;
         uint32_t maxsize;
         struct spa_data *od;
         int n = 0;
 
-        for (n = 0; n < N_PORTS; n++) {
+        for (n = 0; n < d->n_ports; n++) {
                 struct port *p = &d->ports[n];
 
                 struct spa_io_buffers *io = p->io;
@@ -736,17 +646,17 @@ static int impl_node_process(void *object)
 
 static void proxy_removed(void *object) {
         struct data *data = object;
-	pw_log_debug("%p: removed", data);
+	pw_log_info("%p: proxy removed", data);
 }
 
 static void proxy_destroy(void *object) {
         struct data *data = object;
-	pw_log_debug("%p: destroy", data);
+	pw_log_info("%p: proxy destroy", data);
 }
 
 static void proxy_error(void *object, int seq, int res, const char *message) {
         struct data *data = object;
-	pw_log_debug("%p: error: %s", data, message);
+	pw_log_info("%p: proxy error: %s", data, message);
 }
 
 static void proxy_bound_props(void *data, uint32_t global_id, const struct spa_dict *props) {
@@ -891,15 +801,13 @@ int main(int argc, char *argv[])
         data.context = pw_context_new(pw_main_loop_get_loop(data.loop), NULL, 0);
         data.path = argc > 1 ? argv[1] : NULL;
 
-	data.change_mask_all =
-		SPA_NODE_CHANGE_MASK_FLAGS |
-		SPA_NODE_CHANGE_MASK_PROPS |
-		SPA_NODE_CHANGE_MASK_PARAMS;
+	data.change_mask_all = SPA_NODE_CHANGE_MASK_FLAGS | SPA_NODE_CHANGE_MASK_PROPS | SPA_NODE_CHANGE_MASK_PARAMS;
 
         data.props = pw_properties_new(
-                PW_KEY_MEDIA_NAME, "livemix",
-                PW_KEY_NODE_AUTOCONNECT, "false",
+                PW_KEY_NODE_AUTOCONNECT, "true",
+                PW_KEY_NODE_EXCLUSIVE, "true",
                 PW_KEY_NODE_NAME, "livemix",
+                PW_KEY_MEDIA_NAME, "lmao",
                 PW_KEY_MEDIA_TYPE, "Audio",
                 PW_KEY_MEDIA_CATEGORY, "Playback",
                 PW_KEY_MEDIA_ROLE, "Music",
@@ -916,9 +824,8 @@ int main(int argc, char *argv[])
 
 	data.params[NODE_PropInfo] = SPA_PARAM_INFO(SPA_PARAM_PropInfo, 0);
 	data.params[NODE_Props] = SPA_PARAM_INFO(SPA_PARAM_Props, SPA_PARAM_INFO_WRITE);
-	data.params[NODE_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
-	data.params[NODE_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_READ);
-	data.params[NODE_ProcessLatency] = SPA_PARAM_INFO(SPA_PARAM_ProcessLatency, SPA_PARAM_INFO_READWRITE);
+	data.params[NODE_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, SPA_PARAM_INFO_READ);
+	data.params[NODE_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
         data.info.props = &data.props->dict;
 	data.info.params = data.params;
 	data.info.n_params = N_NODE_PARAMS;
@@ -926,10 +833,11 @@ int main(int argc, char *argv[])
  
         data.port_change_mask_all = SPA_PORT_CHANGE_MASK_FLAGS | SPA_PORT_CHANGE_MASK_PROPS | SPA_PORT_CHANGE_MASK_PARAMS;
 
-        for (n = 0; n < N_PORTS; n++) {
+        char name[32];
+
+        for (n = 0; n < MAX_PORTS; n++) {
                 struct port *port = &data.ports[n];
 
-                char name[32];
                 snprintf(name, sizeof(name), "out_%d", n);
 
                 port->port_props = pw_properties_new(
@@ -938,13 +846,11 @@ int main(int argc, char *argv[])
                         NULL
                 );
 
-                port->port_params[PORT_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, 0);
-                port->port_params[PORT_Meta] = SPA_PARAM_INFO(SPA_PARAM_Meta, 0);
-                port->port_params[PORT_IO] = SPA_PARAM_INFO(SPA_PARAM_IO, 0);
-                port->port_params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_READ);
+                port->port_params[PORT_EnumFormat] = SPA_PARAM_INFO(SPA_PARAM_EnumFormat, SPA_PARAM_INFO_READ);
+                port->port_params[PORT_Meta] = SPA_PARAM_INFO(SPA_PARAM_Meta, SPA_PARAM_INFO_READ);
+                port->port_params[PORT_IO] = SPA_PARAM_INFO(SPA_PARAM_IO, SPA_PARAM_INFO_READ);
+                port->port_params[PORT_Format] = SPA_PARAM_INFO(SPA_PARAM_Format, SPA_PARAM_INFO_WRITE);
                 port->port_params[PORT_Buffers] = SPA_PARAM_INFO(SPA_PARAM_Buffers, 0);
-                port->port_params[PORT_Latency] = SPA_PARAM_INFO(SPA_PARAM_Latency, SPA_PARAM_INFO_WRITE);
-                port->port_params[PORT_Tag] = SPA_PARAM_INFO(SPA_PARAM_Tag, SPA_PARAM_INFO_WRITE);
 
                 port->port_info = SPA_PORT_INFO_INIT();
                 port->port_info.flags = 0;
@@ -955,7 +861,8 @@ int main(int argc, char *argv[])
                 spa_zero(port->format);
                 spa_list_init(&port->empty);
         }
- 
+
+        data.n_ports = MAX_PORTS;
         spa_hook_list_init(&data.hooks);
  
         if ((data.core = pw_context_connect(data.context, NULL, 0)) == NULL) {
