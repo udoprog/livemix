@@ -42,6 +42,9 @@ struct lm_stream {
 	struct spa_hook node_rt_listener;
 
 	struct spa_list controls;
+
+	unsigned int driving: 1;
+	unsigned int sc_pagesize;
 };
 
 int pw_impl_node_trigger(struct pw_impl_node *node);
@@ -61,6 +64,8 @@ void pw_log_log_object(enum spa_log_level level, const struct spa_log_topic *top
 
 #define pw_log_pod(lev,pod) pw_log_object(lev,PW_LOG_TOPIC_DEFAULT,PW_LOG_OBJECT_POD,pod)
 #define pw_log_format(lev,pod) pw_log_object(lev,PW_LOG_TOPIC_DEFAULT,PW_LOG_OBJECT_FORMAT,pod)
+
+int pw_loop_check(struct pw_loop *loop);
 
 #define ensure_loop(loop,...) ({							\
 	int res = pw_loop_check(loop);							\

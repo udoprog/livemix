@@ -786,7 +786,7 @@ static int map_data(struct stream *impl, struct spa_data *data, int prot)
 	void *ptr;
 	struct pw_map_range range;
 
-	pw_map_range_init(&range, data->mapoffset, data->maxsize, impl->context->sc_pagesize);
+	pw_map_range_init(&range, data->mapoffset, data->maxsize, impl->this.sc_pagesize);
 
 	ptr = mmap(NULL, range.size, prot, MAP_SHARED, data->fd, range.offset);
 	if (ptr == MAP_FAILED) {
@@ -816,7 +816,7 @@ static int unmap_data(struct stream *impl, struct spa_data *data)
 {
 	struct pw_map_range range;
 
-	pw_map_range_init(&range, data->mapoffset, data->maxsize, impl->context->sc_pagesize);
+	pw_map_range_init(&range, data->mapoffset, data->maxsize, impl->this.sc_pagesize);
 
 	if (munmap(SPA_PTROFF(data->data, -range.start, void), range.size) < 0)
 		pw_log_warn("%p: failed to unmap: %m", impl);
@@ -1073,7 +1073,7 @@ static int impl_node_process_input(void *object)
 		}
 		io->status = SPA_STATUS_NEED_DATA;
 	}
-	if (stream->node->driving && impl->using_trigger)
+	if (stream->driving && impl->using_trigger)
 		call_trigger_done(impl);
 
 	return SPA_STATUS_NEED_DATA | SPA_STATUS_HAVE_DATA;
@@ -1128,7 +1128,7 @@ again:
 
 	copy_position(impl, impl->queued.outcount);
 
-	if (!impl->draining && !stream->node->driving && ask_more) {
+	if (!impl->draining && !stream->driving && ask_more) {
 		/* we're not draining, not a driver check if we need to get
 		 * more buffers */
 		call_process(impl);
@@ -1138,7 +1138,7 @@ again:
 
 	pw_log_trace_fp("%p: res %d", stream, res);
 
-	if (stream->node->driving && impl->using_trigger && res != SPA_STATUS_HAVE_DATA)
+	if (stream->driving && impl->using_trigger && res != SPA_STATUS_HAVE_DATA)
 		call_trigger_done(impl);
 
 	return res;
@@ -1441,11 +1441,17 @@ static void node_state_changed(void *data, enum pw_node_state old,
 	}
 }
 
+void node_driver_changed(void *data, struct pw_impl_node *old, struct pw_impl_node *driver) {
+	struct lm_stream *stream = data;
+	stream->driving = driver == stream->node;
+}
+
 static const struct pw_impl_node_events node_events = {
 	PW_VERSION_IMPL_NODE_EVENTS,
 	.destroy = node_event_destroy,
 	.info_changed = node_event_info,
 	.state_changed = node_state_changed,
+	.driver_changed = node_driver_changed,
 };
 
 static void on_core_error(void *data, uint32_t id, int seq, int res, const char *message)
@@ -1563,6 +1569,8 @@ stream_new(struct pw_context *context, const char *name,
 	spa_list_init(&this->controls);
 
 	this->state = LM_STREAM_STATE_UNCONNECTED;
+	this->driving = false;
+	this->sc_pagesize = sysconf(_SC_PAGESIZE);
 
 	impl->context = context;
 	impl->allow_mlock = context->settings.mem_allow_mlock;
@@ -1585,15 +1593,15 @@ struct lm_stream * lm_stream_new(struct pw_core *core, const char *name,
 {
 	struct stream *impl;
 	struct lm_stream *this;
-	struct pw_context *context = core->context;
+	struct pw_context *context = pw_core_get_context(core);
 
-	impl = stream_new(context, name, props, core->properties);
+	impl = stream_new(context, name, props, pw_core_get_properties(core));
 	if (impl == NULL)
 		return NULL;
 
 	this = &impl->this;
 	this->core = core;
-	spa_list_append(&core->stream_list, &this->link);
+	// spa_list_append(&core->stream_list, &this->link);
 	pw_core_add_listener(core,
 			&this->core_listener, &core_events, this);
 
@@ -2504,7 +2512,7 @@ int lm_stream_queue_buffer(struct lm_stream *stream, struct pw_buffer *buffer)
 		return res;
 
 	if (impl->direction == SPA_DIRECTION_OUTPUT &&
-	    stream->node->driving && !impl->using_trigger) {
+	    stream->driving && !impl->using_trigger) {
 		pw_log_debug("deprecated: use lm_stream_trigger_process() to drive the stream.");
 		res = pw_loop_invoke(impl->data_loop,
 			do_trigger_deprecated, 1, NULL, 0, false, impl);
@@ -2607,7 +2615,7 @@ int lm_stream_flush(struct lm_stream *stream, bool drain)
 SPA_EXPORT
 bool lm_stream_is_driving(struct lm_stream *stream)
 {
-	return stream->node->driving;
+	return stream->driving;
 }
 
 SPA_EXPORT
@@ -2654,14 +2662,14 @@ int lm_stream_trigger_process(struct lm_stream *stream)
 	struct stream *impl = SPA_CONTAINER_OF(stream, struct stream, this);
 	int res = 0;
 
-	pw_log_trace_fp("%p: trigger:%d driving:%d", impl, impl->trigger, stream->node->driving);
+	pw_log_trace_fp("%p: trigger:%d driving:%d", impl, impl->trigger, stream->driving);
 
 	/* flag to check for old or new behaviour */
 	impl->using_trigger = true;
 
 	if (impl->trigger) {
 		res = pw_impl_node_trigger(stream->node);
-	} else if (stream->node->driving) {
+	} else if (stream->driving) {
 		res = pw_loop_invoke(impl->data_loop,
 			do_trigger_driver, 1, NULL, 0, false, impl);
 	} else {
