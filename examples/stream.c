@@ -41,6 +41,9 @@ PW_LOG_TOPIC_EXTERN(log_stream);
 
 static bool mlock_warned = false;
 
+#define DEFAULT_MEM_WARN_MLOCK			false
+#define DEFAULT_MEM_ALLOW_MLOCK			true
+
 struct buffer {
 	struct pw_buffer this;
 	uint32_t id;
@@ -148,6 +151,7 @@ struct stream {
 	uint64_t quantum;
 
 	struct spa_callbacks rt_callbacks;
+	struct spa_io_position *position;
 
 	unsigned int disconnecting:1;
 	unsigned int disconnect_core:1;
@@ -163,6 +167,18 @@ struct stream {
 	int in_emit_param_changed;
 	int pending_drain;
 };
+
+static bool get_default_bool(const struct pw_properties *properties, const char *name, bool def)
+{
+	bool val;
+	const char *str;
+	if ((str = pw_properties_get(properties, name)) != NULL)
+		val = pw_properties_parse_bool(str);
+	else {
+		val = def;
+	}
+	return val;
+}
 
 static int get_param_index(uint32_t id)
 {
@@ -513,6 +529,14 @@ static int impl_set_io(void *object, uint32_t id, void *data, size_t size)
 
 	lm_stream_emit_io_changed(stream, id, data, size);
 
+	switch (id) {
+		case SPA_IO_Position:
+			impl->position = data;
+			break;
+		default:
+			break;
+	}
+
 	return 0;
 }
 
@@ -643,7 +667,7 @@ static int impl_set_param(void *object, uint32_t id, uint32_t flags, const struc
 
 static inline void copy_position(struct stream *impl, int64_t queued)
 {
-	struct spa_io_position *p = impl->this.node->rt.position;
+	struct spa_io_position *p = impl->position;
 
 	SPA_SEQ_WRITE(impl->seq);
 	if (SPA_LIKELY(p != NULL)) {
@@ -1512,7 +1536,7 @@ stream_new(struct pw_context *context, const char *name,
 	const char *str;
 	int res;
 
-	ensure_loop(context->main_loop, return NULL);
+	ensure_loop(pw_context_get_main_loop(context), return NULL);
 
 	impl = calloc(1, sizeof(struct stream));
 	if (impl == NULL) {
@@ -1572,10 +1596,12 @@ stream_new(struct pw_context *context, const char *name,
 	this->driving = false;
 	this->sc_pagesize = sysconf(_SC_PAGESIZE);
 
-	impl->context = context;
-	impl->allow_mlock = context->settings.mem_allow_mlock;
-	impl->warn_mlock = context->settings.mem_warn_mlock;
+	const struct pw_properties *p = pw_context_get_properties(context);
 
+	impl->warn_mlock = get_default_bool(p, "mem.warn-mlock", DEFAULT_MEM_WARN_MLOCK);
+	impl->allow_mlock = get_default_bool(p, "mem.allow-mlock", DEFAULT_MEM_ALLOW_MLOCK);
+	impl->context = context;
+	impl->position = NULL;
 	return impl;
 
 error_properties:
@@ -2113,7 +2139,7 @@ lm_stream_connect(struct lm_stream *stream,
 			res = -errno;
 			goto error_connect;
 		}
-		spa_list_append(&stream->core->stream_list, &stream->link);
+		// spa_list_append(&stream->core->stream_list, &stream->link);
 		pw_core_add_listener(stream->core,
 				&stream->core_listener, &core_events, stream);
 		impl->disconnect_core = true;
@@ -2169,7 +2195,8 @@ lm_stream_connect(struct lm_stream *stream,
 	pw_impl_node_set_active(stream->node,
 			!SPA_FLAG_IS_SET(impl->flags, LM_STREAM_FLAG_INACTIVE));
 
-	impl->data_loop = stream->node->data_loop;
+	// TODO: this should use data_loop.
+	impl->data_loop = pw_context_get_main_loop(impl->context);
 
 	pw_log_debug("%p: export node %p", stream, stream->node);
 	stream->proxy = pw_core_export(stream->core,
@@ -2606,9 +2633,12 @@ int lm_stream_flush(struct lm_stream *stream, bool drain)
 	pw_loop_invoke(impl->data_loop,
 			drain ? do_drain : do_flush, 1, NULL, 0, true, impl);
 
+	// TODO: How to do this?
+	/*
 	if (!drain)
-		spa_node_send_command(stream->node->node,
+		spa_node_send_command(stream->node,
 				&SPA_NODE_COMMAND_INIT(SPA_NODE_COMMAND_Flush));
+	*/
 	return 0;
 }
 
@@ -2618,11 +2648,13 @@ bool lm_stream_is_driving(struct lm_stream *stream)
 	return stream->driving;
 }
 
+/*
 SPA_EXPORT
 bool lm_stream_is_lazy(struct lm_stream *stream)
 {
 	return stream->node->lazy;
 }
+*/
 
 static int
 do_trigger_driver(struct spa_loop *loop,
