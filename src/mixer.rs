@@ -12,7 +12,8 @@ use pw_sys::pw_stream_state;
 use spa_sys::spa_pod;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use crate::{pw, spa};
+use crate::spa;
+use crate::pw;
 
 const M_PI_M2: f32 = PI * PI;
 const DEFAULT_RATE: u32 = 48000;
