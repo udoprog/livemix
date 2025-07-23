@@ -25,6 +25,10 @@ pub trait Writer: self::sealed::Sealed {
     /// Reserve space for the given number of words.
     fn reserve_words(&mut self, words: &[u32]) -> Result<Self::Pos, Error>;
 
+    /// Get the distance from the given position to the current writer position
+    /// in words.
+    fn distance_from(&self, pos: Self::Pos) -> usize;
+
     /// Write `words` number of zeros the writer.
     fn write_zeros(&mut self, words: usize) -> Result<(), Error>;
 
@@ -54,10 +58,7 @@ pub trait Writer: self::sealed::Sealed {
     }
 
     /// Write bytes to the writer.
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error>;
-
-    /// Write bytes to the writer, appending a null byte at the end.
-    fn write_bytes_with_nul(&mut self, bytes: &[u8]) -> Result<(), Error>;
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>;
 }
 
 impl<W> Writer for &mut W
@@ -79,6 +80,11 @@ where
     #[inline]
     fn reserve_words(&mut self, words: &[u32]) -> Result<Self::Pos, Error> {
         (**self).reserve_words(words)
+    }
+
+    #[inline]
+    fn distance_from(&self, pos: Self::Pos) -> usize {
+        (**self).distance_from(pos)
     }
 
     #[inline]
@@ -107,12 +113,7 @@ where
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        (**self).write_bytes(bytes)
-    }
-
-    #[inline]
-    fn write_bytes_with_nul(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        (**self).write_bytes_with_nul(bytes)
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
+        (**self).write_bytes(bytes, pad)
     }
 }

@@ -64,13 +64,13 @@ impl EncodeUnsized for [u8] {
         };
 
         writer.write_words(&[len, Type::BYTES.into_u32()])?;
-        writer.write_bytes(self)?;
+        writer.write_bytes(self, 0)?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_bytes(self)
+        writer.write_bytes(self, 0)
     }
 }
 
@@ -108,13 +108,13 @@ impl EncodeUnsized for CStr {
         };
 
         writer.write_words(&[len, Type::STRING.into_u32()])?;
-        writer.write_bytes(bytes)?;
+        writer.write_bytes(bytes, 0)?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_bytes(self.to_bytes_with_nul())?;
+        writer.write_bytes(self.to_bytes_with_nul(), 0)?;
         Ok(())
     }
 }
@@ -160,13 +160,13 @@ impl EncodeUnsized for str {
         }
 
         writer.write_words(&[len, Type::STRING.into_u32()])?;
-        writer.write_bytes_with_nul(bytes)?;
+        writer.write_bytes(bytes, 1)?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_bytes_with_nul(self.as_bytes())?;
+        writer.write_bytes(self.as_bytes(), 1)?;
         Ok(())
     }
 }
@@ -204,13 +204,13 @@ impl EncodeUnsized for Bitmap {
         };
 
         writer.write_words(&[len, Type::BITMAP.into_u32()])?;
-        writer.write_bytes(value)?;
+        writer.write_bytes(value, 0)?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_bytes(self.as_bytes())?;
+        writer.write_bytes(self.as_bytes(), 0)?;
         Ok(())
     }
 }

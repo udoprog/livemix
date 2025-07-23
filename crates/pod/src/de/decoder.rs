@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use crate::OwnedBitmap;
 use crate::error::ErrorKind;
-use crate::{Bitmap, Error, Fraction, Id, IntoId, Reader, Rectangle, Type, Visitor};
+use crate::{Bitmap, DWORD_SIZE, Error, Fraction, Id, IntoId, Reader, Rectangle, Type, Visitor};
 
 use super::{Decode, DecodeArray, DecodeUnsized};
 
@@ -757,9 +757,7 @@ where
                 let [child_size, child_type] = self.r.array()?;
                 let child_type = Type::new(child_type);
 
-                let remaining;
-
-                if size > 0 && child_size > 0 {
+                let remaining = if size > 0 && child_size > 0 {
                     if size % child_size != 0 {
                         return Err(Error::new(ErrorKind::InvalidArraySize {
                             size: full_size,
@@ -767,10 +765,11 @@ where
                         }));
                     }
 
-                    remaining = (size / child_size) as usize;
+                    let padded_child_size = child_size.next_multiple_of(DWORD_SIZE as u32);
+                    (size / padded_child_size) as usize
                 } else {
-                    remaining = 0;
-                }
+                    0
+                };
 
                 Ok(DecodeArray::new(
                     self.r.borrow_mut(),

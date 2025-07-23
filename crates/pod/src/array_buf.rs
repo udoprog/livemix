@@ -56,6 +56,13 @@ impl ArrayBuf {
     }
 }
 
+impl Default for ArrayBuf {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const N: usize> ArrayBuf<N> {
     /// Construct a new array buffer with a default size.
     ///
@@ -457,6 +464,11 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
+    fn distance_from(&self, pos: Self::Pos) -> usize {
+        (self.write - pos.write) * WORD_SIZE
+    }
+
+    #[inline]
     fn write_zeros(&mut self, words: usize) -> Result<(), Error> {
         let write = self.write.wrapping_add(words);
 
@@ -518,40 +530,15 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        let req = bytes.len().div_ceil(WORD_SIZE).next_multiple_of(2);
-        let write = self.write.wrapping_add(req);
-
-        if write > N || write < self.write {
-            return Err(Error::new(ErrorKind::BufferOverflow));
-        }
-
-        // SAFETY: We are writing to a valid position in the buffer.
-        unsafe {
-            let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
-            ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-
-            let remaining = DWORD_SIZE - bytes.len() % DWORD_SIZE;
-
-            if remaining > 0 {
-                ptr.add(bytes.len()).write_bytes(0, remaining);
-            }
-        }
-
-        self.write = write;
-        Ok(())
-    }
-
-    #[inline]
-    fn write_bytes_with_nul(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        let Some(full) = bytes.len().checked_add(1) else {
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
+        let Some(full) = bytes.len().checked_add(pad) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
         let req = full.div_ceil(WORD_SIZE).next_multiple_of(2);
         let write = self.write.wrapping_add(req);
 
-        if write > N || write < self.write {
+        if !(self.write..=N).contains(&write) {
             return Err(Error::new(ErrorKind::BufferOverflow));
         }
 
@@ -559,12 +546,8 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         unsafe {
             let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-
-            let remaining = DWORD_SIZE - full % DWORD_SIZE;
-
-            if remaining > 0 {
-                ptr.add(full).write_bytes(0, remaining);
-            }
+            let pad = DWORD_SIZE - bytes.len() % DWORD_SIZE;
+            ptr.add(bytes.len()).write_bytes(0, pad);
         }
 
         self.write = write;

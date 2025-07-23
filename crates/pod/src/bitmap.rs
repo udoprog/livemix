@@ -48,7 +48,7 @@ impl Borrow<Bitmap> for OwnedBitmap {
 impl fmt::Debug for OwnedBitmap {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BitOwnedBitmapmap({} bytes)", self.data.len())
+        write!(f, "OwnedBitmap({} bytes)", self.data.len())
     }
 }
 

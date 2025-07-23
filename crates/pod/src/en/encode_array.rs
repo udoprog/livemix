@@ -1,5 +1,5 @@
 use crate::error::ErrorKind;
-use crate::{DWORD_SIZE, Encode, EncodeUnsized, Error, Type, Writer};
+use crate::{Encode, EncodeUnsized, Error, Type, Writer};
 
 /// An encoder for an array.
 #[must_use = "Array encoders must be closed to ensure all elements are encoded"]
@@ -69,14 +69,6 @@ where
         }
 
         value.write_content(self.writer.borrow_mut())?;
-
-        let remaining_words = (self.child_size - actual) / DWORD_SIZE;
-
-        // Pad out the remaining space in the array.
-        if remaining_words > 0 {
-            self.writer.write_zeros(remaining_words)?;
-        }
-
         self.len += 1;
         Ok(())
     }
@@ -143,12 +135,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn close(mut self) -> Result<(), Error> {
-        let Some(len) = self
-            .len
-            .checked_mul(self.child_size)
-            .and_then(|v| u32::try_from(v).ok())
-            .and_then(|v| v.checked_add(8))
-        else {
+        let len = self.writer.distance_from(self.pos) - 8;
+
+        let Ok(len) = u32::try_from(len) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 

@@ -4,7 +4,6 @@ use core::ffi::CStr;
 
 use super::Reader;
 use super::error::ErrorKind;
-use super::utils::Align;
 use super::{ArrayBuf, Decoder, Encoder, Error, Slice, Type, Writer};
 
 #[inline]
@@ -22,6 +21,11 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 
 #[test]
 fn test_encode_decode_u64() -> Result<(), Error> {
+    fn u64_from_array(values: [u32; 2]) -> u64 {
+        // SAFETY: The u64 can inhabit all bit patterns presented.
+        unsafe { (&values as *const [u32; 2]).cast::<u64>().read() }
+    }
+
     let mut buf = ArrayBuf::new();
     buf.write_u64(0x1234567890abcdef)?;
 
@@ -32,13 +36,11 @@ fn test_encode_decode_u64() -> Result<(), Error> {
     if cfg!(target_endian = "little") {
         assert_eq!(a, 0x90abcdef);
         assert_eq!(b, 0x12345678);
-        let align = Align::new([a, b]);
-        assert_eq!(0x1234567890abcdefu64, align.read());
+        assert_eq!(0x1234567890abcdefu64, u64_from_array([a, b]));
     } else {
         assert_eq!(b, 0x90abcdef);
         assert_eq!(a, 0x12345678);
-        let align = Align::new([b, a]);
-        assert_eq!(0x1234567890abcdefu64, align.read());
+        assert_eq!(0x1234567890abcdefu64, u64_from_array([b, a]));
     }
 
     assert_eq!(buf.read_u64()?, 0x1234567890abcdef);

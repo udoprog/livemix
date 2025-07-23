@@ -29,8 +29,10 @@ impl Slice {
     /// Returns the length of the slice.
     ///
     /// # Examples
+    ///
     /// ```
     /// use pod::Slice;
+    ///
     /// let slice = Slice::new(&[1, 2, 3]);
     /// assert_eq!(slice.len(), 3);
     /// ```
@@ -38,7 +40,33 @@ impl Slice {
         self.0.len()
     }
 
+    /// Test if the slice is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Slice;
+    ///
+    /// let slice = Slice::new(&[1, 2, 3]);
+    /// assert_eq!(slice.len(), 3);
+    /// assert!(!slice.is_empty());
+    /// ```
+    pub const fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Returns the contents of the slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Slice;
+    ///
+    /// let slice = Slice::new(&[1, 2, 3]);
+    /// assert_eq!(slice.len(), 3);
+    /// assert!(!slice.is_empty());
+    /// assert_eq!(slice.as_slice(), &[1, 2, 3]);
+    /// ```
     pub const fn as_slice(&self) -> &[u32] {
         &self.0
     }

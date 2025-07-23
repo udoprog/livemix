@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 use core::slice;
 
-use crate::utils::Align;
+use crate::utils::{Align, WordAligned};
 use crate::visitor::Visitor;
 use crate::{Error, Type};
 
@@ -42,10 +42,10 @@ pub trait Reader<'de>: self::sealed::Sealed {
 
     /// Read a `u64` value from the reader.
     fn read_u64(&mut self) -> Result<u64, Error> {
-        let mut out = Align::<u64, [_; 2]>::uninit();
+        let mut out = Align::<u64>::uninit();
         self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice is guaranteed to be 2 elements u64 long.
-        Ok(unsafe { out.assume_init().read() })
+        Ok(unsafe { out.assume_init() })
     }
 
     /// Read the given number of bytes from the input.
@@ -56,19 +56,31 @@ pub trait Reader<'de>: self::sealed::Sealed {
     /// Read an array of words.
     #[inline]
     fn peek_array<const N: usize>(&mut self) -> Result<[u32; N], Error> {
-        let mut out = Align::<[u32; N], [_; N]>::uninit();
+        let mut out = Align::<[u32; N]>::uninit();
         self.peek_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
-        Ok(unsafe { out.assume_init().read() })
+        Ok(unsafe { out.assume_init() })
     }
 
     /// Read an array of words.
     #[inline]
     fn array<const N: usize>(&mut self) -> Result<[u32; N], Error> {
-        let mut out = Align::<[u32; N], [_; N]>::uninit();
+        let mut out = Align::<[u32; N]>::uninit();
         self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
-        Ok(unsafe { out.assume_init().read() })
+        Ok(unsafe { out.assume_init() })
+    }
+
+    /// Read an array of words.
+    #[inline]
+    fn read<T>(&mut self) -> Result<T, Error>
+    where
+        T: WordAligned,
+    {
+        let mut out = Align::<T>::uninit();
+        self.read_words_uninit(out.as_mut_slice())?;
+        // SAFETY: The slice must have been initialized by the reader.
+        Ok(unsafe { out.assume_init() })
     }
 
     #[inline]
