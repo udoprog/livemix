@@ -1,0 +1,171 @@
+use crate::error::ErrorKind;
+use crate::{DWORD_SIZE, Encode, EncodeUnsized, Error, Type, Writer};
+
+/// An encoder for an array.
+#[must_use = "Array encoders must be closed to ensure all elements are encoded"]
+pub struct EncodeArray<W>
+where
+    W: Writer,
+{
+    writer: W,
+    child_size: usize,
+    child_type: Type,
+    pos: W::Pos,
+    len: usize,
+}
+
+impl<W> EncodeArray<W>
+where
+    W: Writer,
+{
+    /// Create a new encoder for an array with the given writer and length.
+    #[inline]
+    pub(crate) fn new(writer: W, child_size: usize, child_type: Type, pos: W::Pos) -> Self {
+        EncodeArray {
+            writer,
+            child_size,
+            child_type,
+            pos,
+            len: 0,
+        }
+    }
+
+    /// Encode a value into the array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// let mut array = encoder.encode_array(Type::INT)?;
+    ///
+    /// array.encode(1i32)?;
+    /// array.encode(2i32)?;
+    /// array.encode(3i32)?;
+    ///
+    /// array.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn encode<T>(&mut self, value: T) -> Result<(), Error>
+    where
+        T: Encode,
+    {
+        if self.child_type != T::TYPE {
+            return Err(Error::new(ErrorKind::Expected {
+                expected: self.child_type,
+                actual: T::TYPE,
+            }));
+        }
+
+        let actual = value.size();
+
+        if actual > self.child_size {
+            return Err(Error::new(ErrorKind::ArrayChildSizeMismatch {
+                expected: self.child_size,
+                actual,
+            }));
+        }
+
+        value.write_content(self.writer.borrow_mut())?;
+
+        let remaining_words = (self.child_size - actual) / DWORD_SIZE;
+
+        // Pad out the remaining space in the array.
+        if remaining_words > 0 {
+            self.writer.write_zeros(remaining_words)?;
+        }
+
+        self.len += 1;
+        Ok(())
+    }
+
+    /// Encode an unsized value into the array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    ///
+    /// array.encode_unsized("foo")?;
+    /// array.encode_unsized("bar")?;
+    /// array.encode_unsized("baz")?;
+    ///
+    /// array.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn encode_unsized<T>(&mut self, value: &T) -> Result<(), Error>
+    where
+        T: ?Sized + EncodeUnsized,
+    {
+        if self.child_type != T::TYPE {
+            return Err(Error::new(ErrorKind::Expected {
+                expected: self.child_type,
+                actual: T::TYPE,
+            }));
+        }
+
+        let actual = value.size();
+
+        if actual != self.child_size {
+            return Err(Error::new(ErrorKind::ArrayChildSizeMismatch {
+                expected: self.child_size,
+                actual,
+            }));
+        }
+
+        value.write_content(self.writer.borrow_mut())?;
+        self.len += 1;
+        Ok(())
+    }
+
+    /// Close the array encoder, ensuring all elements have been encoded.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    ///
+    /// array.encode_unsized("foo")?;
+    /// array.encode_unsized("bar")?;
+    /// array.encode_unsized("baz")?;
+    ///
+    /// array.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn close(mut self) -> Result<(), Error> {
+        let Some(len) = self
+            .len
+            .checked_mul(self.child_size)
+            .and_then(|v| u32::try_from(v).ok())
+            .and_then(|v| v.checked_add(8))
+        else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let Ok(child_size) = u32::try_from(self.child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        self.writer.write_words_at(
+            self.pos,
+            &[
+                len,
+                Type::ARRAY.into_u32(),
+                child_size,
+                self.child_type.into_u32(),
+            ],
+        )?;
+
+        Ok(())
+    }
+}

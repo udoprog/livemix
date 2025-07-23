@@ -1,14 +1,13 @@
 use core::ffi::CStr;
 
 use crate::error::ErrorKind;
-use crate::ty::Type;
-use crate::{Bitmap, Error, Fraction, Rectangle, Writer};
+use crate::{Bitmap, Error, Fraction, Rectangle, Type, Writer};
 
-use super::{Encode, EncodeUnsized};
+use super::{Encode, EncodeArray, EncodeUnsized};
 
 /// A POD (Plain Old Data) encoder.
 pub struct Encoder<W> {
-    w: W,
+    pub(crate) w: W,
 }
 
 impl<W> Encoder<W> {
@@ -85,8 +84,7 @@ where
     /// ```
     #[inline]
     pub fn encode_none(&mut self) -> Result<(), Error> {
-        self.w.write_u32(0)?;
-        self.w.write_type(Type::NONE)?;
+        self.w.write_words(&[0, Type::NONE.into_u32()])?;
         Ok(())
     }
 
@@ -226,7 +224,6 @@ where
 
         self.w.write_words(&[len, Type::STRING.into_u32()])?;
         self.w.write_bytes(bytes)?;
-        self.w.pad()?;
         Ok(())
     }
 
@@ -259,9 +256,7 @@ where
         }
 
         self.w.write_words(&[len, Type::STRING.into_u32()])?;
-        self.w.write_bytes(bytes)?;
-        self.w.write_bytes(&[0])?;
-        self.w.pad()?;
+        self.w.write_bytes_with_nul(bytes)?;
         Ok(())
     }
 
@@ -285,7 +280,6 @@ where
 
         self.w.write_words(&[len, Type::BYTES.into_u32()])?;
         self.w.write_bytes(value)?;
-        self.w.pad()?;
         Ok(())
     }
 
@@ -353,7 +347,77 @@ where
 
         self.w.write_words(&[len, Type::BITMAP.into_u32()])?;
         self.w.write_bytes(value)?;
-        self.w.pad()?;
         Ok(())
+    }
+
+    /// Encode an array with the given type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// let mut array = encoder.encode_array(Type::INT)?;
+    ///
+    /// array.encode(1i32)?;
+    /// array.encode(2i32)?;
+    /// array.encode(3i32)?;
+    ///
+    /// array.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_array(&mut self, child_type: Type) -> Result<EncodeArray<W::Mut<'_>>, Error> {
+        let Some(child_size) = child_type.size() else {
+            return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
+        };
+
+        let mut writer = self.w.borrow_mut();
+        let pos = writer.reserve_words(&[0, 0, 0, 0])?;
+        Ok(EncodeArray::new(writer, child_size, child_type, pos))
+    }
+
+    /// Encode an array with elements of an unsized type.
+    ///
+    /// The `len` specified will be used to determine the maximum size of
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    ///
+    /// array.encode_unsized("foo")?;
+    /// array.encode_unsized("bar")?;
+    /// array.encode_unsized("baz")?;
+    ///
+    /// array.close()?;
+    ///
+    /// assert_eq!(buf.as_reader_slice().len(), 10);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_unsized_array(
+        &mut self,
+        child_type: Type,
+        len: usize,
+    ) -> Result<EncodeArray<W::Mut<'_>>, Error> {
+        if let Some(child_size) = child_type.size() {
+            if child_size != len {
+                return Err(Error::new(ErrorKind::ArrayChildSizeMismatch {
+                    actual: len,
+                    expected: child_size,
+                }));
+            }
+        };
+
+        let mut writer = self.w.borrow_mut();
+        let pos = writer.reserve_words(&[0, 0, 0, 0])?;
+        Ok(EncodeArray::new(writer, len, child_type, pos))
     }
 }

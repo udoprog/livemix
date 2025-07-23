@@ -11,6 +11,7 @@
 /// assert_ne!(rect1, rect2);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
 pub struct Rectangle {
     pub width: u32,
     pub height: u32,

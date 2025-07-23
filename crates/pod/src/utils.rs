@@ -19,6 +19,9 @@ unsafe impl WordAligned for u32 {
 unsafe impl<const N: usize> WordAligned for [u32; N] {
     const WORD_SIZE: usize = N;
 }
+unsafe impl<const N: usize> WordAligned for [u64; N] {
+    const WORD_SIZE: usize = N * 2;
+}
 
 impl<T, U, const N: usize> Align<T, [U; N]> {
     /// Get a mutable slice of the aligned value.

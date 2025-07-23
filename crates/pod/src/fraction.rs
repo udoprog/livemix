@@ -11,6 +11,7 @@
 /// assert_ne!(rect1, rect2);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
 pub struct Fraction {
     pub num: u32,
     pub denom: u32,

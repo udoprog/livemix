@@ -2,9 +2,9 @@ use core::fmt;
 use core::mem::MaybeUninit;
 use core::slice;
 
-use super::error::ErrorKind;
-use super::visitor::Visitor;
-use super::{Error, Reader};
+use crate::error::ErrorKind;
+use crate::visitor::Visitor;
+use crate::{Error, Reader, WORD_SIZE};
 
 /// A slice of words that can be used for decoding.
 pub struct Slice([u32]);
@@ -169,7 +169,7 @@ impl<'de> Reader<'de> for &'de Slice {
     }
 
     #[inline]
-    fn peek_uninit_words(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
         if out.len() > self.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
@@ -208,25 +208,15 @@ impl<'de> Reader<'de> for &'de Slice {
     where
         V: Visitor<'de, [u8]>,
     {
-        let req = len.div_ceil(4);
+        let req = len.div_ceil(WORD_SIZE).next_multiple_of(2);
 
-        if req > self.0.len() {
+        let Some((head, tail)) = self.0.split_at_checked(req) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
-        }
+        };
 
-        let value = unsafe { slice::from_raw_parts(self.0.as_ptr().cast::<u8>(), len) };
+        let value = unsafe { slice::from_raw_parts(head.as_ptr().cast::<u8>(), len) };
         let ok = visitor.visit_borrowed(value)?;
-        *self = Slice::new(&self.0[req..]);
+        *self = Slice::new(tail);
         Ok(ok)
-    }
-
-    #[inline]
-    fn skip(&mut self, size: usize) -> Result<(), Error> {
-        if size > self.len() {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        }
-
-        *self = Slice::new(&self.0[size..]);
-        Ok(())
     }
 }

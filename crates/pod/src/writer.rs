@@ -1,5 +1,4 @@
-use super::Error;
-use super::ty::Type;
+use crate::Error;
 
 mod sealed {
     use crate::ArrayBuf;
@@ -12,8 +11,34 @@ mod sealed {
 
 /// A type that can have PODs written to it.
 pub trait Writer: self::sealed::Sealed {
+    /// The mutable borrow of a writer.
+    type Mut<'this>: Writer
+    where
+        Self: 'this;
+
+    /// A position in the writer.
+    type Pos: Copy;
+
+    /// Borrow the current writer mutably.
+    fn borrow_mut(&mut self) -> Self::Mut<'_>;
+
+    /// Reserve space for the given number of words.
+    fn reserve_words(&mut self, words: &[u32]) -> Result<Self::Pos, Error>;
+
+    /// Write `words` number of zeros the writer.
+    fn write_zeros(&mut self, words: usize) -> Result<(), Error>;
+
     /// Write a slice of `u32` values to the writer.
-    fn write_words(&mut self, value: &[u32]) -> Result<(), Error>;
+    fn write_words(&mut self, words: &[u32]) -> Result<(), Error>;
+
+    /// Write a slice of `u32` values to the writer at the given previously
+    /// reserved `pos`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the given number of words written overflows the
+    /// reserved space.
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[u32]) -> Result<(), Error>;
 
     /// Write a `u32` value to the writer.
     #[inline]
@@ -28,41 +53,47 @@ pub trait Writer: self::sealed::Sealed {
         self.write_words(&[a, b])
     }
 
-    /// Write a type to the writer.
-    #[inline]
-    fn write_type(&mut self, ty: Type) -> Result<(), Error> {
-        self.write_u32(ty.into_u32())
-    }
-
     /// Write bytes to the writer.
-    #[inline]
-    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        for chunk in bytes.chunks(4) {
-            let value = if let &[a, b, c, d] = chunk {
-                u32::from_ne_bytes([a, b, c, d])
-            } else {
-                let mut array = [0u8; 4];
-                array[..chunk.len()].copy_from_slice(chunk);
-                u32::from_ne_bytes(array)
-            };
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error>;
 
-            self.write_u32(value)?;
-        }
-
-        Ok(())
-    }
-
-    /// Pad the writer to the next double word boundary.
-    fn pad(&mut self) -> Result<(), Error>;
+    /// Write bytes to the writer, appending a null byte at the end.
+    fn write_bytes_with_nul(&mut self, bytes: &[u8]) -> Result<(), Error>;
 }
 
 impl<W> Writer for &mut W
 where
     W: ?Sized + Writer,
 {
+    type Mut<'this>
+        = W::Mut<'this>
+    where
+        Self: 'this;
+
+    type Pos = W::Pos;
+
+    #[inline]
+    fn borrow_mut(&mut self) -> Self::Mut<'_> {
+        (**self).borrow_mut()
+    }
+
+    #[inline]
+    fn reserve_words(&mut self, words: &[u32]) -> Result<Self::Pos, Error> {
+        (**self).reserve_words(words)
+    }
+
+    #[inline]
+    fn write_zeros(&mut self, words: usize) -> Result<(), Error> {
+        (**self).write_zeros(words)
+    }
+
     #[inline]
     fn write_words(&mut self, value: &[u32]) -> Result<(), Error> {
         (**self).write_words(value)
+    }
+
+    #[inline]
+    fn write_words_at(&mut self, pos: Self::Pos, value: &[u32]) -> Result<(), Error> {
+        (**self).write_words_at(pos, value)
     }
 
     #[inline]
@@ -76,12 +107,12 @@ where
     }
 
     #[inline]
-    fn write_type(&mut self, ty: Type) -> Result<(), Error> {
-        (**self).write_type(ty)
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        (**self).write_bytes(bytes)
     }
 
     #[inline]
-    fn pad(&mut self) -> Result<(), Error> {
-        (**self).pad()
+    fn write_bytes_with_nul(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        (**self).write_bytes_with_nul(bytes)
     }
 }

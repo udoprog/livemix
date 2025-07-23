@@ -1,10 +1,11 @@
 #![cfg(feature = "alloc")]
 
+use core::ffi::CStr;
+
 use super::Reader;
 use super::error::ErrorKind;
-use super::ty::Type;
 use super::utils::Align;
-use super::{ArrayBuf, Decoder, Encoder, Error, Slice, Writer};
+use super::{ArrayBuf, Decoder, Encoder, Error, Slice, Type, Writer};
 
 #[inline]
 fn encode_none() -> Result<Decoder<impl Reader<'static>>, Error> {
@@ -60,15 +61,15 @@ fn test_write_overflow() -> Result<(), Error> {
 #[test]
 fn test_slice_underflow() -> Result<(), Error> {
     let mut buf = Slice::new(&[1, 2, 3]);
-    assert_eq!(buf.read_u32()?, 1);
-    assert_eq!(buf.read_u32()?, 2);
+    assert_eq!(buf.array::<1>()?, [1]);
+    assert_eq!(buf.array::<1>()?, [2]);
     assert_eq!(
         buf.read_u64().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
-    assert_eq!(buf.read_u32()?, 3);
+    assert_eq!(buf.array::<1>()?, [3]);
     assert_eq!(
-        buf.read_u32().unwrap_err().kind(),
+        buf.array::<1>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
     Ok(())
@@ -77,15 +78,15 @@ fn test_slice_underflow() -> Result<(), Error> {
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
     let mut buf = ArrayBuf::<3>::from_array([1, 2, 3]);
-    assert_eq!(buf.read_u32()?, 1);
-    assert_eq!(buf.read_u32()?, 2);
+    assert_eq!(buf.array::<1>()?, [1]);
+    assert_eq!(buf.array::<1>()?, [2]);
     assert_eq!(
         buf.read_u64().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
-    assert_eq!(buf.read_u32()?, 3);
+    assert_eq!(buf.array::<1>()?, [3]);
     assert_eq!(
-        buf.read_u32().unwrap_err().kind(),
+        buf.array::<1>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
     Ok(())
@@ -231,5 +232,32 @@ fn test_bitmap() -> Result<(), Error> {
         expected(Type::BITMAP, Type::NONE)
     );
 
+    Ok(())
+}
+
+#[test]
+fn test_array() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let mut encoder = Encoder::new(&mut buf);
+    let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+
+    array.encode_unsized("foo")?;
+    array.encode_unsized("bar")?;
+    array.encode_unsized("baz")?;
+
+    array.close()?;
+
+    let mut decoder = Decoder::new(buf.as_reader_slice());
+    let mut array = decoder.decode_array()?;
+
+    assert_eq!(array.len(), 3);
+    assert_eq!(array.decode_borrowed::<CStr>()?, c"foo");
+    assert_eq!(array.len(), 2);
+    assert_eq!(array.decode_borrowed::<CStr>()?, c"bar");
+    assert_eq!(array.len(), 1);
+    assert_eq!(array.decode_borrowed::<CStr>()?, c"baz");
+
+    assert!(array.is_empty());
+    assert_eq!(array.len(), 0);
     Ok(())
 }

@@ -1,5 +1,4 @@
 use core::ffi::CStr;
-use core::mem::MaybeUninit;
 
 #[cfg(feature = "alloc")]
 use alloc::borrow::ToOwned;
@@ -13,11 +12,10 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use crate::OwnedBitmap;
 use crate::error::ErrorKind;
-use crate::ty::Type;
 use crate::utils::Align;
-use crate::{Bitmap, Error, Fraction, Reader, Rectangle, Visitor};
+use crate::{Bitmap, Error, Fraction, Reader, Rectangle, Type, Visitor};
 
-use super::{Decode, DecodeUnsized};
+use super::{Decode, DecodeArray, DecodeUnsized};
 
 /// A POD (Plain Old Data) decoder.
 pub struct Decoder<R> {
@@ -125,15 +123,13 @@ where
     /// ```
     #[inline]
     pub fn decode_option(&mut self) -> Result<Option<Decoder<R::Mut<'_>>>, Error> {
-        let mut out = Align::<[u32; 2], [MaybeUninit<u32>; 2]>::uninit();
-        self.r.peek_uninit_words(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
-        let [_, ty] = unsafe { out.assume_init().read() };
+        let [_, ty] = self.r.peek_array::<2>()?;
         let ty = Type::new(ty);
 
         match ty {
             Type::NONE => {
-                self.r.skip(2)?;
+                _ = self.r.array::<2>()?;
                 Ok(None)
             }
             _ => Ok(Some(Decoder::new(self.r.borrow_mut()))),
@@ -168,9 +164,8 @@ where
 
         match ty {
             Type::BOOL if size == 4 => {
-                let value = self.r.read_u32()? != 0;
-                self.r.skip(1)?;
-                Ok(value)
+                let [value, _pad] = self.r.array()?;
+                Ok(value != 0)
             }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BOOL,
@@ -207,8 +202,7 @@ where
 
         match ty {
             Type::ID if size == 4 => {
-                let value = self.r.read_u32()?;
-                self.r.skip(1)?;
+                let [value, _pad] = self.r.array()?;
                 Ok(value)
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -246,9 +240,8 @@ where
 
         match ty {
             Type::INT if size == 4 => {
-                let value = self.r.read_u32()?.cast_signed();
-                self.r.skip(1)?;
-                Ok(value)
+                let [value, _pad] = self.r.array()?;
+                Ok(value.cast_signed())
             }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::INT,
@@ -323,9 +316,8 @@ where
 
         match ty {
             Type::FLOAT if size == 4 => {
-                let value = f32::from_bits(self.r.read_u32()?);
-                self.r.skip(1)?;
-                Ok(value)
+                let [value, _pad] = self.r.array()?;
+                Ok(f32::from_bits(value))
             }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::FLOAT,
@@ -397,40 +389,7 @@ where
         let (size, ty) = self.header()?;
 
         match ty {
-            Type::STRING => {
-                struct LocalVisitor<V> {
-                    visitor: V,
-                }
-
-                impl<'de, V> Visitor<'de, [u8]> for LocalVisitor<V>
-                where
-                    V: Visitor<'de, CStr>,
-                {
-                    type Ok = V::Ok;
-
-                    #[inline]
-                    fn visit_borrowed(self, bytes: &'de [u8]) -> Result<Self::Ok, Error> {
-                        let Ok(str) = CStr::from_bytes_with_nul(bytes) else {
-                            return Err(Error::new(ErrorKind::NonTerminatedString));
-                        };
-
-                        self.visitor.visit_borrowed(str)
-                    }
-
-                    #[inline]
-                    fn visit_ref(self, bytes: &[u8]) -> Result<Self::Ok, Error> {
-                        let Ok(str) = CStr::from_bytes_with_nul(bytes) else {
-                            return Err(Error::new(ErrorKind::NonTerminatedString));
-                        };
-
-                        self.visitor.visit_ref(str)
-                    }
-                }
-
-                let visitor = LocalVisitor { visitor };
-
-                self.r.read_bytes(size as usize, visitor)
-            }
+            Type::STRING => CStr::read_content(self.r.borrow_mut(), size as usize, visitor),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -529,32 +488,7 @@ where
         let (size, ty) = self.header()?;
 
         match ty {
-            Type::STRING => {
-                struct LocalVisitor<V> {
-                    visitor: V,
-                }
-
-                impl<'de, V> Visitor<'de, [u8]> for LocalVisitor<V>
-                where
-                    V: Visitor<'de, str>,
-                {
-                    type Ok = V::Ok;
-
-                    #[inline]
-                    fn visit_borrowed(self, bytes: &'de [u8]) -> Result<Self::Ok, Error> {
-                        self.visitor.visit_borrowed(decode_string(bytes)?)
-                    }
-
-                    #[inline]
-                    fn visit_ref(self, bytes: &[u8]) -> Result<Self::Ok, Error> {
-                        self.visitor.visit_ref(decode_string(bytes)?)
-                    }
-                }
-
-                let visitor = LocalVisitor { visitor };
-
-                self.r.read_bytes(size as usize, visitor)
-            }
+            Type::STRING => str::read_content(self.r.borrow_mut(), size as usize, visitor),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -654,7 +588,7 @@ where
         let (size, ty) = self.header()?;
 
         match ty {
-            Type::BYTES => self.r.read_bytes(size as usize, visitor),
+            Type::BYTES => <[u8]>::read_content(self.r.borrow_mut(), size as usize, visitor),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BYTES,
                 actual: ty,
@@ -822,27 +756,8 @@ where
     {
         let (size, ty) = self.header()?;
 
-        struct LocalVisitor<V>(V);
-
-        impl<'de, V> Visitor<'de, [u8]> for LocalVisitor<V>
-        where
-            V: Visitor<'de, Bitmap>,
-        {
-            type Ok = V::Ok;
-
-            #[inline]
-            fn visit_borrowed(self, value: &'de [u8]) -> Result<Self::Ok, Error> {
-                self.0.visit_borrowed(Bitmap::new(value))
-            }
-
-            #[inline]
-            fn visit_ref(self, value: &[u8]) -> Result<Self::Ok, Error> {
-                self.0.visit_ref(Bitmap::new(value))
-            }
-        }
-
         match ty {
-            Type::BITMAP => self.r.read_bytes(size as usize, LocalVisitor(visitor)),
+            Type::BITMAP => Bitmap::read_content(self.r.borrow_mut(), size as usize, visitor),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BITMAP,
                 actual: ty,
@@ -915,23 +830,81 @@ where
         self.decode_bitmap(LocalVisitor)
     }
 
+    /// Decode an array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Decoder, Encoder, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// let mut array = encoder.encode_array(Type::INT)?;
+    ///
+    /// array.encode(1i32)?;
+    /// array.encode(2i32)?;
+    /// array.encode(3i32)?;
+    ///
+    /// array.close()?;
+    ///
+    /// let mut decoder = Decoder::new(buf.as_reader_slice());
+    /// let mut array = decoder.decode_array()?;
+    ///
+    /// assert!(!array.is_empty());
+    /// assert_eq!(array.len(), 3);
+    ///
+    /// assert_eq!(array.decode::<i32>()?, 1i32);
+    /// assert_eq!(array.decode::<i32>()?, 2i32);
+    /// assert_eq!(array.decode::<i32>()?, 3i32);
+    ///
+    /// assert!(array.is_empty());
+    /// assert_eq!(array.len(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_array(&mut self) -> Result<DecodeArray<R::Mut<'_>>, Error> {
+        let (full_size, ty) = self.header()?;
+
+        match ty {
+            Type::ARRAY if full_size >= 8 => {
+                let size = full_size - 8;
+
+                let [child_size, child_type] = self.r.array()?;
+                let child_type = Type::new(child_type);
+
+                let remaining;
+
+                if size > 0 && child_size > 0 {
+                    if size % child_size != 0 {
+                        return Err(Error::new(ErrorKind::InvalidArraySize {
+                            size: full_size,
+                            child_size,
+                        }));
+                    }
+
+                    remaining = (size / child_size) as usize;
+                } else {
+                    remaining = 0;
+                }
+
+                Ok(DecodeArray::new(
+                    self.r.borrow_mut(),
+                    child_type,
+                    child_size as usize,
+                    remaining,
+                ))
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::ARRAY,
+                actual: ty,
+            })),
+        }
+    }
+
     #[inline]
     fn header(&mut self) -> Result<(u32, Type), Error> {
-        let size = self.r.read_u32()?;
-        let ty = Type::new(self.r.read_u32()?);
+        let [size, ty] = self.r.array()?;
+        let ty = Type::new(ty);
         Ok((size, ty))
     }
-}
-
-fn decode_string(bytes: &[u8]) -> Result<&str, Error> {
-    let bytes = match bytes {
-        [head @ .., 0] => head,
-        _ => return Err(Error::new(ErrorKind::NonTerminatedString)),
-    };
-
-    let Ok(str) = str::from_utf8(bytes) else {
-        return Err(Error::new(ErrorKind::NotUtf8));
-    };
-
-    Ok(str)
 }

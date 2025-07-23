@@ -1,6 +1,6 @@
 use core::fmt;
 
-use super::ty::Type;
+use crate::Type;
 
 #[non_exhaustive]
 pub struct Error {
@@ -25,6 +25,7 @@ impl Error {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum ErrorKind {
+    ArrayUnderflow,
     SizeOverflow,
     BufferOverflow,
     BufferUnderflow,
@@ -32,7 +33,12 @@ pub(crate) enum ErrorKind {
     NullContainingString,
     NotUtf8,
     NotSupportedRef,
+    UnsizedTypeInArray { ty: Type },
     Expected { expected: Type, actual: Type },
+    PositionSizeMismatch { expected: usize, actual: usize },
+    ArrayChildSizeMismatch { expected: usize, actual: usize },
+    ArrayTypeMismatch { expected: Type, actual: Type },
+    InvalidArraySize { size: u32, child_size: u32 },
 }
 
 #[cfg(test)]
@@ -56,6 +62,7 @@ impl fmt::Display for Error {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
+            ErrorKind::ArrayUnderflow => write!(f, "Array underflow"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
             ErrorKind::BufferOverflow => write!(f, "Buffer overflow"),
             ErrorKind::BufferUnderflow => write!(f, "Buffer underflow"),
@@ -66,8 +73,33 @@ impl fmt::Display for Error {
             ),
             ErrorKind::NotUtf8 => write!(f, "String does not contain valid UTF-8"),
             ErrorKind::NotSupportedRef => write!(f, "Decoding into reference is not supported"),
+            ErrorKind::UnsizedTypeInArray { ty } => write!(
+                f,
+                "Unsized type {ty:?} in array, use encode_unsized_array instead"
+            ),
             ErrorKind::Expected { expected, actual } => {
                 write!(f, "Expected {expected:?}, but found {actual:?}")
+            }
+            ErrorKind::PositionSizeMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "Expected position written at most {expected}, but found {actual}"
+                )
+            }
+            ErrorKind::ArrayChildSizeMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "Expected array element size {expected}, but found {actual}"
+                )
+            }
+            ErrorKind::ArrayTypeMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "Expected array element type {expected:?}, but found {actual:?}"
+                )
+            }
+            ErrorKind::InvalidArraySize { size, child_size } => {
+                write!(f, "Invalid array size {size} for child size {child_size}")
             }
         }
     }

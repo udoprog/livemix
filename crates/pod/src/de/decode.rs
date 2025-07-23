@@ -1,4 +1,4 @@
-use crate::{Error, Fraction, Reader, Rectangle};
+use crate::{Error, Fraction, Reader, Rectangle, Type};
 
 use super::{DecodeUnsized, Decoder};
 
@@ -17,9 +17,16 @@ mod sealed {
 
 /// A trait for types that can be decoded.
 pub trait Decode<'de>: Sized + self::sealed::Sealed {
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
+    /// The type of the decoded value.
+    const TYPE: Type;
+
+    /// Decode a full typed value.
+    fn decode<R>(decoder: &mut Decoder<R>) -> Result<Self, Error>
     where
-        W: Reader<'de>;
+        R: Reader<'de>;
+
+    /// Read the content of a type.
+    fn read_content(reader: impl Reader<'de>) -> Result<Self, Error>;
 }
 
 /// [`Decode`] implementation for `i32`.
@@ -39,12 +46,22 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for i32 {
+    const TYPE: Type = Type::INT;
+
     #[inline]
+    #[doc(hidden)]
     fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
     where
         W: Reader<'de>,
     {
         decoder.decode_int()
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let [value, _pad] = reader.array()?;
+        Ok(value.cast_signed())
     }
 }
 
@@ -65,12 +82,19 @@ impl<'de> Decode<'de> for i32 {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for i64 {
+    const TYPE: Type = Type::LONG;
+
     #[inline]
     fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
     where
         W: Reader<'de>,
     {
         decoder.decode_long()
+    }
+
+    #[inline]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        Ok(reader.read_u64()?.cast_signed())
     }
 }
 
@@ -91,12 +115,20 @@ impl<'de> Decode<'de> for i64 {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for f32 {
+    const TYPE: Type = Type::FLOAT;
+
     #[inline]
     fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
     where
         W: Reader<'de>,
     {
         decoder.decode_float()
+    }
+
+    #[inline]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let [value, _pad] = reader.array()?;
+        Ok(f32::from_bits(value))
     }
 }
 
@@ -117,12 +149,19 @@ impl<'de> Decode<'de> for f32 {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for f64 {
+    const TYPE: Type = Type::DOUBLE;
+
     #[inline]
     fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
     where
         W: Reader<'de>,
     {
         decoder.decode_double()
+    }
+
+    #[inline]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        Ok(f64::from_bits(reader.read_u64()?))
     }
 }
 
@@ -143,12 +182,20 @@ impl<'de> Decode<'de> for f64 {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for Rectangle {
+    const TYPE: Type = Type::RECTANGLE;
+
     #[inline]
     fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
     where
         W: Reader<'de>,
     {
         decoder.decode_rectangle()
+    }
+
+    #[inline]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let [width, height] = reader.array()?;
+        Ok(Rectangle::new(width, height))
     }
 }
 
@@ -169,6 +216,8 @@ impl<'de> Decode<'de> for Rectangle {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for Fraction {
+    const TYPE: Type = Type::FRACTION;
+
     #[inline]
     fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
     where
@@ -176,33 +225,10 @@ impl<'de> Decode<'de> for Fraction {
     {
         decoder.decode_fraction()
     }
-}
 
-/// [`Decode`] an unsized type through a reference.
-///
-/// # Examples
-///
-/// ```
-/// use pod::{ArrayBuf, Encoder, Decoder};
-///
-/// let mut buf = ArrayBuf::new();
-/// let mut encoder = Encoder::new(&mut buf);
-/// encoder.encode_unsized(&b"hello world"[..])?;
-///
-/// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &[u8] = de.decode()?;
-/// assert_eq!(bytes, b"hello world");
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de, T> Decode<'de> for &'de T
-where
-    T: ?Sized + DecodeUnsized<'de>,
-{
     #[inline]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_unsized()
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let [num, denom] = reader.array()?;
+        Ok(Fraction::new(num, denom))
     }
 }

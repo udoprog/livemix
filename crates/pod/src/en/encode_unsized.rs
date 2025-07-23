@@ -1,6 +1,6 @@
 use core::ffi::CStr;
 
-use crate::{Bitmap, Error, Writer};
+use crate::{Bitmap, Error, Type, Writer};
 
 use super::Encoder;
 
@@ -19,10 +19,18 @@ mod sealed {
 
 /// A trait for unsized types that can be encoded.
 pub trait EncodeUnsized: self::sealed::Sealed {
+    /// The type of the encoded value.
+    const TYPE: Type;
+
+    /// The size in bytes of the unsized value.
+    fn size(&self) -> usize;
+
     #[doc(hidden)]
     fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
     where
         W: Writer;
+
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
 }
 
 /// [`EncodeUnsized`] implementation for an unsized `[u8]`.
@@ -42,12 +50,25 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for [u8] {
+    const TYPE: Type = Type::BYTES;
+
+    #[inline]
+    fn size(&self) -> usize {
+        self.len()
+    }
+
     #[inline]
     fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
     where
         W: Writer,
     {
         encoder.encode_bytes(self)
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_bytes(self)?;
+        Ok(())
     }
 }
 
@@ -69,12 +90,25 @@ impl EncodeUnsized for [u8] {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for CStr {
+    const TYPE: Type = Type::STRING;
+
+    #[inline]
+    fn size(&self) -> usize {
+        self.to_bytes_with_nul().len()
+    }
+
     #[inline]
     fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
     where
         W: Writer,
     {
         encoder.encode_c_str(self)
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_bytes(self.to_bytes_with_nul())?;
+        Ok(())
     }
 }
 
@@ -95,12 +129,25 @@ impl EncodeUnsized for CStr {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for str {
+    const TYPE: Type = Type::STRING;
+
+    #[inline]
+    fn size(&self) -> usize {
+        str::len(self).wrapping_add(1)
+    }
+
     #[inline]
     fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
     where
         W: Writer,
     {
         encoder.encode_str(self)
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_bytes_with_nul(self.as_bytes())?;
+        Ok(())
     }
 }
 
@@ -121,11 +168,24 @@ impl EncodeUnsized for str {
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for Bitmap {
+    const TYPE: Type = Type::BITMAP;
+
+    #[inline]
+    fn size(&self) -> usize {
+        Bitmap::as_bytes(self).len()
+    }
+
     #[inline]
     fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
     where
         W: Writer,
     {
         encoder.encode_bitmap(self)
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_bytes(self.as_bytes())?;
+        Ok(())
     }
 }

@@ -9,7 +9,12 @@ extern crate std;
 #[cfg(test)]
 mod tests;
 
+pub(crate) const WORD_SIZE: usize = 4;
+pub(crate) const DWORD_SIZE: usize = 8;
+
 pub(crate) mod ty;
+pub use self::ty::Type;
+
 pub(crate) mod utils;
 
 mod en;

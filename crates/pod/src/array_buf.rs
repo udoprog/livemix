@@ -2,8 +2,8 @@ use core::fmt;
 use core::mem::MaybeUninit;
 use core::slice;
 
-use super::error::ErrorKind;
-use super::{Error, Reader, Slice, Visitor, Writer};
+use crate::error::ErrorKind;
+use crate::{DWORD_SIZE, Error, Reader, Slice, Visitor, WORD_SIZE, Writer};
 
 const DEFAULT_SIZE: usize = 1024;
 
@@ -22,7 +22,7 @@ const DEFAULT_SIZE: usize = 1024;
 /// buf.write_u32(5)?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
 /// assert_eq!(buf.read(), 5);
-/// assert_eq!(buf.read_u32()?, 1);
+/// assert_eq!(buf.array()?, [1]);
 /// assert_eq!(buf.as_slice(), &[2, 3, 4, 5]);
 /// assert_eq!(buf.read_u64()?, 2u64 + (3u64 << 32));
 /// assert_eq!(buf.read(), 2);
@@ -152,7 +152,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut array = ArrayBuf::from_array([1, 2, 3]);
     /// assert_eq!(array.read(), 3);
     ///
-    /// assert_eq!(array.read_u32()?, 1);
+    /// assert_eq!(array.array()?, [1]);
     /// assert_eq!(array.read(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
@@ -175,7 +175,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// assert_eq!(array.read(), 3);
     /// assert_eq!(array.write(), 13);
     ///
-    /// assert_eq!(array.read_u32()?, 1);
+    /// assert_eq!(array.array::<1>()?, [1]);
     /// assert_eq!(array.read(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
@@ -202,11 +202,11 @@ impl<const N: usize> ArrayBuf<N> {
     /// assert_eq!(buf.read(), 3);
     ///
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
-    /// assert_eq!(buf.read_u32()?, 1);
+    /// assert_eq!(buf.array()?, [1]);
     /// assert_eq!(buf.as_slice(), &[2, 3]);
     /// buf.clear_read();
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
-    /// assert_eq!(buf.read_u32()?, 1);
+    /// assert_eq!(buf.array()?, [1]);
     /// buf.clear();
     /// assert_eq!(buf.as_slice(), &[]);
     /// assert_eq!(buf.write(), 3);
@@ -231,12 +231,12 @@ impl<const N: usize> ArrayBuf<N> {
     /// buf.write_u32(42)?;
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
-    /// assert_eq!(buf.read_u32()?, 42);
+    /// assert_eq!(buf.array()?, [42]);
     /// assert_eq!(buf.as_slice(), &[]);
     /// buf.clear_read();
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
-    /// assert_eq!(buf.read_u32()?, 42);
+    /// assert_eq!(buf.array()?, [42]);
     /// # Ok::<_, pod::Error>(())
     #[inline]
     pub fn clear_read(&mut self) {
@@ -293,7 +293,7 @@ impl<const N: usize> ArrayBuf<N> {
 ///
 /// let mut buf = ArrayBuf::from_array([1, 2, 3]);
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
-/// buf.read_u32()?;
+/// buf.array::<1>()?;
 /// assert_eq!(format!("{buf:?}"), "[2, 3]");
 ///
 /// # Ok::<_, pod::Error>(())
@@ -411,13 +411,75 @@ impl<const N: usize> PartialEq<&[u32]> for ArrayBuf<N> {
 
 impl<const N: usize> Eq for ArrayBuf<N> {}
 
+#[derive(Clone, Copy)]
+pub struct Pos {
+    write: usize,
+    len: usize,
+}
+
 impl<const N: usize> Writer for ArrayBuf<N> {
+    type Mut<'this>
+        = &'this mut ArrayBuf<N>
+    where
+        Self: 'this;
+
+    type Pos = Pos;
+
+    #[inline]
+    fn borrow_mut(&mut self) -> Self::Mut<'_> {
+        self
+    }
+
+    #[inline]
+    fn reserve_words(&mut self, words: &[u32]) -> Result<Self::Pos, Error> {
+        let write = self.write.wrapping_add(words.len());
+
+        // Ensure we have enough space in the buffer.
+        if write > N || write < self.write {
+            return Err(Error::new(ErrorKind::BufferOverflow));
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data
+                .as_mut_ptr()
+                .add(self.write)
+                .copy_from_nonoverlapping(words.as_ptr().cast(), words.len());
+        }
+
+        let pos = Pos {
+            write: self.write,
+            len: words.len(),
+        };
+
+        self.write = write;
+        Ok(pos)
+    }
+
+    #[inline]
+    fn write_zeros(&mut self, words: usize) -> Result<(), Error> {
+        let write = self.write.wrapping_add(words);
+
+        // Ensure we have enough space in the buffer.
+        if write > N || write < self.write {
+            return Err(Error::new(ErrorKind::BufferOverflow));
+        }
+
+        // SAFETY: We are writing to valid positions in the buffer.
+        unsafe {
+            self.data.as_mut_ptr().add(self.write).write_bytes(0, words);
+        }
+
+        self.write = write;
+        Ok(())
+    }
+
     #[inline]
     fn write_words(&mut self, words: &[u32]) -> Result<(), Error> {
         let write = self.write.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
-        if write > N {
+        if write > N || write < self.write {
             return Err(Error::new(ErrorKind::BufferOverflow));
         }
 
@@ -434,11 +496,78 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn pad(&mut self) -> Result<(), Error> {
-        if self.write % 2 != 0 {
-            self.write_u32(0)?;
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[u32]) -> Result<(), Error> {
+        let Pos { write, len } = pos;
+
+        if len < words.len() {
+            return Err(Error::new(ErrorKind::PositionSizeMismatch {
+                expected: len,
+                actual: words.len(),
+            }));
         }
 
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data
+                .as_mut_ptr()
+                .add(write)
+                .copy_from_nonoverlapping(words.as_ptr().cast(), words.len());
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        let req = bytes.len().div_ceil(WORD_SIZE).next_multiple_of(2);
+        let write = self.write.wrapping_add(req);
+
+        if write > N || write < self.write {
+            return Err(Error::new(ErrorKind::BufferOverflow));
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
+            ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
+
+            let remaining = DWORD_SIZE - bytes.len() % DWORD_SIZE;
+
+            if remaining > 0 {
+                ptr.add(bytes.len()).write_bytes(0, remaining);
+            }
+        }
+
+        self.write = write;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_bytes_with_nul(&mut self, bytes: &[u8]) -> Result<(), Error> {
+        let Some(full) = bytes.len().checked_add(1) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let req = full.div_ceil(WORD_SIZE).next_multiple_of(2);
+        let write = self.write.wrapping_add(req);
+
+        if write > N || write < self.write {
+            return Err(Error::new(ErrorKind::BufferOverflow));
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
+            ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
+
+            let remaining = DWORD_SIZE - full % DWORD_SIZE;
+
+            if remaining > 0 {
+                ptr.add(full).write_bytes(0, remaining);
+            }
+        }
+
+        self.write = write;
         Ok(())
     }
 }
@@ -455,7 +584,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
-    fn peek_uninit_words(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
         if self.read() < out.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
@@ -498,7 +627,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     where
         V: Visitor<'de, [u8]>,
     {
-        let req = len.div_ceil(4);
+        let req = len.div_ceil(WORD_SIZE).next_multiple_of(2);
         let read = self.read.wrapping_add(req);
 
         if read > self.write || read < self.read {
@@ -512,17 +641,5 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
             self.read = read;
             Ok(ok)
         }
-    }
-
-    #[inline]
-    fn skip(&mut self, size: usize) -> Result<(), Error> {
-        let read = self.read.wrapping_add(size);
-
-        if read > self.write || read < self.read {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        }
-
-        self.read = read;
-        Ok(())
     }
 }
