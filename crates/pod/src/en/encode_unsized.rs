@@ -45,7 +45,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 /// encoder.encode_unsized(&b"hello world"[..])?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &[u8] = de.decode_unsized()?;
+/// let bytes: &[u8] = de.decode_borrowed()?;
 /// assert_eq!(bytes, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -87,7 +87,7 @@ impl EncodeUnsized for [u8] {
 /// encoder.encode_unsized(c"hello world")?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &CStr = de.decode_unsized()?;
+/// let bytes: &CStr = de.decode_borrowed()?;
 /// assert_eq!(bytes, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -131,7 +131,7 @@ impl EncodeUnsized for CStr {
 /// encoder.encode_unsized("hello world")?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &str = de.decode_unsized()?;
+/// let bytes: &str = de.decode_borrowed()?;
 /// assert_eq!(bytes, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -183,7 +183,7 @@ impl EncodeUnsized for str {
 /// encoder.encode_unsized(Bitmap::new(b"asdfasdf"))?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bitmap: &Bitmap = de.decode_unsized()?;
+/// let bitmap: &Bitmap = de.decode_borrowed()?;
 /// assert_eq!(bitmap, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```

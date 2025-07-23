@@ -1,7 +1,7 @@
 use core::ffi::CStr;
 
 use crate::error::ErrorKind;
-use crate::{Bitmap, Decoder, Error, Reader, Type, Visitor};
+use crate::{Bitmap, Error, Reader, Type, Visitor};
 
 mod sealed {
     use core::ffi::CStr;
@@ -21,9 +21,29 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
     const TYPE: Type;
 
     #[doc(hidden)]
-    fn decode_unsized<R>(decoder: &mut Decoder<R>) -> Result<&'de Self, Error>
+    fn decode_unsized<V>(reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
     where
-        R: Reader<'de>;
+        V: Visitor<'de, Self>;
+
+    #[inline]
+    #[doc(hidden)]
+    fn decode_borrowed(reader: impl Reader<'de>) -> Result<&'de Self, Error> {
+        struct LocalVisitor;
+
+        impl<'de, T> Visitor<'de, T> for LocalVisitor
+        where
+            T: 'de + ?Sized,
+        {
+            type Ok = &'de T;
+
+            #[inline]
+            fn visit_borrowed(self, value: &'de T) -> Result<Self::Ok, Error> {
+                Ok(value)
+            }
+        }
+
+        Self::decode_unsized(reader, LocalVisitor)
+    }
 
     #[doc(hidden)]
     fn read_content<V>(reader: impl Reader<'de>, size: usize, visitor: V) -> Result<V::Ok, Error>
@@ -44,7 +64,7 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
 /// encoder.encode_unsized(c"hello world")?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &CStr = de.decode_unsized()?;
+/// let bytes: &CStr = de.decode_borrowed()?;
 /// assert_eq!(bytes, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -52,11 +72,19 @@ impl<'de> DecodeUnsized<'de> for CStr {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn decode_unsized<R>(decoder: &mut Decoder<R>) -> Result<&'de Self, Error>
+    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
     where
-        R: Reader<'de>,
+        V: Visitor<'de, Self>,
     {
-        decoder.decode_borrowed_c_str()
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::STRING => CStr::read_content(reader, size as usize, visitor),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::STRING,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -114,7 +142,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
 /// encoder.encode_unsized("hello world")?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &str = de.decode_unsized()?;
+/// let bytes: &str = de.decode_borrowed()?;
 /// assert_eq!(bytes, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -122,11 +150,19 @@ impl<'de> DecodeUnsized<'de> for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn decode_unsized<R>(decoder: &mut Decoder<R>) -> Result<&'de Self, Error>
+    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
     where
-        R: Reader<'de>,
+        V: Visitor<'de, Self>,
     {
-        decoder.decode_borrowed_str()
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::STRING => str::read_content(reader, size as usize, visitor),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::STRING,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -173,7 +209,7 @@ impl<'de> DecodeUnsized<'de> for str {
 /// encoder.encode_unsized(&b"hello world"[..])?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &[u8] = de.decode_unsized()?;
+/// let bytes: &[u8] = de.decode_borrowed()?;
 /// assert_eq!(bytes, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -181,11 +217,19 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn decode_unsized<R>(decoder: &mut Decoder<R>) -> Result<&'de Self, Error>
+    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
     where
-        R: Reader<'de>,
+        V: Visitor<'de, Self>,
     {
-        decoder.decode_borrowed_bytes()
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::BYTES => <[u8]>::read_content(reader, size as usize, visitor),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::BYTES,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -213,7 +257,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 /// encoder.encode_unsized(Bitmap::new(b"asdfasdf"))?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bitmap: &Bitmap = de.decode_unsized()?;
+/// let bitmap: &Bitmap = de.decode_borrowed()?;
 /// assert_eq!(bitmap, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -221,11 +265,19 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
-    fn decode_unsized<R>(decoder: &mut Decoder<R>) -> Result<&'de Self, Error>
+    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
     where
-        R: Reader<'de>,
+        V: Visitor<'de, Self>,
     {
-        decoder.decode_borrowed_bitmap()
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::BITMAP => Bitmap::read_content(reader, size as usize, visitor),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::BITMAP,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]

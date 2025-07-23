@@ -1,9 +1,9 @@
 use core::mem::MaybeUninit;
 use core::slice;
 
-use crate::Error;
 use crate::utils::Align;
 use crate::visitor::Visitor;
+use crate::{Error, Type};
 
 mod sealed {
     use crate::{ArrayBuf, Reader, Slice};
@@ -69,6 +69,13 @@ pub trait Reader<'de>: self::sealed::Sealed {
         self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init().read() })
+    }
+
+    #[inline]
+    fn header(&mut self) -> Result<(u32, Type), Error> {
+        let [size, ty] = self.array()?;
+        let ty = Type::new(ty);
+        Ok((size, ty))
     }
 }
 

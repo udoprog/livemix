@@ -12,8 +12,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use crate::OwnedBitmap;
 use crate::error::ErrorKind;
-use crate::utils::Align;
-use crate::{Bitmap, Error, Fraction, IntoId, Reader, Rectangle, Type, Visitor};
+use crate::{Bitmap, Error, Fraction, Id, IntoId, Reader, Rectangle, Type, Visitor};
 
 use super::{Decode, DecodeArray, DecodeUnsized};
 
@@ -26,53 +25,6 @@ impl<'de, R> Decoder<R>
 where
     R: Reader<'de>,
 {
-    /// Encode a value into the encoder.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder, Decoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode(10i32)?;
-    /// encoder.encode(&b"hello world"[..])?;
-    ///
-    /// let mut de = Decoder::new(buf.as_reader_slice());
-    /// let value: i32 = de.decode()?;
-    /// assert_eq!(value, 10i32);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    pub fn decode<T>(&mut self) -> Result<T, Error>
-    where
-        T: Decode<'de>,
-    {
-        T::decode(self)
-    }
-
-    /// Decode an unsized value into the encoder.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder, Decoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_unsized(&b"hello world"[..])?;
-    ///
-    /// let mut de = Decoder::new(buf.as_reader_slice());
-    /// let bytes: &[u8] = de.decode_unsized()?;
-    /// assert_eq!(bytes, b"hello world");
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    pub fn decode_unsized<T>(&mut self) -> Result<&'de T, Error>
-    where
-        T: ?Sized + DecodeUnsized<'de>,
-    {
-        T::decode_unsized(self)
-    }
-
     /// Construct a new decoder.
     ///
     /// # Examples
@@ -93,6 +45,80 @@ where
     #[inline]
     pub fn new(r: R) -> Self {
         Self { r }
+    }
+
+    /// Encode a value into the encoder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Decoder};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// encoder.encode(10i32)?;
+    /// encoder.encode(&b"hello world"[..])?;
+    ///
+    /// let mut de = Decoder::new(buf.as_reader_slice());
+    /// let value: i32 = de.decode()?;
+    /// assert_eq!(value, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode<T>(&mut self) -> Result<T, Error>
+    where
+        T: Decode<'de>,
+    {
+        T::decode(self.r.borrow_mut())
+    }
+
+    /// Decode an unsized value into the encoder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Decoder};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// encoder.encode_unsized(&b"hello world"[..])?;
+    ///
+    /// let mut de = Decoder::new(buf.as_reader_slice());
+    /// let bytes: &[u8] = de.decode_borrowed()?;
+    /// assert_eq!(bytes, b"hello world");
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_unsized<T, V>(&mut self, visitor: V) -> Result<V::Ok, Error>
+    where
+        T: ?Sized + DecodeUnsized<'de>,
+        V: Visitor<'de, T>,
+    {
+        T::decode_unsized(self.r.borrow_mut(), visitor)
+    }
+
+    /// Decode an unsized value into the encoder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Encoder, Decoder};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let mut encoder = Encoder::new(&mut buf);
+    /// encoder.encode_unsized(&b"hello world"[..])?;
+    ///
+    /// let mut de = Decoder::new(buf.as_reader_slice());
+    /// let bytes: &[u8] = de.decode_borrowed()?;
+    /// assert_eq!(bytes, b"hello world");
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_borrowed<T>(&mut self) -> Result<&'de T, Error>
+    where
+        T: ?Sized + DecodeUnsized<'de>,
+    {
+        T::decode_borrowed(self.r.borrow_mut())
     }
 
     /// Decode an optional value.
@@ -160,18 +186,7 @@ where
     /// ```
     #[inline]
     pub fn decode_bool(&mut self) -> Result<bool, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::BOOL if size == 4 => {
-                let [value, _pad] = self.r.array()?;
-                Ok(value != 0)
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::BOOL,
-                actual: ty,
-            })),
-        }
+        bool::decode(self.r.borrow_mut())
     }
 
     /// Decode an id value.
@@ -204,18 +219,8 @@ where
     where
         I: IntoId,
     {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::ID if size == 4 => {
-                let [value, _pad] = self.r.array()?;
-                Ok(I::from_id(value))
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::ID,
-                actual: ty,
-            })),
-        }
+        let Id(id) = Id::<I>::decode(self.r.borrow_mut())?;
+        Ok(id)
     }
 
     /// Decode a signed 32-bit integer.
@@ -242,18 +247,7 @@ where
     /// ```
     #[inline]
     pub fn decode_int(&mut self) -> Result<i32, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::INT if size == 4 => {
-                let [value, _pad] = self.r.array()?;
-                Ok(value.cast_signed())
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::INT,
-                actual: ty,
-            })),
-        }
+        i32::decode(self.r.borrow_mut())
     }
 
     /// Decode a signed 64-bit long.
@@ -280,18 +274,7 @@ where
     /// ```
     #[inline]
     pub fn decode_long(&mut self) -> Result<i64, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::LONG if size == 8 => {
-                let value = self.r.read_u64()?.cast_signed();
-                Ok(value)
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::LONG,
-                actual: ty,
-            })),
-        }
+        i64::decode(self.r.borrow_mut())
     }
 
     /// Decode a 32-bit float.
@@ -318,18 +301,7 @@ where
     /// ```
     #[inline]
     pub fn decode_float(&mut self) -> Result<f32, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::FLOAT if size == 4 => {
-                let [value, _pad] = self.r.array()?;
-                Ok(f32::from_bits(value))
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::FLOAT,
-                actual: ty,
-            })),
-        }
+        f32::decode(self.r.borrow_mut())
     }
 
     /// Decode a 64-bit double.
@@ -356,18 +328,7 @@ where
     /// ```
     #[inline]
     pub fn decode_double(&mut self) -> Result<f64, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::DOUBLE if size == 8 => {
-                let value = f64::from_bits(self.r.read_u64()?);
-                Ok(value)
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::DOUBLE,
-                actual: ty,
-            })),
-        }
+        f64::decode(self.r.borrow_mut())
     }
 
     /// Decode a c-string with full control through a visitor.
@@ -392,15 +353,7 @@ where
     where
         V: Visitor<'de, CStr>,
     {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::STRING => CStr::read_content(self.r.borrow_mut(), size as usize, visitor),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::STRING,
-                actual: ty,
-            })),
-        }
+        CStr::decode_unsized(self.r.borrow_mut(), visitor)
     }
 
     /// Decode a c-string.
@@ -422,18 +375,7 @@ where
     /// ```
     #[inline]
     pub fn decode_borrowed_c_str(&mut self) -> Result<&'de CStr, Error> {
-        struct LocalVisitor;
-
-        impl<'de> Visitor<'de, CStr> for LocalVisitor {
-            type Ok = &'de CStr;
-
-            #[inline]
-            fn visit_borrowed(self, value: &'de CStr) -> Result<Self::Ok, Error> {
-                Ok(value)
-            }
-        }
-
-        self.decode_c_str(LocalVisitor)
+        CStr::decode_borrowed(self.r.borrow_mut())
     }
 
     /// Decode an owned c-string.
@@ -491,15 +433,7 @@ where
     where
         V: Visitor<'de, str>,
     {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::STRING => str::read_content(self.r.borrow_mut(), size as usize, visitor),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::STRING,
-                actual: ty,
-            })),
-        }
+        str::decode_unsized(self.r.borrow_mut(), visitor)
     }
 
     /// Decode a string.
@@ -521,18 +455,7 @@ where
     /// ```
     #[inline]
     pub fn decode_borrowed_str(&mut self) -> Result<&'de str, Error> {
-        struct LocalVisitor;
-
-        impl<'de> Visitor<'de, str> for LocalVisitor {
-            type Ok = &'de str;
-
-            #[inline]
-            fn visit_borrowed(self, value: &'de str) -> Result<Self::Ok, Error> {
-                Ok(value)
-            }
-        }
-
-        self.decode_str(LocalVisitor)
+        str::decode_borrowed(self.r.borrow_mut())
     }
 
     /// Decode an owned string.
@@ -591,15 +514,7 @@ where
     where
         V: Visitor<'de, [u8]>,
     {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::BYTES => <[u8]>::read_content(self.r.borrow_mut(), size as usize, visitor),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::BYTES,
-                actual: ty,
-            })),
-        }
+        <[u8]>::decode_unsized(self.r.borrow_mut(), visitor)
     }
 
     /// Decode borrowed bytes.
@@ -687,21 +602,7 @@ where
     /// ```
     #[inline]
     pub fn decode_rectangle(&mut self) -> Result<Rectangle, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::RECTANGLE if size == 8 => {
-                let mut out = Align::<[u32; 2], [_; 2]>::uninit();
-                self.r.read_words_uninit(out.as_mut_slice())?;
-                // SAFETY: The slice must have been initialized by the reader.
-                let [width, height] = unsafe { out.assume_init().read() };
-                Ok(Rectangle::new(width, height))
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::RECTANGLE,
-                actual: ty,
-            })),
-        }
+        Rectangle::decode(self.r.borrow_mut())
     }
 
     /// Decode a [`Fraction`].
@@ -722,21 +623,7 @@ where
     /// ```
     #[inline]
     pub fn decode_fraction(&mut self) -> Result<Fraction, Error> {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::FRACTION if size == 8 => {
-                let mut out = Align::<[u32; 2], [_; 2]>::uninit();
-                self.r.read_words_uninit(out.as_mut_slice())?;
-                // SAFETY: The slice must have been initialized by the reader.
-                let [num, denom] = unsafe { out.assume_init().read() };
-                Ok(Fraction::new(num, denom))
-            }
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::FRACTION,
-                actual: ty,
-            })),
-        }
+        Fraction::decode(self.r.borrow_mut())
     }
 
     /// Decode bitmap with full control through a visitor.
@@ -760,15 +647,7 @@ where
     where
         V: Visitor<'de, Bitmap>,
     {
-        let (size, ty) = self.header()?;
-
-        match ty {
-            Type::BITMAP => Bitmap::read_content(self.r.borrow_mut(), size as usize, visitor),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::BITMAP,
-                actual: ty,
-            })),
-        }
+        Bitmap::decode_unsized(self.r.borrow_mut(), visitor)
     }
 
     /// Decode borrowed bitmap.
@@ -869,7 +748,7 @@ where
     /// ```
     #[inline]
     pub fn decode_array(&mut self) -> Result<DecodeArray<R::Mut<'_>>, Error> {
-        let (full_size, ty) = self.header()?;
+        let (full_size, ty) = self.r.header()?;
 
         match ty {
             Type::ARRAY if full_size >= 8 => {
@@ -905,12 +784,5 @@ where
                 actual: ty,
             })),
         }
-    }
-
-    #[inline]
-    fn header(&mut self) -> Result<(u32, Type), Error> {
-        let [size, ty] = self.r.array()?;
-        let ty = Type::new(ty);
-        Ok((size, ty))
     }
 }

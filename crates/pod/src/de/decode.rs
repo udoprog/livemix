@@ -1,7 +1,5 @@
-use crate::id::IntoId;
-use crate::{Error, Fraction, Id, Reader, Rectangle, Type};
-
-use super::Decoder;
+use crate::error::ErrorKind;
+use crate::{Error, Fraction, Id, IntoId, Reader, Rectangle, Type};
 
 mod sealed {
     use crate::id::IntoId;
@@ -22,14 +20,15 @@ mod sealed {
 /// A trait for types that can be decoded.
 pub trait Decode<'de>: Sized + self::sealed::Sealed {
     /// The type of the decoded value.
+    #[doc(hidden)]
     const TYPE: Type;
 
     /// Decode a full typed value.
-    fn decode<R>(decoder: &mut Decoder<R>) -> Result<Self, Error>
-    where
-        R: Reader<'de>;
+    #[doc(hidden)]
+    fn decode(reader: impl Reader<'de>) -> Result<Self, Error>;
 
     /// Read the content of a type.
+    #[doc(hidden)]
     fn read_content(reader: impl Reader<'de>) -> Result<Self, Error>;
 }
 
@@ -53,16 +52,22 @@ impl<'de> Decode<'de> for bool {
     const TYPE: Type = Type::BOOL;
 
     #[inline]
-    #[doc(hidden)]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_bool()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::BOOL if size == 4 => {
+                let [value, _pad] = reader.array()?;
+                Ok(value != 0)
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::BOOL,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
-    #[doc(hidden)]
     fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(value != 0)
@@ -92,16 +97,22 @@ where
     const TYPE: Type = Type::ID;
 
     #[inline]
-    #[doc(hidden)]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        Ok(Id(decoder.decode_id()?))
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::ID if size == 4 => {
+                let [value, _pad] = reader.array()?;
+                Ok(Id(I::from_id(value)))
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::ID,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
-    #[doc(hidden)]
     fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(Id(I::from_id(value)))
@@ -128,16 +139,22 @@ impl<'de> Decode<'de> for i32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
-    #[doc(hidden)]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_int()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::INT if size == 4 => {
+                let [value, _pad] = reader.array()?;
+                Ok(value.cast_signed())
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::INT,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
-    #[doc(hidden)]
     fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(value.cast_signed())
@@ -164,11 +181,19 @@ impl<'de> Decode<'de> for i64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_long()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::LONG if size == 8 => {
+                let value = reader.read_u64()?.cast_signed();
+                Ok(value)
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::LONG,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -197,11 +222,19 @@ impl<'de> Decode<'de> for f32 {
     const TYPE: Type = Type::FLOAT;
 
     #[inline]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_float()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::FLOAT if size == 4 => {
+                let [value, _pad] = reader.array()?;
+                Ok(f32::from_bits(value))
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::FLOAT,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -231,11 +264,19 @@ impl<'de> Decode<'de> for f64 {
     const TYPE: Type = Type::DOUBLE;
 
     #[inline]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_double()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::DOUBLE if size == 8 => {
+                let value = f64::from_bits(reader.read_u64()?);
+                Ok(value)
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::DOUBLE,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -264,11 +305,19 @@ impl<'de> Decode<'de> for Rectangle {
     const TYPE: Type = Type::RECTANGLE;
 
     #[inline]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_rectangle()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::RECTANGLE if size == 8 => {
+                let [width, height] = reader.array()?;
+                Ok(Rectangle::new(width, height))
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::RECTANGLE,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
@@ -298,11 +347,19 @@ impl<'de> Decode<'de> for Fraction {
     const TYPE: Type = Type::FRACTION;
 
     #[inline]
-    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
-    where
-        W: Reader<'de>,
-    {
-        decoder.decode_fraction()
+    fn decode(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let (size, ty) = reader.header()?;
+
+        match ty {
+            Type::FRACTION if size == 8 => {
+                let [num, denom] = reader.array()?;
+                Ok(Fraction::new(num, denom))
+            }
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::FRACTION,
+                actual: ty,
+            })),
+        }
     }
 
     #[inline]
