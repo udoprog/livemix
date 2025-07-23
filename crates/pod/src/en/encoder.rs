@@ -1,7 +1,8 @@
 use core::ffi::CStr;
 
 use crate::error::ErrorKind;
-use crate::{Bitmap, Error, Fraction, Rectangle, Type, Writer};
+use crate::id::IntoId;
+use crate::{Bitmap, Error, Fraction, Id, Rectangle, Type, Writer};
 
 use super::{Encode, EncodeArray, EncodeUnsized};
 
@@ -41,14 +42,13 @@ where
     /// let mut buf = ArrayBuf::new();
     /// let mut encoder = Encoder::new(&mut buf);
     /// encoder.encode(10i32)?;
-    /// encoder.encode(&b"hello world"[..])?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn encode<T>(&mut self, value: T) -> Result<(), Error>
     where
         T: Encode,
     {
-        value.encode(self)
+        value.encode(self.w.borrow_mut())
     }
 
     /// Encode an unsized value into the encoder.
@@ -67,7 +67,7 @@ where
     where
         T: ?Sized + EncodeUnsized,
     {
-        value.encode_unsized(self)
+        value.encode_unsized(self.w.borrow_mut())
     }
 
     /// Encode a `None` value.
@@ -102,9 +102,7 @@ where
     /// ```
     #[inline]
     pub fn encode_bool(&mut self, value: bool) -> Result<(), Error> {
-        self.w
-            .write_words(&[4, Type::BOOL.into_u32(), if value { 1 } else { 0 }, 0])?;
-        Ok(())
+        value.encode(self.w.borrow_mut())
     }
 
     /// Encode an `id` value.
@@ -113,16 +111,16 @@ where
     ///
     /// ```
     /// use pod::{ArrayBuf, Encoder};
+    /// use pod::id::MediaSubType;
     ///
     /// let mut buf = ArrayBuf::new();
     /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_id(42)?;
+    /// encoder.encode_id(MediaSubType::Opus)?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_id(&mut self, value: u32) -> Result<(), Error> {
-        self.w.write_words(&[4, Type::ID.into_u32(), value, 0])?;
-        Ok(())
+    pub fn encode_id(&mut self, value: impl IntoId) -> Result<(), Error> {
+        Id(value).encode(self.w.borrow_mut())
     }
 
     /// Encode a signed 32-bit integer.
@@ -139,9 +137,7 @@ where
     /// ```
     #[inline]
     pub fn encode_int(&mut self, value: i32) -> Result<(), Error> {
-        self.w
-            .write_words(&[4, Type::INT.into_u32(), value.cast_unsigned(), 0])?;
-        Ok(())
+        value.encode(self.w.borrow_mut())
     }
 
     /// Encode a signed 64-bit integer.
@@ -158,9 +154,7 @@ where
     /// ```
     #[inline]
     pub fn encode_long(&mut self, value: i64) -> Result<(), Error> {
-        self.w.write_words(&[8, Type::LONG.into_u32()])?;
-        self.w.write_u64(value.cast_unsigned())?;
-        Ok(())
+        value.encode(self.w.borrow_mut())
     }
 
     /// Encode a signed 32-bit float.
@@ -177,9 +171,7 @@ where
     /// ```
     #[inline]
     pub fn encode_float(&mut self, value: f32) -> Result<(), Error> {
-        self.w
-            .write_words(&[4, Type::FLOAT.into_u32(), value.to_bits(), 0])?;
-        Ok(())
+        value.encode(self.w.borrow_mut())
     }
 
     /// Encode a signed 64-bit float.
@@ -196,9 +188,7 @@ where
     /// ```
     #[inline]
     pub fn encode_double(&mut self, value: f64) -> Result<(), Error> {
-        self.w.write_words(&[8, Type::DOUBLE.into_u32()])?;
-        self.w.write_u64(value.to_bits())?;
-        Ok(())
+        value.encode(self.w.borrow_mut())
     }
 
     /// Encode a null-terminated C-string.
@@ -216,15 +206,7 @@ where
     /// ```
     #[inline]
     pub fn encode_c_str(&mut self, value: &CStr) -> Result<(), Error> {
-        let bytes = value.to_bytes_with_nul();
-
-        let Ok(len) = u32::try_from(bytes.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.w.write_words(&[len, Type::STRING.into_u32()])?;
-        self.w.write_bytes(bytes)?;
-        Ok(())
+        value.encode_unsized(self.w.borrow_mut())
     }
 
     /// Encode a UTF-8 string.
@@ -241,23 +223,7 @@ where
     /// ```
     #[inline]
     pub fn encode_str(&mut self, value: &str) -> Result<(), Error> {
-        let bytes = value.as_bytes();
-
-        let Some(len) = bytes
-            .len()
-            .checked_add(1)
-            .and_then(|v| u32::try_from(v).ok())
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        if bytes.contains(&0) {
-            return Err(Error::new(ErrorKind::NullContainingString));
-        }
-
-        self.w.write_words(&[len, Type::STRING.into_u32()])?;
-        self.w.write_bytes_with_nul(bytes)?;
-        Ok(())
+        value.encode_unsized(self.w.borrow_mut())
     }
 
     /// Encode bytes.
@@ -274,13 +240,7 @@ where
     /// ```
     #[inline]
     pub fn encode_bytes(&mut self, value: &[u8]) -> Result<(), Error> {
-        let Ok(len) = u32::try_from(value.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.w.write_words(&[len, Type::BYTES.into_u32()])?;
-        self.w.write_bytes(value)?;
-        Ok(())
+        value.encode_unsized(self.w.borrow_mut())
     }
 
     /// Encode a rectangle.
@@ -297,13 +257,7 @@ where
     /// ```
     #[inline]
     pub fn encode_rectangle(&mut self, rectangle: Rectangle) -> Result<(), Error> {
-        self.w.write_words(&[
-            8,
-            Type::RECTANGLE.into_u32(),
-            rectangle.width,
-            rectangle.height,
-        ])?;
-        Ok(())
+        rectangle.encode(self.w.borrow_mut())
     }
 
     /// Encode a fraction.
@@ -320,34 +274,12 @@ where
     /// ```
     #[inline]
     pub fn encode_fraction(&mut self, fraction: Fraction) -> Result<(), Error> {
-        self.w
-            .write_words(&[8, Type::FRACTION.into_u32(), fraction.num, fraction.denom])?;
-        Ok(())
+        fraction.encode(self.w.borrow_mut())
     }
 
-    /// Encode a bitmap.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Bitmap, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_bitmap(Bitmap::new(b"hello world"))?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
     #[inline]
     pub fn encode_bitmap(&mut self, value: &Bitmap) -> Result<(), Error> {
-        let value = value.as_bytes();
-
-        let Ok(len) = u32::try_from(value.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.w.write_words(&[len, Type::BITMAP.into_u32()])?;
-        self.w.write_bytes(value)?;
-        Ok(())
+        value.encode_unsized(self.w.borrow_mut())
     }
 
     /// Encode an array with the given type.

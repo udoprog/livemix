@@ -17,6 +17,9 @@ pub use self::ty::Type;
 
 pub(crate) mod utils;
 
+pub mod id;
+pub use self::id::{Id, IntoId};
+
 mod en;
 pub use self::en::{Encode, EncodeUnsized, Encoder};
 

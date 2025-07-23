@@ -1,8 +1,7 @@
 use core::ffi::CStr;
 
+use crate::error::ErrorKind;
 use crate::{Bitmap, Error, Type, Writer};
-
-use super::Encoder;
 
 mod sealed {
     use core::ffi::CStr;
@@ -20,16 +19,17 @@ mod sealed {
 /// A trait for unsized types that can be encoded.
 pub trait EncodeUnsized: self::sealed::Sealed {
     /// The type of the encoded value.
+    #[doc(hidden)]
     const TYPE: Type;
 
     /// The size in bytes of the unsized value.
+    #[doc(hidden)]
     fn size(&self) -> usize;
 
     #[doc(hidden)]
-    fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer;
+    fn encode_unsized(&self, writer: impl Writer) -> Result<(), Error>;
 
+    #[doc(hidden)]
     fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
 }
 
@@ -58,17 +58,19 @@ impl EncodeUnsized for [u8] {
     }
 
     #[inline]
-    fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_bytes(self)
+    fn encode_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let Ok(len) = u32::try_from(self.len()) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write_words(&[len, Type::BYTES.into_u32()])?;
+        writer.write_bytes(self)?;
+        Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_bytes(self)?;
-        Ok(())
+        writer.write_bytes(self)
     }
 }
 
@@ -98,11 +100,16 @@ impl EncodeUnsized for CStr {
     }
 
     #[inline]
-    fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_c_str(self)
+    fn encode_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let bytes = self.to_bytes_with_nul();
+
+        let Ok(len) = u32::try_from(bytes.len()) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write_words(&[len, Type::STRING.into_u32()])?;
+        writer.write_bytes(bytes)?;
+        Ok(())
     }
 
     #[inline]
@@ -137,11 +144,24 @@ impl EncodeUnsized for str {
     }
 
     #[inline]
-    fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_str(self)
+    fn encode_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let bytes = self.as_bytes();
+
+        let Some(len) = bytes
+            .len()
+            .checked_add(1)
+            .and_then(|v| u32::try_from(v).ok())
+        else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        if bytes.contains(&0) {
+            return Err(Error::new(ErrorKind::NullContainingString));
+        }
+
+        writer.write_words(&[len, Type::STRING.into_u32()])?;
+        writer.write_bytes_with_nul(bytes)?;
+        Ok(())
     }
 
     #[inline]
@@ -176,11 +196,16 @@ impl EncodeUnsized for Bitmap {
     }
 
     #[inline]
-    fn encode_unsized<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_bitmap(self)
+    fn encode_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let value = self.as_bytes();
+
+        let Ok(len) = u32::try_from(value.len()) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write_words(&[len, Type::BITMAP.into_u32()])?;
+        writer.write_bytes(value)?;
+        Ok(())
     }
 
     #[inline]

@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use crate::OwnedBitmap;
 use crate::error::ErrorKind;
 use crate::utils::Align;
-use crate::{Bitmap, Error, Fraction, Reader, Rectangle, Type, Visitor};
+use crate::{Bitmap, Error, Fraction, IntoId, Reader, Rectangle, Type, Visitor};
 
 use super::{Decode, DecodeArray, DecodeUnsized};
 
@@ -180,30 +180,36 @@ where
     ///
     /// ```
     /// use pod::{ArrayBuf, Decoder, Encoder};
+    /// use pod::id::MediaSubType;
     ///
     /// let mut buf = ArrayBuf::new();
     /// let mut en = Encoder::new(&mut buf);
     ///
-    /// en.encode_id(42)?;
+    /// en.encode_id(MediaSubType::Opus)?;
     /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// assert_eq!(decoder.decode_id()?, 42);
+    /// let sub_type: MediaSubType = decoder.decode_id()?;
+    /// assert_eq!(sub_type, MediaSubType::Opus);
     ///
     /// buf.clear();
     ///
     /// let mut en = Encoder::new(&mut buf);
-    /// en.encode_id(42)?;
+    /// en.encode_id(MediaSubType::Opus)?;
     /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// assert_eq!(decoder.decode_id()?, 42);
+    /// let sub_type: MediaSubType = decoder.decode_id()?;
+    /// assert_eq!(sub_type, MediaSubType::Opus);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_id(&mut self) -> Result<u32, Error> {
+    pub fn decode_id<I>(&mut self) -> Result<I, Error>
+    where
+        I: IntoId,
+    {
         let (size, ty) = self.header()?;
 
         match ty {
             Type::ID if size == 4 => {
                 let [value, _pad] = self.r.array()?;
-                Ok(value)
+                Ok(I::from_id(value))
             }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::ID,

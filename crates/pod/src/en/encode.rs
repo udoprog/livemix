@@ -1,11 +1,12 @@
-use crate::{Error, Fraction, Rectangle, Type, Writer};
-
-use super::{EncodeUnsized, Encoder};
+use crate::{EncodeUnsized, Error, Fraction, Id, IntoId, Rectangle, Type, Writer};
 
 mod sealed {
-    use super::{EncodeUnsized, Fraction, Rectangle};
+    use crate::id::IntoId;
+    use crate::{EncodeUnsized, Fraction, Id, Rectangle};
 
     pub trait Sealed {}
+    impl Sealed for bool {}
+    impl<I> Sealed for Id<I> where I: IntoId {}
     impl Sealed for i32 {}
     impl Sealed for i64 {}
     impl Sealed for f32 {}
@@ -23,13 +24,85 @@ pub trait Encode: Sized + self::sealed::Sealed {
     /// The size in bytes of the encoded value.
     fn size(&self) -> usize;
 
-    /// Encode the value into the encoder.
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer;
+    /// Encode the value into the writer.
+    fn encode(&self, writer: impl Writer) -> Result<(), Error>;
 
     /// Write the content of a type.
     fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
+}
+
+/// [`Encode`] implementation for `i32`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Encoder, Decoder};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut encoder = Encoder::new(&mut buf);
+/// encoder.encode(true)?;
+///
+/// let mut de = Decoder::new(buf.as_reader_slice());
+/// let value: bool = de.decode()?;
+/// assert_eq!(value, true);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for bool {
+    const TYPE: Type = Type::BOOL;
+
+    #[inline]
+    fn size(&self) -> usize {
+        4
+    }
+
+    #[inline]
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[4, Type::BOOL.into_u32(), if *self { 1 } else { 0 }, 0])
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[if *self { 1 } else { 0 }, 0])
+    }
+}
+
+/// [`Encode`] implementation for any type that can be converted into an `Id`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Encoder, Decoder};
+/// use pod::id::{Id, MediaSubType};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut encoder = Encoder::new(&mut buf);
+/// encoder.encode(Id(MediaSubType::Opus))?;
+///
+/// let mut de = Decoder::new(buf.as_reader_slice());
+/// let Id(value): Id<MediaSubType> = de.decode()?;
+/// assert_eq!(value, MediaSubType::Opus);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<I> Encode for Id<I>
+where
+    I: IntoId,
+{
+    const TYPE: Type = Type::ID;
+
+    #[inline]
+    fn size(&self) -> usize {
+        4
+    }
+
+    #[inline]
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[4, Type::ID.into_u32(), self.0.into_id(), 0])
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[self.0.into_id(), 0])
+    }
 }
 
 /// [`Encode`] implementation for `i32`.
@@ -57,11 +130,8 @@ impl Encode for i32 {
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_int(*self)
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[4, Type::INT.into_u32(), self.cast_unsigned(), 0])
     }
 
     #[inline]
@@ -95,11 +165,10 @@ impl Encode for i64 {
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_long(*self)
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[8, Type::LONG.into_u32()])?;
+        writer.write_u64(self.cast_unsigned())?;
+        Ok(())
     }
 
     #[inline]
@@ -133,11 +202,8 @@ impl Encode for f32 {
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_float(*self)
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[4, Type::FLOAT.into_u32(), self.to_bits(), 0])
     }
 
     #[inline]
@@ -171,11 +237,10 @@ impl Encode for f64 {
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_double(*self)
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[8, Type::DOUBLE.into_u32()])?;
+        writer.write_u64(self.to_bits())?;
+        Ok(())
     }
 
     #[inline]
@@ -209,11 +274,8 @@ impl Encode for Rectangle {
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_rectangle(*self)
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[8, Type::RECTANGLE.into_u32(), self.width, self.height])
     }
 
     #[inline]
@@ -247,11 +309,8 @@ impl Encode for Fraction {
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        encoder.encode_fraction(*self)
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write_words(&[8, Type::FRACTION.into_u32(), self.num, self.denom])
     }
 
     #[inline]
@@ -288,11 +347,8 @@ where
     }
 
     #[inline]
-    fn encode<W>(&self, encoder: &mut Encoder<W>) -> Result<(), Error>
-    where
-        W: Writer,
-    {
-        self.encode_unsized(encoder)
+    fn encode(&self, writer: impl Writer) -> Result<(), Error> {
+        self.encode_unsized(writer)
     }
 
     #[inline]

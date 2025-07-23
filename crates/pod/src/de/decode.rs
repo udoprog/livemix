@@ -1,11 +1,15 @@
-use crate::{Error, Fraction, Reader, Rectangle, Type};
+use crate::id::IntoId;
+use crate::{Error, Fraction, Id, Reader, Rectangle, Type};
 
-use super::{DecodeUnsized, Decoder};
+use super::Decoder;
 
 mod sealed {
-    use super::{DecodeUnsized, Fraction, Rectangle};
+    use crate::id::IntoId;
+    use crate::{DecodeUnsized, Fraction, Id, Rectangle};
 
     pub trait Sealed {}
+    impl Sealed for bool {}
+    impl<I> Sealed for Id<I> where I: IntoId {}
     impl Sealed for i32 {}
     impl Sealed for i64 {}
     impl Sealed for f32 {}
@@ -27,6 +31,81 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 
     /// Read the content of a type.
     fn read_content(reader: impl Reader<'de>) -> Result<Self, Error>;
+}
+
+/// [`Decode`] implementation for `i32`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Encoder, Decoder};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut encoder = Encoder::new(&mut buf);
+/// encoder.encode(10i32)?;
+///
+/// let mut de = Decoder::new(buf.as_reader_slice());
+/// let value: i32 = de.decode()?;
+/// assert_eq!(value, 10i32);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for bool {
+    const TYPE: Type = Type::BOOL;
+
+    #[inline]
+    #[doc(hidden)]
+    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
+    where
+        W: Reader<'de>,
+    {
+        decoder.decode_bool()
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let [value, _pad] = reader.array()?;
+        Ok(value != 0)
+    }
+}
+
+/// [`Decode`] implementation for an [`IntoId`] type.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Encoder, Decoder};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut encoder = Encoder::new(&mut buf);
+/// encoder.encode(10i32)?;
+///
+/// let mut de = Decoder::new(buf.as_reader_slice());
+/// let value: i32 = de.decode()?;
+/// assert_eq!(value, 10i32);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de, I> Decode<'de> for Id<I>
+where
+    I: IntoId,
+{
+    const TYPE: Type = Type::ID;
+
+    #[inline]
+    #[doc(hidden)]
+    fn decode<W>(decoder: &mut Decoder<W>) -> Result<Self, Error>
+    where
+        W: Reader<'de>,
+    {
+        Ok(Id(decoder.decode_id()?))
+    }
+
+    #[inline]
+    #[doc(hidden)]
+    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+        let [value, _pad] = reader.array()?;
+        Ok(Id(I::from_id(value)))
+    }
 }
 
 /// [`Decode`] implementation for `i32`.
