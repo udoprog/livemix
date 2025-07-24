@@ -1,6 +1,6 @@
 use crate::{EncodeUnsized, Error, Fraction, Id, IntoId, Rectangle, Type, Writer};
 
-mod sealed {
+pub(crate) mod sealed {
     use crate::id::IntoId;
     use crate::{EncodeUnsized, Fraction, Id, Rectangle};
 
@@ -71,21 +71,19 @@ impl Encode for bool {
     }
 }
 
-/// [`Encode`] implementation for any type that can be converted into an `Id`.
+/// [`Encode`] implementation for any type that can be converted into an [`Id`].
 ///
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
-/// use pod::id::{Id, MediaSubType};
+/// use pod::{ArrayBuf, Pod, Id};
 ///
 /// let mut buf = ArrayBuf::new();
 /// let pod = Pod::new(&mut buf);
-/// pod.encode(Id(MediaSubType::Opus))?;
+/// pod.encode(Id(142u32))?;
 ///
-/// let pod = Pod::new(buf.as_slice());
-/// let Id(value) = pod.decode::<Id<MediaSubType>>()?;
-/// assert_eq!(value, MediaSubType::Opus);
+/// let mut pod = Pod::new(buf.as_slice());
+/// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<I> Encode for Id<I>

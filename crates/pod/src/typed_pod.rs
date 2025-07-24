@@ -4,7 +4,6 @@ use core::fmt;
 use crate::bstr::BStr;
 use crate::de::{ArrayDecoder, StructDecoder};
 use crate::error::ErrorKind;
-use crate::id::IntoId;
 use crate::{
     Bitmap, Decode, DecodeUnsized, Error, Fraction, Id, Reader, Rectangle, Type, Visitor, WORD_SIZE,
 };
@@ -262,50 +261,6 @@ where
         }
     }
 
-    /// Decode an id value.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod};
-    /// use pod::id::MediaSubType;
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
-    ///
-    /// pod.encode_id(MediaSubType::Opus)?;
-    /// let pod = TypedPod::from_reader(buf.as_slice())?;
-    /// assert_eq!(pod.decode_id::<MediaSubType>()?, MediaSubType::Opus);
-    ///
-    /// buf.clear();
-    ///
-    /// let pod = Pod::new(&mut buf);
-    /// pod.encode_id(MediaSubType::Opus)?;
-    ///
-    /// let pod = TypedPod::from_reader(buf.as_slice())?;
-    /// assert_eq!(pod.decode_id::<MediaSubType>()?, MediaSubType::Opus);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn decode_id<I>(self) -> Result<I, Error>
-    where
-        I: IntoId,
-    {
-        if self.ty != Type::ID {
-            return Err(Error::new(ErrorKind::Expected {
-                expected: Type::ID,
-                actual: self.ty,
-            }));
-        }
-
-        let Ok(size) = usize::try_from(self.size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let Id(id) = Id::<I>::read_content(self.buf, size)?;
-        Ok(id)
-    }
-
     /// Decode an array.
     ///
     /// # Examples
@@ -411,7 +366,7 @@ where
         }
     }
 
-    fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let primitive = !matches!(self.ty, Type::ARRAY | Type::STRUCT);
 
         if primitive {
@@ -427,7 +382,7 @@ where
         Ok(())
     }
 
-    fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub(crate) fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ty {
             Type::NONE => f.write_str("None"),
             Type::BOOL => {

@@ -1,7 +1,7 @@
 mod decode_unsized;
 pub use self::decode_unsized::DecodeUnsized;
 
-mod decode;
+pub(crate) mod decode;
 pub use self::decode::Decode;
 
 mod array_decoder;

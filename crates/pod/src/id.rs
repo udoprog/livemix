@@ -1,8 +1,11 @@
-macro_rules! declare_enum {
-    ($ty_vis:vis enum $ty:ident {
-        $default:ident = $default_value:expr
-        $(, $field:ident = $field_value:expr)* $(,)?
-    }) => {
+macro_rules! declare_id {
+    (
+        #[example = $example:ident]
+        $ty_vis:vis enum $ty:ident {
+            $default:ident = $default_value:expr
+            $(, $field:ident = $field_value:expr)* $(,)?
+        }
+    ) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         #[repr(u32)]
         $ty_vis enum $ty {
@@ -11,6 +14,99 @@ macro_rules! declare_enum {
         }
 
         impl self::sealed::Sealed for $ty {}
+
+        impl $crate::en::encode::sealed::Sealed for $ty {}
+        impl $crate::de::decode::sealed::Sealed for $ty {}
+
+        #[doc = concat!(" Encode an [`", stringify!($ty), "`].")]
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use pod::{ArrayBuf, Pod};
+        #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+        ///
+        /// let mut buf = ArrayBuf::new();
+        /// let pod = Pod::new(&mut buf);
+        #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+        /// # Ok::<_, pod::Error>(())
+        /// ```
+        impl $crate::Encode for $ty {
+            const TYPE: $crate::Type = $crate::Type::ID;
+
+            #[inline]
+            fn size(&self) -> usize {
+                4
+            }
+
+            #[inline]
+            fn encode(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+                $crate::Id(*self).encode(writer)
+            }
+
+            #[inline]
+            fn write_content(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+                $crate::Id(*self).write_content(writer)
+            }
+        }
+
+        #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use pod::{ArrayBuf, Pod};
+        #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+        ///
+        /// let mut buf = ArrayBuf::new();
+        /// let pod = Pod::new(&mut buf);
+        ///
+        #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+        ///
+        /// let pod = Pod::new(buf.as_slice());
+        #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+        #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
+        ///
+        /// buf.clear();
+        ///
+        /// let pod = Pod::new(&mut buf);
+        #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+        /// let pod = Pod::new(buf.as_slice());
+        #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+        #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
+        /// # Ok::<_, pod::Error>(())
+        /// ```
+        ///
+        #[doc = concat!(" Unknown identifiers will be decoded as the default value ", stringify!($default), ".")]
+        ///
+        /// ```
+        /// use pod::{ArrayBuf, Pod, Id};
+        #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+        ///
+        /// let mut buf = ArrayBuf::new();
+        /// let pod = Pod::new(&mut buf);
+        /// pod.encode(Id(u32::MAX / 2))?;
+        ///
+        /// let pod = Pod::new(buf.as_slice());
+        #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+        #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($default), ");")]
+        /// # Ok::<_, pod::Error>(())
+        /// ```
+        impl<'de> $crate::Decode<'de> for $ty {
+            const TYPE: $crate::Type = $crate::Type::ID;
+
+            #[inline]
+            fn decode(reader: impl $crate::Reader<'de>) -> Result<Self, $crate::Error> {
+                let $crate::Id(id) = $crate::Id::<$ty>::decode(reader)?;
+                Ok(id)
+            }
+
+            #[inline]
+            fn read_content(reader: impl $crate::Reader<'de>, len: usize) -> Result<Self, $crate::Error> {
+                let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, len)?;
+                Ok(id)
+            }
+        }
 
         impl IntoId for $ty {
             #[inline]
@@ -29,7 +125,8 @@ macro_rules! declare_enum {
     };
 }
 
-declare_enum! {
+declare_id! {
+    #[example = Opus]
     pub enum MediaSubType {
         Unknown = 0,
         Raw = 1,
@@ -107,6 +204,22 @@ impl IntoId for u32 {
     }
 }
 
+/// Helper type that can be used to encode and decode identifiers, including raw
+/// ones based on `u32`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Pod, Id};
+///
+/// let mut buf = ArrayBuf::new();
+/// let pod = Pod::new(&mut buf);
+/// pod.encode(Id(142u32))?;
+///
+/// let mut pod = Pod::new(buf.as_slice());
+/// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
+/// # Ok::<_, pod::Error>(())
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Id<T>(pub T);

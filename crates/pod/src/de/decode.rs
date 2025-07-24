@@ -15,7 +15,7 @@ use crate::error::ErrorKind;
 use crate::{Bitmap, DecodeUnsized, OwnedBitmap, Visitor};
 use crate::{Error, Fraction, Id, IntoId, Reader, Rectangle, Type};
 
-mod sealed {
+pub(crate) mod sealed {
     #[cfg(feature = "alloc")]
     use alloc::ffi::CString;
     #[cfg(feature = "alloc")]
@@ -110,14 +110,14 @@ impl<'de> Decode<'de> for bool {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::{ArrayBuf, Pod, Id};
 ///
 /// let mut buf = ArrayBuf::new();
 /// let pod = Pod::new(&mut buf);
-/// pod.encode(10i32)?;
+/// pod.encode(Id(142u32))?;
 ///
-/// let pod = Pod::new(buf.as_slice());
-/// assert_eq!(pod.decode::<i32>()?, 10i32);
+/// let mut pod = Pod::new(buf.as_slice());
+/// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de, I> Decode<'de> for Id<I>

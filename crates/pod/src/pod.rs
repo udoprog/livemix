@@ -3,10 +3,8 @@ use core::fmt;
 use crate::de::{ArrayDecoder, StructDecoder};
 use crate::en::{ArrayEncoder, StructEncoder};
 use crate::error::ErrorKind;
-use crate::id::IntoId;
 use crate::{
-    Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Id, Reader, Type, TypedPod, Visitor,
-    Writer,
+    Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -105,25 +103,32 @@ where
         Ok(())
     }
 
-    /// Encode an `id` value.
+    /// Encode an array with the given sized type.
     ///
-    /// # Examples
+    /// To encode an array with unsized types, use [`Pod::encode_unsized_array`]
+    /// where a length in bytes must be specified for every element.
+    ///
+    /// # Errors
+    ///
+    /// This will error if:
+    ///
+    /// * The specified type is unsized, an error will be returned.
+    /// * An element is being inserted which does not match the specified
+    ///   `child_type`.
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
-    /// use pod::id::MediaSubType;
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
+    ///
     /// let pod = Pod::new(&mut buf);
-    /// pod.encode_id(MediaSubType::Opus)?;
+    /// assert!(pod.encode_array(Type::STRING).is_err());
+    ///
+    /// let pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_array(Type::INT)?;
+    /// assert!(array.encode(42.42f32).is_err());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    #[inline]
-    pub fn encode_id(self, value: impl IntoId) -> Result<(), Error> {
-        Id(value).encode(self.buf)
-    }
-
-    /// Encode an array with the given type.
     ///
     /// # Examples
     ///
@@ -151,34 +156,42 @@ where
         Ok(ArrayEncoder::new(self.buf, child_size, child_type, pos))
     }
 
-    /// Encode a struct.
+    /// Encode an array with items of an unsized type.
     ///
-    /// # Examples
+    /// The `len` specified must match every element of the array.
+    ///
+    /// # Errors
+    ///
+    ///
+    /// # Errors
+    ///
+    /// This will error if:
+    ///
+    /// * The specified type is size and the specified length does not match the
+    ///   size of the type.
+    /// * An element is being inserted which does not match the specified
+    ///   `child_type`.
+    /// * An unsized element is being inserted which does not match the size in
+    ///   bytes of `len`.
     ///
     /// ```
     /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
+    ///
     /// let pod = Pod::new(&mut buf);
-    /// let mut st = pod.encode_struct()?;
+    /// assert!(pod.encode_unsized_array(Type::INT, 5).is_err());
     ///
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
+    /// let pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
-    /// st.close()?;
+    /// // Note: strings are null-terminated, so the length is 4.
+    /// array.encode_unsized("foo")?;
+    ///
+    /// assert!(array.encode(1i32).is_err());
+    /// assert!(array.encode_unsized("barbaz").is_err());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    #[inline]
-    pub fn encode_struct(mut self) -> Result<StructEncoder<B>, Error> {
-        // Reserve space for the header of the struct which includes its size that will be determined later.
-        let header = self.buf.reserve_words(&[0])?;
-        Ok(StructEncoder::new(self.buf, header))
-    }
-
-    /// Encode an array with elements of an unsized type.
-    ///
-    /// The `len` specified will be used to determine the maximum size of
     ///
     /// # Examples
     ///
@@ -189,6 +202,7 @@ where
     /// let pod = Pod::new(&mut buf);
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
+    /// // Note: strings are null-terminated, so the length is 4.
     /// array.encode_unsized("foo")?;
     /// array.encode_unsized("bar")?;
     /// array.encode_unsized("baz")?;
@@ -215,6 +229,31 @@ where
 
         let pos = self.buf.reserve_words(&[0, 0])?;
         Ok(ArrayEncoder::new(self.buf, len, child_type, pos))
+    }
+
+    /// Encode a struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut st = pod.encode_struct()?;
+    ///
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
+    ///
+    /// st.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_struct(mut self) -> Result<StructEncoder<B>, Error> {
+        // Reserve space for the header of the struct which includes its size that will be determined later.
+        let header = self.buf.reserve_words(&[0])?;
+        Ok(StructEncoder::new(self.buf, header))
     }
 }
 
@@ -329,40 +368,6 @@ where
         self.typed()?.decode_option()
     }
 
-    /// Decode an id value.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Pod};
-    /// use pod::id::MediaSubType;
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
-    ///
-    /// pod.encode_id(MediaSubType::Opus)?;
-    /// let pod = Pod::new(buf.as_slice());
-    /// let sub_type: MediaSubType = pod.decode_id()?;
-    /// assert_eq!(sub_type, MediaSubType::Opus);
-    ///
-    /// buf.clear();
-    ///
-    /// let pod = Pod::new(&mut buf);
-    /// pod.encode_id(MediaSubType::Opus)?;
-    /// let pod = Pod::new(buf.as_slice());
-    /// let sub_type: MediaSubType = pod.decode_id()?;
-    /// assert_eq!(sub_type, MediaSubType::Opus);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn decode_id<I>(self) -> Result<I, Error>
-    where
-        I: IntoId,
-    {
-        let Id(id) = Id::<I>::decode(self.buf)?;
-        Ok(id)
-    }
-
     /// Decode an array.
     ///
     /// # Examples
@@ -443,9 +448,7 @@ where
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut buf = self.buf.clone_reader();
-        let (size, ty) = buf.header().map_err(|_| fmt::Error)?;
-        let pod = TypedPod::new(size, ty, buf);
-        write!(f, "{pod:?}")
+        let pod = TypedPod::from_reader(self.buf.clone_reader()).map_err(|_| fmt::Error)?;
+        pod.debug_fmt(f)
     }
 }

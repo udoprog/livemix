@@ -1,7 +1,7 @@
 mod encode_unsized;
 pub use self::encode_unsized::EncodeUnsized;
 
-mod encode;
+pub(crate) mod encode;
 pub use self::encode::Encode;
 
 mod array_encoder;
