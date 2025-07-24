@@ -2,7 +2,7 @@ use core::ffi::CStr;
 use core::fmt;
 
 use crate::bstr::BStr;
-use crate::de::{ArrayDecoder, ObjectDecoder, StructDecoder};
+use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
 use crate::error::ErrorKind;
 use crate::{
     Bitmap, Decode, DecodeUnsized, Error, Fraction, Id, Reader, Rectangle, Type, Visitor, WORD_SIZE,
@@ -118,6 +118,33 @@ where
     pub fn from_reader(mut buf: B) -> Result<Self, Error> {
         let (size, ty) = buf.header()?;
         Ok(TypedPod { size, ty, buf })
+    }
+
+    /// Skip a value in the pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    ///
+    /// let mut array = pod.encode_array(Type::INT)?;
+    /// array.encode(10i32)?;
+    /// array.encode(20i32)?;
+    /// array.close()?;
+    ///
+    /// let pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut array = pod.decode_array()?;
+    /// assert!(!array.is_empty());
+    /// array.item()?.skip()?;
+    /// assert_eq!(array.item()?.decode::<i32>()?, 20i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn skip(mut self) -> Result<(), Error> {
+        self.buf.skip(self.size)?;
+        Ok(())
     }
 
     /// Encode a value into the pod.
@@ -382,8 +409,62 @@ where
         }
     }
 
+    /// Decode a sequence.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut seq = pod.encode_sequence()?;
+    ///
+    /// seq.control(1, 10)?.encode(1i32)?;
+    /// seq.control(2, 20)?.encode(2i32)?;
+    /// seq.control(3, 30)?.encode(3i32)?;
+    ///
+    /// seq.close()?;
+    ///
+    /// let mut pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut seq = pod.decode_sequence()?;
+    ///
+    /// assert!(!seq.is_empty());
+    ///
+    /// let c = seq.control()?;
+    /// assert_eq!(c.offset(), 1);
+    /// assert_eq!(c.ty(), 10);
+    /// assert_eq!(c.value().decode::<i32>()?, 1);
+    ///
+    /// let c = seq.control()?;
+    /// assert_eq!(c.offset(), 2);
+    /// assert_eq!(c.ty(), 20);
+    /// assert_eq!(c.value().decode::<i32>()?, 2);
+    ///
+    /// let c = seq.control()?;
+    /// assert_eq!(c.offset(), 3);
+    /// assert_eq!(c.ty(), 30);
+    /// assert_eq!(c.value().decode::<i32>()?, 3);
+    ///
+    /// assert!(seq.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_sequence(self) -> Result<SequenceDecoder<B>, Error> {
+        match self.ty {
+            Type::SEQUENCE => SequenceDecoder::from_reader(self.buf, self.size),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::SEQUENCE,
+                actual: self.ty,
+            })),
+        }
+    }
+
     pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let container = matches!(self.ty, Type::ARRAY | Type::STRUCT | Type::OBJECT);
+        let container = matches!(
+            self.ty,
+            Type::ARRAY | Type::STRUCT | Type::OBJECT | Type::SEQUENCE
+        );
         write!(f, "{}", self.ty)?;
 
         if !container {
@@ -509,7 +590,26 @@ where
                 write!(f, "}}")?;
                 Ok(())
             }
+            Type::SEQUENCE => {
+                let mut st = self.decode_sequence().map_err(|_| fmt::Error)?;
+                write!(f, "[{}, {}]{{", st.unit(), st.pad())?;
+
+                while !st.is_empty() {
+                    let c = st.control().map_err(|_| fmt::Error)?;
+                    write!(f, "{{offset: {:?}, type: {:?}}}: ", c.offset(), c.ty())?;
+
+                    c.value().debug_fmt_with_type(f)?;
+
+                    if !st.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                write!(f, "}}")?;
+                Ok(())
+            }
             ty => {
+                self.skip().map_err(|_| fmt::Error)?;
                 write!(f, "{ty:?}")
             }
         }

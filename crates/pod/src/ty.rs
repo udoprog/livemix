@@ -90,5 +90,7 @@ declare! {
         pub const STRUCT = 14;
         #[name = "Object", size = None]
         pub const OBJECT = 15;
+        #[name = "Sequence", size = None]
+        pub const SEQUENCE = 16;
     }
 }

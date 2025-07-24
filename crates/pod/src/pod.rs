@@ -1,7 +1,7 @@
 use core::fmt;
 
-use crate::de::{ArrayDecoder, ObjectDecoder, StructDecoder};
-use crate::en::{ArrayEncoder, ObjectEncoder, StructEncoder};
+use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
+use crate::en::{ArrayEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
     Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor, Writer,
@@ -280,12 +280,61 @@ where
     ) -> Result<ObjectEncoder<B>, Error> {
         ObjectEncoder::to_writer(self.buf, object_type, object_id)
     }
+
+    /// Encode a sequence.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut seq = pod.encode_sequence()?;
+    ///
+    /// seq.control(1, 0)?.encode(1i32)?;
+    /// seq.control(2, 0)?.encode(2i32)?;
+    /// seq.control(3, 0)?.encode(3i32)?;
+    ///
+    /// seq.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_sequence(self) -> Result<SequenceEncoder<B>, Error> {
+        SequenceEncoder::to_writer(self.buf)
+    }
 }
 
 impl<'de, B> Pod<B>
 where
     B: Reader<'de>,
 {
+    /// Skip a value in the pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    ///
+    /// let mut array = pod.encode_array(Type::INT)?;
+    /// array.encode(10i32)?;
+    /// array.encode(20i32)?;
+    /// array.close()?;
+    ///
+    /// let pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut array = pod.decode_array()?;
+    /// assert!(!array.is_empty());
+    /// array.item()?.skip()?;
+    /// assert_eq!(array.item()?.decode::<i32>()?, 20i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn skip(self) -> Result<(), Error> {
+        self.typed()?.skip()
+    }
+
     /// Encode a value into the pod.
     ///
     /// # Examples
@@ -504,6 +553,51 @@ where
     #[inline]
     pub fn decode_object(self) -> Result<ObjectDecoder<B>, Error> {
         self.typed()?.decode_object()
+    }
+
+    /// Decode a sequence.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut seq = pod.encode_sequence()?;
+    ///
+    /// seq.control(1, 10)?.encode(1i32)?;
+    /// seq.control(2, 20)?.encode(2i32)?;
+    /// seq.control(3, 30)?.encode(3i32)?;
+    ///
+    /// seq.close()?;
+    ///
+    /// let mut pod = Pod::new(buf.as_slice());
+    /// let mut seq = pod.decode_sequence()?;
+    ///
+    /// assert!(!seq.is_empty());
+    ///
+    /// let c = seq.control()?;
+    /// assert_eq!(c.offset(), 1);
+    /// assert_eq!(c.ty(), 10);
+    /// assert_eq!(c.value().decode::<i32>()?, 1);
+    ///
+    /// let c = seq.control()?;
+    /// assert_eq!(c.offset(), 2);
+    /// assert_eq!(c.ty(), 20);
+    /// assert_eq!(c.value().decode::<i32>()?, 2);
+    ///
+    /// let c = seq.control()?;
+    /// assert_eq!(c.offset(), 3);
+    /// assert_eq!(c.ty(), 30);
+    /// assert_eq!(c.value().decode::<i32>()?, 3);
+    ///
+    /// assert!(seq.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_sequence(self) -> Result<SequenceDecoder<B>, Error> {
+        self.typed()?.decode_sequence()
     }
 
     #[inline]

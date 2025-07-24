@@ -12,3 +12,6 @@ pub use self::struct_encoder::StructEncoder;
 
 mod object_encoder;
 pub use self::object_encoder::ObjectEncoder;
+
+mod sequence_encoder;
+pub use self::sequence_encoder::SequenceEncoder;

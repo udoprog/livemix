@@ -25,6 +25,7 @@ where
         // Reserve space for the header of the struct which includes its size
         // that will be determined later.
         let header = writer.reserve_words(&[0, 0])?;
+
         Ok(Self {
             writer,
             header,

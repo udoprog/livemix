@@ -61,3 +61,6 @@ pub use self::bitmap::OwnedBitmap;
 
 mod property;
 pub use self::property::Property;
+
+mod control;
+pub use self::control::Control;

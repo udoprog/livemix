@@ -12,3 +12,6 @@ pub use self::struct_decoder::StructDecoder;
 
 mod object_decoder;
 pub use self::object_decoder::ObjectDecoder;
+
+mod sequence_decoder;
+pub use self::sequence_decoder::SequenceDecoder;

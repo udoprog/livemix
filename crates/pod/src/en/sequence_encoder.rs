@@ -1,0 +1,89 @@
+use crate::error::ErrorKind;
+use crate::{Error, Pod, Type, WORD_SIZE, Writer};
+
+/// An encoder for a sequence.
+#[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
+pub struct SequenceEncoder<W>
+where
+    W: Writer,
+{
+    writer: W,
+    header: W::Pos,
+    unit: u32,
+    pad: u32,
+}
+
+impl<W> SequenceEncoder<W>
+where
+    W: Writer,
+{
+    pub(crate) fn to_writer(mut writer: W) -> Result<Self, Error> {
+        // Reserve space for the header of the sequence which includes its size that will be determined later.
+        let header = writer.reserve_words(&[0, 0])?;
+
+        Ok(Self {
+            writer,
+            header,
+            unit: 0,
+            pad: 0,
+        })
+    }
+
+    /// Write control into the sequence.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut seq = pod.encode_sequence()?;
+    ///
+    /// seq.control(1, 10)?.encode(1i32)?;
+    /// seq.control(2, 20)?.encode(2i32)?;
+    /// seq.control(3, 30)?.encode(3i32)?;
+    ///
+    /// seq.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn control(&mut self, offset: u32, ty: u32) -> Result<Pod<W::Mut<'_>>, Error> {
+        self.writer.write([offset, ty])?;
+        Ok(Pod::new(self.writer.borrow_mut()))
+    }
+
+    /// Close the sequence encoder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut seq = pod.encode_sequence()?;
+    ///
+    /// seq.control(1, 10)?.encode(1i32)?;
+    /// seq.control(2, 20)?.encode(2i32)?;
+    /// seq.control(3, 30)?.encode(3i32)?;
+    ///
+    /// seq.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn close(mut self) -> Result<(), Error> {
+        let Some(size) = self
+            .writer
+            .distance_from(self.header)
+            .and_then(|v| v.checked_sub(WORD_SIZE))
+        else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        self.writer.write_at(
+            self.header,
+            [size, Type::SEQUENCE.into_u32(), self.unit, self.pad],
+        )?;
+        Ok(())
+    }
+}

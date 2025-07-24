@@ -33,6 +33,9 @@ pub trait Reader<'de>: self::sealed::Sealed {
     /// Clone the reader.
     fn clone_reader(&self) -> Self::Clone<'_>;
 
+    /// Skip the given number of bytes.
+    fn skip(&mut self, size: u32) -> Result<(), Error>;
+
     /// Split off the head of the current buffer.
     fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error>;
 
@@ -104,6 +107,11 @@ where
     }
 
     #[inline]
+    fn skip(&mut self, size: u32) -> Result<(), Error> {
+        (**self).skip(size)
+    }
+
+    #[inline]
     fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
         (**self).split(at)
     }
@@ -146,6 +154,22 @@ impl<'de> Reader<'de> for &'de [u64] {
     #[inline]
     fn clone_reader(&self) -> Self::Clone<'_> {
         *self
+    }
+
+    #[inline]
+    fn skip(&mut self, size: u32) -> Result<(), Error> {
+        let size = size.div_ceil(WORD_SIZE);
+
+        let Ok(size) = usize::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let Some((_, tail)) = self.split_at_checked(size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        *self = tail;
+        Ok(())
     }
 
     #[inline]

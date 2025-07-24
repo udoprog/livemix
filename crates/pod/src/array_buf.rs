@@ -539,6 +539,24 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
+    fn skip(&mut self, size: u32) -> Result<(), Error> {
+        let size = size.div_ceil(WORD_SIZE);
+
+        let Ok(size) = usize::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let read = self.read.wrapping_add(size);
+
+        if read > self.write || read < self.read {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        }
+
+        self.read = read;
+        Ok(())
+    }
+
+    #[inline]
     fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
         let at = at.div_ceil(WORD_SIZE);
 
