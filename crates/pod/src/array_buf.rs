@@ -625,19 +625,20 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
         };
 
         let req = len.div_ceil(WORD_SIZE as usize);
-
         let read = self.read.wrapping_add(req);
 
         if read > self.write || read < self.read {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
 
-        unsafe {
-            let ptr = self.data.as_ptr().add(read).cast::<u8>();
-            let bytes = slice::from_raw_parts(ptr, len);
-            let ok = visitor.visit_ref(bytes)?;
-            self.read = read;
-            Ok(ok)
-        }
+        let data = unsafe {
+            let ptr = self.data.as_ptr().add(self.read).cast::<u8>();
+            slice::from_raw_parts(ptr, len)
+        };
+
+        let ok = visitor.visit_ref(data)?;
+
+        self.read = read;
+        Ok(ok)
     }
 }

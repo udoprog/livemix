@@ -6,10 +6,9 @@ use crate::{Encode, EncodeUnsized, Error, Type, WORD_SIZE, Writer};
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, Type};
+/// use pod::{Pod, Type};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// let mut array = pod.encode_array(Type::INT)?;
 ///
 /// array.encode(1i32)?;
@@ -52,10 +51,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
@@ -95,10 +93,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
@@ -138,10 +135,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;

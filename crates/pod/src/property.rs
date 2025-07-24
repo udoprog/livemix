@@ -18,16 +18,14 @@ impl<B> Property<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut obj = pod.encode_object(10, 20)?;
     ///
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut obj = pod.decode_object()?;
     ///
     /// let p = obj.property()?;
@@ -44,16 +42,14 @@ impl<B> Property<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut obj = pod.encode_object(10, 20)?;
     ///
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut obj = pod.decode_object()?;
     ///
     /// let p = obj.property()?;
@@ -70,16 +66,14 @@ impl<B> Property<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut obj = pod.encode_object(10, 20)?;
     ///
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut obj = pod.decode_object()?;
     ///
     /// let p = obj.property()?;

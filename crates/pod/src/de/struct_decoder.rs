@@ -20,10 +20,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut st = pod.encode_struct()?;
     ///
     /// st.field()?.encode(1i32)?;
@@ -32,7 +31,6 @@ where
     ///
     /// st.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut st = pod.decode_struct()?;
     ///
     /// assert!(!st.is_empty());
@@ -51,10 +49,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut st = pod.encode_struct()?;
     ///
     /// st.field()?.encode(1i32)?;
@@ -63,7 +60,6 @@ where
     ///
     /// st.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut st = pod.decode_struct()?;
     ///
     /// assert!(!st.is_empty());

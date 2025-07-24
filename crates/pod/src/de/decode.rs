@@ -64,13 +64,11 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(10i32)?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// let value: i32 = pod.decode()?;
 /// assert_eq!(value, 10i32);
 /// # Ok::<_, pod::Error>(())
@@ -90,13 +88,11 @@ impl<'de> Decode<'de> for bool {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, Id};
+/// use pod::{Pod, Id};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(Id(142u32))?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -118,13 +114,11 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(10i32)?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -143,13 +137,11 @@ impl<'de> Decode<'de> for i32 {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(10i64)?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -167,13 +159,11 @@ impl<'de> Decode<'de> for i64 {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(42.42f32)?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -192,13 +182,11 @@ impl<'de> Decode<'de> for f32 {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(42.42f64)?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -216,13 +204,11 @@ impl<'de> Decode<'de> for f64 {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, Rectangle};
+/// use pod::{Pod, Rectangle};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(Rectangle::new(100, 200))?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -241,13 +227,11 @@ impl<'de> Decode<'de> for Rectangle {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, Fraction};
+/// use pod::{Pod, Fraction};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(Fraction::new(800, 600))?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -267,13 +251,12 @@ impl<'de> Decode<'de> for Fraction {
 ///
 /// ```
 /// use std::ffi::CString;
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode_unsized(c"hello world")?;
 ///
-/// let pod = Pod::new(buf.as_slice());
+/// let pod = pod.typed()?;
 /// assert_eq!(pod.decode::<CString>()?.as_c_str(), c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -305,17 +288,15 @@ impl<'de> Visitor<'de, CStr> for CStrVisitor {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
+/// let mut pod = Pod::array();
 ///
-/// Pod::new(&mut buf).encode_unsized("hello world")?;
-/// Pod::new(&mut buf).encode_unsized("this is right")?;
+/// pod.encode_unsized("hello world")?;
+/// pod.encode_unsized("this is right")?;
 ///
-/// let mut slice = buf.as_slice();
-///
-/// assert_eq!(Pod::new(&mut slice).decode::<String>()?, "hello world");
-/// assert_eq!(Pod::new(&mut slice).decode::<String>()?, "this is right");
+/// assert_eq!(pod.as_typed_mut()?.decode::<String>()?, "hello world");
+/// assert_eq!(pod.as_typed_mut()?.decode::<String>()?, "this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
@@ -346,16 +327,15 @@ impl<'de> Visitor<'de, str> for StrVisitor {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod};
+/// use pod::Pod;
 ///
-/// let mut buf = ArrayBuf::new();
-/// Pod::new(&mut buf).encode(*b"hello world")?;
-/// Pod::new(&mut buf).encode(*b"this is right")?;
+/// let mut pod = Pod::array();
 ///
-/// let mut slice = buf.as_slice();
+/// pod.encode(*b"hello world")?;
+/// pod.encode(*b"this is right")?;
 ///
-/// assert_eq!(Pod::new(&mut slice).decode::<Vec<u8>>()?, b"hello world");
-/// assert_eq!(Pod::new(&mut slice).decode::<Vec<u8>>()?, b"this is right");
+/// assert_eq!(pod.as_typed_mut()?.decode::<Vec<u8>>()?, b"hello world");
+/// assert_eq!(pod.as_typed_mut()?.decode::<Vec<u8>>()?, b"this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
@@ -386,13 +366,11 @@ impl<'de> Visitor<'de, [u8]> for BytesVisitor {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Bitmap, Pod, OwnedBitmap};
+/// use pod::{Bitmap, Pod, OwnedBitmap};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode_unsized(Bitmap::new(b"hello world"))?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<OwnedBitmap>()?.as_bytes(), b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -424,15 +402,13 @@ impl<'de> Visitor<'de, Bitmap> for BitmapVisitor {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, Pointer};
+/// use pod::{Pod, Pointer};
 ///
 /// let value = 1u32;
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(Pointer::new((&value as *const u32).addr()))?;
 ///
-/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
 /// # Ok::<_, pod::Error>(())
 /// ```

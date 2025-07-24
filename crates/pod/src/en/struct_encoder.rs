@@ -26,10 +26,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut st = pod.encode_struct()?;
     ///
     /// st.field()?.encode(1i32)?;
@@ -49,10 +48,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut st = pod.encode_struct()?;
     ///
     /// st.field()?.encode(1i32)?;

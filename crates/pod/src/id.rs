@@ -23,11 +23,10 @@ macro_rules! declare_id {
         /// # Examples
         ///
         /// ```
-        /// use pod::{ArrayBuf, Pod};
+        /// use pod::Pod;
         #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
         ///
-        /// let mut buf = ArrayBuf::new();
-        /// let pod = Pod::new(&mut buf);
+        /// let mut pod = Pod::array();
         #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
         /// # Ok::<_, pod::Error>(())
         /// ```
@@ -55,23 +54,19 @@ macro_rules! declare_id {
         /// # Examples
         ///
         /// ```
-        /// use pod::{ArrayBuf, Pod};
+        /// use pod::Pod;
         #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
         ///
-        /// let mut buf = ArrayBuf::new();
-        /// let pod = Pod::new(&mut buf);
+        /// let mut pod = Pod::array();
         ///
         #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
         ///
-        /// let pod = Pod::new(buf.as_slice());
         #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
         #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
         ///
-        /// buf.clear();
-        ///
-        /// let pod = Pod::new(&mut buf);
+        /// let mut pod = Pod::array();
         #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
-        /// let pod = Pod::new(buf.as_slice());
+        ///
         #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
         #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
         /// # Ok::<_, pod::Error>(())
@@ -80,14 +75,12 @@ macro_rules! declare_id {
         #[doc = concat!(" Unknown identifiers will be decoded as the default value ", stringify!($default), ".")]
         ///
         /// ```
-        /// use pod::{ArrayBuf, Pod, Id};
+        /// use pod::{Pod, Id};
         #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
         ///
-        /// let mut buf = ArrayBuf::new();
-        /// let pod = Pod::new(&mut buf);
+        /// let mut pod = Pod::array();
         /// pod.encode(Id(u32::MAX / 2))?;
         ///
-        /// let pod = Pod::new(buf.as_slice());
         #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
         #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($default), ");")]
         /// # Ok::<_, pod::Error>(())
@@ -204,13 +197,11 @@ impl IntoId for u32 {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, Id};
+/// use pod::{Pod, Id};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// pod.encode(Id(142u32))?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```

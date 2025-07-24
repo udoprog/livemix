@@ -4,7 +4,8 @@ use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
 use crate::en::{ArrayEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor, Writer,
+    ArrayBuf, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor,
+    Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -26,6 +27,50 @@ where
     }
 }
 
+impl Pod<ArrayBuf<1024>> {
+    /// Construct a new [`Pod`] with an 1024 byte array buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.encode(10i32)?;
+    ///
+    /// assert_eq!(pod.decode::<i32>()?, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub const fn array() -> Self {
+        Pod {
+            buf: ArrayBuf::with_size(),
+        }
+    }
+}
+
+impl<const N: usize> Pod<ArrayBuf<N>> {
+    /// Modify the size of the array buffer used by the pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array().with_size::<16>();
+    /// pod.encode(10i32)?;
+    ///
+    /// assert_eq!(pod.decode::<i32>()?, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub const fn with_size<const U: usize>(self) -> Pod<ArrayBuf<U>> {
+        Pod {
+            buf: ArrayBuf::with_size(),
+        }
+    }
+}
+
 impl<B> Pod<B> {
     /// Construct a new [`Pod`] arround the specified buffer `B`.
     ///
@@ -35,11 +80,30 @@ impl<B> Pod<B> {
     /// use pod::{ArrayBuf, Pod};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::new(&mut buf);
     /// ```
     #[inline]
     pub const fn new(buf: B) -> Self {
         Pod { buf }
+    }
+
+    /// Coerce into the underlying buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.encode(10i32)?;
+    ///
+    /// let buf = pod.into_buf();
+    /// assert_eq!(buf.as_slice().len(), 2);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn into_buf(self) -> B {
+        self.buf
     }
 }
 
@@ -52,18 +116,17 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode(10i32)?;
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn encode<T>(self, value: T) -> Result<(), Error>
+    pub fn encode<T>(&mut self, value: T) -> Result<(), Error>
     where
         T: Encode,
     {
-        value.encode(self.buf)
+        value.encode(self.buf.borrow_mut())
     }
 
     /// Encode an unsized value into the pod.
@@ -71,18 +134,17 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode_unsized(&b"hello world"[..])?;
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn encode_unsized<T>(self, value: &T) -> Result<(), Error>
+    pub fn encode_unsized<T>(&mut self, value: &T) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
-        value.encode_unsized(self.buf)
+        value.encode_unsized(self.buf.borrow_mut())
     }
 
     /// Encode a `None` value.
@@ -90,15 +152,14 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode_none()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_none(mut self) -> Result<(), Error> {
+    pub fn encode_none(&mut self) -> Result<(), Error> {
         self.buf.write([0, Type::NONE.into_u32()])?;
         Ok(())
     }
@@ -117,14 +178,12 @@ where
     ///   `child_type`.
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    ///
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// assert!(pod.encode_array(Type::STRING).is_err());
     ///
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     /// assert!(array.encode(42.42f32).is_err());
     /// # Ok::<_, pod::Error>(())
@@ -133,10 +192,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
@@ -147,13 +205,14 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_array(mut self, child_type: Type) -> Result<ArrayEncoder<B>, Error> {
+    pub fn encode_array(&mut self, child_type: Type) -> Result<ArrayEncoder<B::Mut<'_>>, Error> {
         let Some(child_size) = child_type.size() else {
             return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
         };
 
-        let pos = self.buf.reserve_words(&[0, 0])?;
-        Ok(ArrayEncoder::new(self.buf, child_size, child_type, pos))
+        let mut buf = self.buf.borrow_mut();
+        let pos = buf.reserve_words(&[0, 0])?;
+        Ok(ArrayEncoder::new(buf, child_size, child_type, pos))
     }
 
     /// Encode an array with items of an unsized type.
@@ -175,14 +234,13 @@ where
     ///   bytes of `len`.
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
     ///
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// assert!(pod.encode_unsized_array(Type::INT, 5).is_err());
     ///
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// // Note: strings are null-terminated, so the length is 4.
@@ -196,10 +254,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// // Note: strings are null-terminated, so the length is 4.
@@ -209,15 +266,16 @@ where
     ///
     /// array.close()?;
     ///
+    /// let buf = pod.into_buf();
     /// assert_eq!(buf.as_slice().len(), 5);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
     pub fn encode_unsized_array(
-        mut self,
+        &mut self,
         child_type: Type,
         len: usize,
-    ) -> Result<ArrayEncoder<B>, Error> {
+    ) -> Result<ArrayEncoder<B::Mut<'_>>, Error> {
         if let Some(child_size) = child_type.size() {
             if child_size != len {
                 return Err(Error::new(ErrorKind::ArrayChildSizeMismatch {
@@ -227,8 +285,9 @@ where
             }
         };
 
-        let pos = self.buf.reserve_words(&[0, 0])?;
-        Ok(ArrayEncoder::new(self.buf, len, child_type, pos))
+        let mut buf = self.buf.borrow_mut();
+        let pos = buf.reserve_words(&[0, 0])?;
+        Ok(ArrayEncoder::new(buf, len, child_type, pos))
     }
 
     /// Encode a struct.
@@ -236,10 +295,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut st = pod.encode_struct()?;
     ///
     /// st.field()?.encode(1i32)?;
@@ -250,8 +308,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_struct(self) -> Result<StructEncoder<B>, Error> {
-        StructEncoder::to_writer(self.buf)
+    pub fn encode_struct(&mut self) -> Result<StructEncoder<B::Mut<'_>>, Error> {
+        StructEncoder::to_writer(self.buf.borrow_mut())
     }
 
     /// Encode an object.
@@ -259,10 +317,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut obj = pod.encode_object(10, 20)?;
     ///
     /// obj.property(1, 0)?.encode(1i32)?;
@@ -274,11 +331,11 @@ where
     /// ```
     #[inline]
     pub fn encode_object(
-        self,
+        &mut self,
         object_type: u32,
         object_id: u32,
-    ) -> Result<ObjectEncoder<B>, Error> {
-        ObjectEncoder::to_writer(self.buf, object_type, object_id)
+    ) -> Result<ObjectEncoder<B::Mut<'_>>, Error> {
+        ObjectEncoder::to_writer(self.buf.borrow_mut(), object_type, object_id)
     }
 
     /// Encode a sequence.
@@ -286,10 +343,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut seq = pod.encode_sequence()?;
     ///
     /// seq.control(1, 0)?.encode(1i32)?;
@@ -300,8 +356,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_sequence(self) -> Result<SequenceEncoder<B>, Error> {
-        SequenceEncoder::to_writer(self.buf)
+    pub fn encode_sequence(&mut self) -> Result<SequenceEncoder<B::Mut<'_>>, Error> {
+        SequenceEncoder::to_writer(self.buf.borrow_mut())
     }
 }
 
@@ -314,16 +370,15 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// use pod::{Pod, Type};
+    /// let mut pod = Pod::array();
     ///
     /// let mut array = pod.encode_array(Type::INT)?;
     /// array.encode(10i32)?;
     /// array.encode(20i32)?;
     /// array.close()?;
     ///
-    /// let pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let pod = pod.typed()?;
     /// let mut array = pod.decode_array()?;
     /// assert!(!array.is_empty());
     /// array.item()?.skip()?;
@@ -332,7 +387,7 @@ where
     /// ```
     #[inline]
     pub fn skip(self) -> Result<(), Error> {
-        self.typed()?.skip()
+        self.into_typed()?.skip()
     }
 
     /// Encode a value into the pod.
@@ -340,13 +395,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode(10i32)?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// assert_eq!(pod.decode::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -355,7 +408,7 @@ where
     where
         T: Decode<'de>,
     {
-        self.typed()?.decode::<T>()
+        self.into_typed()?.decode::<T>()
     }
 
     /// Decode an unsized value into the pod.
@@ -363,13 +416,12 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
+    /// let pod = pod.typed()?;
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -379,7 +431,7 @@ where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
     {
-        self.typed()?.decode_unsized(visitor)
+        self.into_typed()?.decode_unsized(visitor)
     }
 
     /// Decode an unsized value into the pod.
@@ -387,14 +439,13 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     ///
     /// pod.encode_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
+    /// let pod = pod.typed()?;
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -403,7 +454,7 @@ where
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
-        self.typed()?.decode_borrowed()
+        self.into_typed()?.decode_borrowed()
     }
 
     /// Decode an optional value.
@@ -414,21 +465,15 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::Pod;
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode_none()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// assert!(pod.decode_option()?.is_none());
     ///
-    /// buf.clear();
-    ///
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// pod.encode(true)?;
-    ///
-    /// let pod = Pod::new(buf.as_slice());
     ///
     /// let Some(mut pod) = pod.decode_option()? else {
     ///     panic!("expected some value");
@@ -439,7 +484,7 @@ where
     /// ```
     #[inline]
     pub fn decode_option(self) -> Result<Option<TypedPod<B>>, Error> {
-        self.typed()?.decode_option()
+        self.into_typed()?.decode_option()
     }
 
     /// Decode an array.
@@ -447,10 +492,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
@@ -459,7 +503,6 @@ where
     ///
     /// array.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
@@ -475,7 +518,7 @@ where
     /// ```
     #[inline]
     pub fn decode_array(self) -> Result<ArrayDecoder<B>, Error> {
-        self.typed()?.decode_array()
+        self.into_typed()?.decode_array()
     }
 
     /// Decode a struct.
@@ -483,10 +526,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod};
+    /// use pod::{Pod, TypedPod};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut st = pod.encode_struct()?;
     ///
     /// st.field()?.encode(1i32)?;
@@ -495,7 +537,6 @@ where
     ///
     /// st.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut st = pod.decode_struct()?;
     ///
     /// assert!(!st.is_empty());
@@ -507,7 +548,7 @@ where
     /// ```
     #[inline]
     pub fn decode_struct(self) -> Result<StructDecoder<B>, Error> {
-        self.typed()?.decode_struct()
+        self.into_typed()?.decode_struct()
     }
 
     /// Decode an object.
@@ -515,10 +556,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut obj = pod.encode_object(10, 20)?;
     ///
     /// obj.property(1, 10)?.encode(1i32)?;
@@ -527,7 +567,6 @@ where
     ///
     /// obj.close()?;
     ///
-    /// let pod = Pod::new(buf.as_slice());
     /// let mut obj = pod.decode_object()?;
     ///
     /// assert!(!obj.is_empty());
@@ -552,7 +591,7 @@ where
     /// ```
     #[inline]
     pub fn decode_object(self) -> Result<ObjectDecoder<B>, Error> {
-        self.typed()?.decode_object()
+        self.into_typed()?.decode_object()
     }
 
     /// Decode a sequence.
@@ -560,10 +599,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut seq = pod.encode_sequence()?;
     ///
     /// seq.control(1, 10)?.encode(1i32)?;
@@ -572,7 +610,6 @@ where
     ///
     /// seq.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut seq = pod.decode_sequence()?;
     ///
     /// assert!(!seq.is_empty());
@@ -597,12 +634,52 @@ where
     /// ```
     #[inline]
     pub fn decode_sequence(self) -> Result<SequenceDecoder<B>, Error> {
-        self.typed()?.decode_sequence()
+        self.into_typed()?.decode_sequence()
     }
 
+    /// Convert the [`Pod`] into a [`TypedPod`] taking ownership of the current
+    /// buffer.
+    ///
+    /// A typed pod knows about the size and type of the data it contains,
+    /// allowing it to be inspected through the relevant [`TypedPod::size`] and
+    /// [`TypedPod::ty`] APIs.
+    ///
+    /// # Errors
+    ///
+    /// This errors if the pod does not wrap a buffer containing a valid pod.
     #[inline]
-    fn typed(self) -> Result<TypedPod<B>, Error> {
+    pub fn into_typed(self) -> Result<TypedPod<B>, Error> {
         TypedPod::from_reader(self.buf)
+    }
+
+    /// Convert the [`Pod`] into a [`TypedPod`] borrowing from but without
+    /// modifying the current buffer.
+    ///
+    /// A typed pod knows about the size and type of the data it contains,
+    /// allowing it to be inspected through the relevant [`TypedPod::size`] and
+    /// [`TypedPod::ty`] APIs.
+    ///
+    /// # Errors
+    ///
+    /// This errors if the pod does not wrap a buffer containing a valid pod.
+    #[inline]
+    pub fn typed(&self) -> Result<TypedPod<B::Clone<'_>>, Error> {
+        TypedPod::from_reader(self.buf.clone_reader())
+    }
+
+    /// Convert the [`Pod`] into a [`TypedPod`] mutably borrowing the current
+    /// buffer.
+    ///
+    /// A typed pod knows about the size and type of the data it contains,
+    /// allowing it to be inspected through the relevant [`TypedPod::size`] and
+    /// [`TypedPod::ty`] APIs.
+    ///
+    /// # Errors
+    ///
+    /// This errors if the pod does not wrap a buffer containing a valid pod.
+    #[inline]
+    pub fn as_typed_mut(&mut self) -> Result<TypedPod<B::Mut<'_>>, Error> {
+        TypedPod::from_reader(self.buf.borrow_mut())
     }
 }
 

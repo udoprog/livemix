@@ -5,17 +5,16 @@ use crate::TypedPod;
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Pod, TypedPod, Type};
+/// use pod::{Pod, Type};
 ///
-/// let mut buf = ArrayBuf::new();
-/// let pod = Pod::new(&mut buf);
+/// let mut pod = Pod::array();
 /// let mut seq = pod.encode_sequence()?;
 ///
 /// seq.control(1, 10)?.encode(1i32)?;
 ///
 /// seq.close()?;
 ///
-/// let mut pod = TypedPod::from_reader(buf.as_slice())?;
+/// let mut pod = pod.typed()?;
 /// let mut seq = pod.decode_sequence()?;
 ///
 /// let c = seq.control()?;
@@ -41,17 +40,16 @@ impl<B> Control<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut seq = pod.encode_sequence()?;
     ///
     /// seq.control(1, 10)?.encode(1i32)?;
     ///
     /// seq.close()?;
     ///
-    /// let mut pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut pod = pod.typed()?;
     /// let mut seq = pod.decode_sequence()?;
     ///
     /// let c = seq.control()?;
@@ -68,17 +66,16 @@ impl<B> Control<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut seq = pod.encode_sequence()?;
     ///
     /// seq.control(1, 10)?.encode(1i32)?;
     ///
     /// seq.close()?;
     ///
-    /// let mut pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut pod = pod.typed()?;
     /// let mut seq = pod.decode_sequence()?;
     ///
     /// let c = seq.control()?;
@@ -95,17 +92,16 @@ impl<B> Control<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod, TypedPod, Type};
+    /// use pod::{Pod, Type};
     ///
-    /// let mut buf = ArrayBuf::new();
-    /// let pod = Pod::new(&mut buf);
+    /// let mut pod = Pod::array();
     /// let mut seq = pod.encode_sequence()?;
     ///
     /// seq.control(1, 10)?.encode(1i32)?;
     ///
     /// seq.close()?;
     ///
-    /// let mut pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut pod = pod.typed()?;
     /// let mut seq = pod.decode_sequence()?;
     ///
     /// let c = seq.control()?;
