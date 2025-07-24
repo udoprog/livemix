@@ -1,7 +1,7 @@
 use core::fmt;
 
-use crate::de::{ArrayDecoder, StructDecoder};
-use crate::en::{ArrayEncoder, StructEncoder};
+use crate::de::{ArrayDecoder, ObjectDecoder, StructDecoder};
+use crate::en::{ArrayEncoder, ObjectEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
     Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor, Writer,
@@ -250,10 +250,35 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_struct(mut self) -> Result<StructEncoder<B>, Error> {
-        // Reserve space for the header of the struct which includes its size that will be determined later.
-        let header = self.buf.reserve_words(&[0])?;
-        Ok(StructEncoder::new(self.buf, header))
+    pub fn encode_struct(self) -> Result<StructEncoder<B>, Error> {
+        StructEncoder::to_writer(self.buf)
+    }
+
+    /// Encode an object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut obj = pod.encode_object(10, 20)?;
+    ///
+    /// obj.property(1, 0)?.encode(1i32)?;
+    /// obj.property(2, 0)?.encode(2i32)?;
+    /// obj.property(3, 0)?.encode(3i32)?;
+    ///
+    /// obj.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_object(
+        self,
+        object_type: u32,
+        object_id: u32,
+    ) -> Result<ObjectEncoder<B>, Error> {
+        ObjectEncoder::to_writer(self.buf, object_type, object_id)
     }
 }
 
@@ -436,6 +461,51 @@ where
         self.typed()?.decode_struct()
     }
 
+    /// Decode an object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut obj = pod.encode_object(10, 20)?;
+    ///
+    /// obj.property(1, 10)?.encode(1i32)?;
+    /// obj.property(2, 20)?.encode(2i32)?;
+    /// obj.property(3, 30)?.encode(3i32)?;
+    ///
+    /// obj.close()?;
+    ///
+    /// let pod = Pod::new(buf.as_slice());
+    /// let mut obj = pod.decode_object()?;
+    ///
+    /// assert!(!obj.is_empty());
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    ///
+    /// assert!(obj.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_object(self) -> Result<ObjectDecoder<B>, Error> {
+        self.typed()?.decode_object()
+    }
+
     #[inline]
     fn typed(self) -> Result<TypedPod<B>, Error> {
         TypedPod::from_reader(self.buf)
@@ -449,6 +519,6 @@ where
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let pod = TypedPod::from_reader(self.buf.clone_reader()).map_err(|_| fmt::Error)?;
-        pod.debug_fmt(f)
+        pod.debug_fmt_with_type(f)
     }
 }

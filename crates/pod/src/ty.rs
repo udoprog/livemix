@@ -88,5 +88,7 @@ declare! {
         pub const ARRAY = 13;
         #[name = "Struct", size = None]
         pub const STRUCT = 14;
+        #[name = "Object", size = None]
+        pub const OBJECT = 15;
     }
 }

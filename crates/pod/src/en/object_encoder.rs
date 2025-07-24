@@ -1,27 +1,39 @@
 use crate::error::ErrorKind;
 use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 
-/// An encoder for a struct.
-#[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
-pub struct StructEncoder<W>
+/// An encoder for an object.
+#[must_use = "Object encoders must be closed to ensure all elements are initialized"]
+pub struct ObjectEncoder<W>
 where
     W: Writer,
 {
     writer: W,
     header: W::Pos,
+    object_type: u32,
+    object_id: u32,
 }
 
-impl<W> StructEncoder<W>
+impl<W> ObjectEncoder<W>
 where
     W: Writer,
 {
-    pub(crate) fn to_writer(mut writer: W) -> Result<Self, Error> {
-        // Reserve space for the header of the struct which includes its size that will be determined later.
-        let header = writer.reserve_words(&[0])?;
-        Ok(Self { writer, header })
+    pub(crate) fn to_writer(
+        mut writer: W,
+        object_type: u32,
+        object_id: u32,
+    ) -> Result<Self, Error> {
+        // Reserve space for the header of the struct which includes its size
+        // that will be determined later.
+        let header = writer.reserve_words(&[0, 0])?;
+        Ok(Self {
+            writer,
+            header,
+            object_type,
+            object_id,
+        })
     }
 
-    /// Add a field into the struct.
+    /// Encode a property into the object.
     ///
     /// # Examples
     ///
@@ -40,7 +52,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Result<Pod<W::Mut<'_>>, Error> {
+    pub fn property(&mut self, key: u32, flags: u32) -> Result<Pod<W::Mut<'_>>, Error> {
+        self.writer.write([key, flags])?;
         Ok(Pod::new(self.writer.borrow_mut()))
     }
 
@@ -72,8 +85,15 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        self.writer
-            .write_at(self.header, [size, Type::STRUCT.into_u32()])?;
+        self.writer.write_at(
+            self.header,
+            [
+                size,
+                Type::OBJECT.into_u32(),
+                self.object_type,
+                self.object_id,
+            ],
+        )?;
         Ok(())
     }
 }

@@ -9,3 +9,6 @@ pub use self::array_decoder::ArrayDecoder;
 
 mod struct_decoder;
 pub use self::struct_decoder::StructDecoder;
+
+mod object_decoder;
+pub use self::object_decoder::ObjectDecoder;

@@ -58,3 +58,6 @@ mod bitmap;
 pub use self::bitmap::Bitmap;
 #[cfg(feature = "alloc")]
 pub use self::bitmap::OwnedBitmap;
+
+mod property;
+pub use self::property::Property;

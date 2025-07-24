@@ -329,7 +329,33 @@ fn test_format_struct() -> Result<(), Error> {
     let pod = Pod::new(buf.as_slice());
     assert_eq!(
         format!("{pod:?}"),
-        "Struct(Int: 1, Int: 2, Struct: Struct(Bytes: b\"hello world\", Rectangle: Rectangle { width: 800, height: 600 }, Bytes: b\"goodbye world\"))"
+        "Struct{Int: 1, Int: 2, Struct: {Bytes: b\"hello world\", Rectangle: {width: 800, height: 600}, Bytes: b\"goodbye world\"}}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_format_object() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let pod = Pod::new(&mut buf);
+    let mut obj = pod.encode_object(10, 20)?;
+
+    obj.property(1, 0b100)?.encode(1i32)?;
+    obj.property(2, 0b010)?.encode(2i32)?;
+
+    let mut inner = obj.property(3, 0b001)?.encode_struct()?;
+    inner.field()?.encode(*b"hello world")?;
+    inner.field()?.encode(Rectangle::new(800, 600))?;
+    inner.field()?.encode(*b"goodbye world")?;
+    inner.close()?;
+
+    obj.close()?;
+
+    let pod = Pod::new(buf.as_slice());
+
+    assert_eq!(
+        format!("{pod:?}"),
+        "Object[10, 20]{{key: 1, flags: 0b100}: Int(1), {key: 2, flags: 0b10}: Int(2), {key: 3, flags: 0b1}: Struct{Bytes: b\"hello world\", Rectangle: {width: 800, height: 600}, Bytes: b\"goodbye world\"}}"
     );
     Ok(())
 }

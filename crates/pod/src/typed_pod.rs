@@ -2,7 +2,7 @@ use core::ffi::CStr;
 use core::fmt;
 
 use crate::bstr::BStr;
-use crate::de::{ArrayDecoder, StructDecoder};
+use crate::de::{ArrayDecoder, ObjectDecoder, StructDecoder};
 use crate::error::ErrorKind;
 use crate::{
     Bitmap, Decode, DecodeUnsized, Error, Fraction, Id, Reader, Rectangle, Type, Visitor, WORD_SIZE,
@@ -331,23 +331,75 @@ where
         }
     }
 
-    pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let primitive = !matches!(self.ty, Type::ARRAY | Type::STRUCT);
+    /// Decode an object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut obj = pod.encode_object(10, 20)?;
+    ///
+    /// obj.property(1, 10)?.encode(1i32)?;
+    /// obj.property(2, 20)?.encode(2i32)?;
+    /// obj.property(3, 30)?.encode(3i32)?;
+    ///
+    /// obj.close()?;
+    ///
+    /// let pod = Pod::new(buf.as_slice());
+    /// let mut obj = pod.decode_object()?;
+    ///
+    /// assert!(!obj.is_empty());
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    ///
+    /// assert!(obj.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_object(self) -> Result<ObjectDecoder<B>, Error> {
+        match self.ty {
+            Type::OBJECT => ObjectDecoder::from_reader(self.buf, self.size),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::OBJECT,
+                actual: self.ty,
+            })),
+        }
+    }
 
-        if primitive {
-            write!(f, "{}(", self.ty)?;
+    pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let container = matches!(self.ty, Type::ARRAY | Type::STRUCT | Type::OBJECT);
+        write!(f, "{}", self.ty)?;
+
+        if !container {
+            write!(f, "(")?;
         }
 
         self.debug_fmt(f)?;
 
-        if primitive {
+        if !container {
             write!(f, ")")?;
         }
 
         Ok(())
     }
 
-    pub(crate) fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ty {
             Type::NONE => f.write_str("None"),
             Type::BOOL => {
@@ -384,22 +436,26 @@ where
             }
             Type::RECTANGLE => {
                 let value = self.decode::<Rectangle>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                write!(
+                    f,
+                    "{{width: {:?}, height: {:?}}}",
+                    value.width, value.height
+                )
             }
             Type::FRACTION => {
                 let value = self.decode::<Fraction>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                write!(f, "{{num: {:?}, denom: {:?}}}", value.num, value.denom)
             }
             Type::BITMAP => {
                 let value = self
                     .typed()
                     .decode_borrowed::<Bitmap>()
                     .map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                write!(f, "{:?}", BStr::new(value.as_bytes()))
             }
             Type::ARRAY => {
                 let mut array = self.decode_array().map_err(|_| fmt::Error)?;
-                write!(f, "Array[{:?}](", array.child_type())?;
+                write!(f, "[{:?}](", array.child_type())?;
 
                 while !array.is_empty() {
                     array.item().map_err(|_| fmt::Error)?.debug_fmt(f)?;
@@ -414,7 +470,7 @@ where
             }
             Type::STRUCT => {
                 let mut st = self.decode_struct().map_err(|_| fmt::Error)?;
-                write!(f, "Struct(")?;
+                write!(f, "{{")?;
 
                 while !st.is_empty() {
                     let pod = st.field().map_err(|_| fmt::Error)?;
@@ -427,7 +483,30 @@ where
                     }
                 }
 
-                write!(f, ")")?;
+                write!(f, "}}")?;
+                Ok(())
+            }
+            Type::OBJECT => {
+                let mut st = self.decode_object().map_err(|_| fmt::Error)?;
+                write!(f, "[{}, {}]{{", st.object_type(), st.object_id())?;
+
+                while !st.is_empty() {
+                    let prop = st.property().map_err(|_| fmt::Error)?;
+
+                    if prop.flags() != 0 {
+                        write!(f, "{{key: {}, flags: 0b{:b}}}: ", prop.key(), prop.flags())?;
+                    } else {
+                        write!(f, "{:?}: ", prop.key())?;
+                    }
+
+                    prop.value().debug_fmt_with_type(f)?;
+
+                    if !st.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                write!(f, "}}")?;
                 Ok(())
             }
             ty => {

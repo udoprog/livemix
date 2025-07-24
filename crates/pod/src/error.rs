@@ -27,6 +27,7 @@ impl Error {
 pub(crate) enum ErrorKind {
     ArrayUnderflow,
     StructUnderflow,
+    ObjectUnderflow,
     SizeOverflow,
     SizeUnderflow { size: u32, sub: u32 },
     BufferOverflow,
@@ -37,7 +38,7 @@ pub(crate) enum ErrorKind {
     NotSupportedRef,
     UnsizedTypeInArray { ty: Type },
     Expected { expected: Type, actual: Type },
-    PositionSizeMismatch { expected: usize, actual: usize },
+    ReservedSizeMismatch { expected: usize, actual: usize },
     ArrayChildSizeMismatch { expected: usize, actual: usize },
     ArrayTypeMismatch { expected: Type, actual: Type },
 }
@@ -65,6 +66,7 @@ impl fmt::Display for Error {
         match self.kind {
             ErrorKind::ArrayUnderflow => write!(f, "Array underflow"),
             ErrorKind::StructUnderflow => write!(f, "Struct underflow"),
+            ErrorKind::ObjectUnderflow => write!(f, "Object underflow"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
             ErrorKind::SizeUnderflow { size, sub } => {
                 write!(f, "Size {size} underflowed when subtracting {sub}")
@@ -85,10 +87,10 @@ impl fmt::Display for Error {
             ErrorKind::Expected { expected, actual } => {
                 write!(f, "Expected {expected:?}, but found {actual:?}")
             }
-            ErrorKind::PositionSizeMismatch { expected, actual } => {
+            ErrorKind::ReservedSizeMismatch { expected, actual } => {
                 write!(
                     f,
-                    "Expected position written at most {expected}, but found {actual}"
+                    "Expected reserved to write {expected} bytes, but found {actual}"
                 )
             }
             ErrorKind::ArrayChildSizeMismatch { expected, actual } => {

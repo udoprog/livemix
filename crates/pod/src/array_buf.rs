@@ -477,7 +477,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         let Pos { write, len } = pos;
 
         if len < words.len() {
-            return Err(Error::new(ErrorKind::PositionSizeMismatch {
+            return Err(Error::new(ErrorKind::ReservedSizeMismatch {
                 expected: len,
                 actual: words.len(),
             }));
