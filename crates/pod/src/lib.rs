@@ -6,11 +6,10 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "alloc"))]
 mod tests;
 
-pub(crate) const WORD_SIZE: usize = 4;
-pub(crate) const DWORD_SIZE: usize = 8;
+pub(crate) const WORD_SIZE: usize = 8;
 
 mod pod;
 pub use self::pod::Pod;
@@ -31,9 +30,6 @@ pub use self::de::{Decode, DecodeUnsized};
 
 mod array_buf;
 pub use self::array_buf::ArrayBuf;
-
-mod slice;
-pub use self::slice::Slice;
 
 mod writer;
 pub use self::writer::Writer;

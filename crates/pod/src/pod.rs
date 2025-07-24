@@ -1,7 +1,7 @@
 use crate::error::ErrorKind;
 use crate::id::IntoId;
 use crate::{
-    DWORD_SIZE, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Id, Reader, Type, Visitor,
+    Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Id, Reader, Type, Visitor, WORD_SIZE,
     Writer,
 };
 
@@ -27,8 +27,8 @@ impl<B> Pod<B> {
     /// let mut pod = Pod::new(&mut buf);
     /// ```
     #[inline]
-    pub const fn new(inner: B) -> Self {
-        Pod { buf: inner }
+    pub const fn new(buf: B) -> Self {
+        Pod { buf }
     }
 }
 
@@ -88,7 +88,7 @@ where
     /// ```
     #[inline]
     pub fn encode_none(&mut self) -> Result<(), Error> {
-        self.buf.write_words(&[0, Type::NONE.into_u32()])?;
+        self.buf.write([0, Type::NONE.into_u32()])?;
         Ok(())
     }
 
@@ -135,7 +135,7 @@ where
         };
 
         let mut writer = self.buf.borrow_mut();
-        let pos = writer.reserve_words(&[0, 0, 0, 0])?;
+        let pos = writer.reserve_words(&[0, 0])?;
         Ok(EncodeArray::new(writer, child_size, child_type, pos))
     }
 
@@ -158,7 +158,7 @@ where
     ///
     /// array.close()?;
     ///
-    /// assert_eq!(buf.as_reader_slice().len(), 10);
+    /// assert_eq!(buf.as_slice().len(), 5);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -177,7 +177,7 @@ where
         };
 
         let mut writer = self.buf.borrow_mut();
-        let pos = writer.reserve_words(&[0, 0, 0, 0])?;
+        let pos = writer.reserve_words(&[0, 0])?;
         Ok(EncodeArray::new(writer, len, child_type, pos))
     }
 }
@@ -198,7 +198,7 @@ where
     /// pod.encode(10i32)?;
     /// pod.encode(&b"hello world"[..])?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let value: i32 = pod.decode()?;
     /// assert_eq!(value, 10i32);
     /// # Ok::<_, pod::Error>(())
@@ -222,7 +222,7 @@ where
     /// let mut pod = Pod::new(&mut buf);
     /// pod.encode_unsized(&b"hello world"[..])?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -247,7 +247,7 @@ where
     ///
     /// pod.encode_unsized(&b"hello world"[..])?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -273,14 +273,14 @@ where
     /// let mut pod = Pod::new(&mut buf);
     ///
     /// pod.encode_none()?;
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// assert!(pod.decode_option()?.is_none());
     ///
     /// buf.clear();
     ///
     /// let mut pod = Pod::new(&mut buf);
     /// pod.encode(true)?;
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     ///
     /// let Some(mut pod) = pod.decode_option()? else {
     ///     panic!("expected some value");
@@ -292,12 +292,12 @@ where
     #[inline]
     pub fn decode_option(&mut self) -> Result<Option<Pod<B::Mut<'_>>>, Error> {
         // SAFETY: The slice must have been initialized by the reader.
-        let [_, ty] = self.buf.peek_array::<2>()?;
+        let [_, ty] = self.buf.peek::<[u32; 2]>()?;
         let ty = Type::new(ty);
 
         match ty {
             Type::NONE => {
-                _ = self.buf.array::<2>()?;
+                _ = self.buf.read::<[u32; 2]>()?;
                 Ok(None)
             }
             _ => Ok(Some(Pod::new(self.buf.borrow_mut()))),
@@ -316,7 +316,7 @@ where
     /// let mut pod = Pod::new(&mut buf);
     ///
     /// pod.encode_id(MediaSubType::Opus)?;
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let sub_type: MediaSubType = pod.decode_id()?;
     /// assert_eq!(sub_type, MediaSubType::Opus);
     ///
@@ -324,7 +324,7 @@ where
     ///
     /// let mut pod = Pod::new(&mut buf);
     /// pod.encode_id(MediaSubType::Opus)?;
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let sub_type: MediaSubType = pod.decode_id()?;
     /// assert_eq!(sub_type, MediaSubType::Opus);
     /// # Ok::<_, pod::Error>(())
@@ -355,7 +355,7 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
@@ -377,7 +377,7 @@ where
             Type::ARRAY if full_size >= 8 => {
                 let size = full_size - 8;
 
-                let [child_size, child_type] = self.buf.array()?;
+                let [child_size, child_type] = self.buf.read()?;
                 let child_type = Type::new(child_type);
 
                 let remaining = if size > 0 && child_size > 0 {
@@ -388,7 +388,7 @@ where
                         }));
                     }
 
-                    let padded_child_size = child_size.next_multiple_of(DWORD_SIZE as u32);
+                    let padded_child_size = child_size.next_multiple_of(WORD_SIZE as u32);
                     (size / padded_child_size) as usize
                 } else {
                     0

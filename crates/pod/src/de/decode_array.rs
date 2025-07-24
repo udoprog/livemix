@@ -37,7 +37,7 @@ where
     /// array.encode(1i32)?;
     /// array.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert_eq!(array.len(), 1);
@@ -61,7 +61,7 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert!(array.is_empty());
@@ -88,7 +88,7 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
@@ -139,7 +139,7 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
@@ -191,7 +191,7 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut pod = Pod::new(buf.as_slice());
     /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());

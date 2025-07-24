@@ -3,7 +3,7 @@ use core::mem::MaybeUninit;
 use core::slice;
 
 use crate::error::ErrorKind;
-use crate::{DWORD_SIZE, Error, Reader, Slice, Visitor, WORD_SIZE, Writer};
+use crate::{Error, Reader, Visitor, WORD_SIZE, Writer};
 
 const DEFAULT_SIZE: usize = 1024;
 
@@ -19,18 +19,18 @@ const DEFAULT_SIZE: usize = 1024;
 ///
 /// let mut buf = ArrayBuf::<16>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.remaining(), 4);
-/// buf.write(&5u32)?;
+/// buf.write(5u64)?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
 /// assert_eq!(buf.remaining(), 5);
-/// assert_eq!(buf.array()?, [1]);
+/// assert_eq!(buf.read::<[u64; 1]>()?, [1]);
 /// assert_eq!(buf.as_slice(), &[2, 3, 4, 5]);
-/// assert_eq!(buf.read::<u64>()?, 2u64 + (3u64 << 32));
+/// assert_eq!(buf.read::<u128>()?, 2u128 + (3u128 << 64));
 /// assert_eq!(buf.remaining(), 2);
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[repr(C, align(8))]
 pub struct ArrayBuf<const N: usize = DEFAULT_SIZE> {
-    data: [MaybeUninit<u32>; N],
+    data: [MaybeUninit<u64>; N],
     read: usize,
     write: usize,
 }
@@ -94,12 +94,12 @@ impl<const N: usize> ArrayBuf<N> {
     /// assert_eq!(buf.remaining(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
-    pub const fn from_array(words: [u32; N]) -> Self {
+    pub const fn from_array(words: [u64; N]) -> Self {
         // SAFETY: The array is a sequence of initialized elements.
         unsafe {
             Self {
-                data: (&words as *const [u32; N])
-                    .cast::<[MaybeUninit<u32>; N]>()
+                data: (&words as *const [u64; N])
+                    .cast::<[MaybeUninit<u64>; N]>()
                     .read(),
                 read: 0,
                 write: N,
@@ -128,12 +128,12 @@ impl<const N: usize> ArrayBuf<N> {
     /// assert_eq!(buf.remaining(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
-    pub const fn from_slice(words: &[u32]) -> Self {
+    pub const fn from_slice(words: &[u64]) -> Self {
         assert!(words.len() <= N, "Array size exceeds buffer size");
 
         // SAFETY: The array is a sequence of initialized elements.
         unsafe {
-            let mut dest: [MaybeUninit<u32>; N] = MaybeUninit::uninit().assume_init();
+            let mut dest: [MaybeUninit<u64>; N] = MaybeUninit::uninit().assume_init();
             let mut write = 0;
 
             while write < words.len() {
@@ -149,7 +149,7 @@ impl<const N: usize> ArrayBuf<N> {
         }
     }
 
-    /// Returns the number of 32-bit words that can be read.
+    /// Returns the number of words that can be read.
     ///
     /// # Examples
     ///
@@ -159,11 +159,11 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut array = ArrayBuf::from_array([1, 2, 3]);
     /// assert_eq!(array.remaining(), 3);
     ///
-    /// assert_eq!(array.array()?, [1]);
+    /// assert_eq!(array.read::<[u64; 1]>()?, [1]);
     /// assert_eq!(array.remaining(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(array.read::<u128>()?, 2u128 + (3u128 << 64));
     /// assert_eq!(array.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -171,7 +171,7 @@ impl<const N: usize> ArrayBuf<N> {
         self.write - self.read
     }
 
-    /// Returns the number of 32-bit words that can be written.
+    /// Returns the number of words that can be written.
     ///
     /// # Examples
     ///
@@ -182,11 +182,11 @@ impl<const N: usize> ArrayBuf<N> {
     /// assert_eq!(array.remaining(), 3);
     /// assert_eq!(array.remaining_mut(), 13);
     ///
-    /// assert_eq!(array.array::<1>()?, [1]);
+    /// assert_eq!(array.read::<[u64; 1]>()?, [1]);
     /// assert_eq!(array.remaining(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(array.read::<u128>()?, 2u128 + (3u128 << 64));
     /// assert_eq!(array.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -209,11 +209,11 @@ impl<const N: usize> ArrayBuf<N> {
     /// assert_eq!(buf.remaining(), 3);
     ///
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
-    /// assert_eq!(buf.array()?, [1]);
+    /// assert_eq!(buf.read::<[u64; 1]>()?, [1]);
     /// assert_eq!(buf.as_slice(), &[2, 3]);
     /// buf.clear_remaining();
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
-    /// assert_eq!(buf.array()?, [1]);
+    /// assert_eq!(buf.read::<[u64; 1]>()?, [1]);
     /// buf.clear();
     /// assert_eq!(buf.as_slice(), &[]);
     /// assert_eq!(buf.remaining_mut(), 3);
@@ -235,15 +235,15 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::{ArrayBuf, Reader, Writer};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// buf.write(&42u32)?;
+    /// buf.write(42u64)?;
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
-    /// assert_eq!(buf.array()?, [42]);
+    /// assert_eq!(buf.read::<[u64; 1]>()?, [42]);
     /// assert_eq!(buf.as_slice(), &[]);
     /// buf.clear_remaining();
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
-    /// assert_eq!(buf.array()?, [42]);
+    /// assert_eq!(buf.read::<[u64; 1]>()?, [42]);
     /// # Ok::<_, pod::Error>(())
     #[inline]
     pub fn clear_remaining(&mut self) {
@@ -260,34 +260,14 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut buf = ArrayBuf::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
-    /// buf.write(&42u32)?;
+    /// buf.write(42u64)?;
     /// assert_eq!(buf.as_slice(), &[42]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[u32] {
+    pub fn as_slice(&self) -> &[u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.remaining()) }
-    }
-
-    /// Returns the initialized slice wrapped as a [`Slice`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Writer};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.write(&42u32)?;
-    /// assert_eq!(buf.as_slice(), &[42]);
-    /// assert_eq!(buf.as_slice(), &[42][..]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn as_reader_slice(&self) -> &Slice {
-        Slice::new(self.as_slice())
     }
 }
 
@@ -300,7 +280,7 @@ impl<const N: usize> ArrayBuf<N> {
 ///
 /// let mut buf = ArrayBuf::from_array([1, 2, 3]);
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
-/// buf.array::<1>()?;
+/// buf.read::<u64>()?;
 /// assert_eq!(format!("{buf:?}"), "[2, 3]");
 ///
 /// # Ok::<_, pod::Error>(())
@@ -340,15 +320,15 @@ impl<const A: usize, const B: usize> PartialEq<ArrayBuf<B>> for ArrayBuf<A> {
 /// use pod::ArrayBuf;
 ///
 /// let array1 = ArrayBuf::from_array([1, 2, 3]);
-/// let slice2: &[u32] = &[1, 2, 3, 4][..];
+/// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, *slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<const N: usize> PartialEq<[u32]> for ArrayBuf<N> {
+impl<const N: usize> PartialEq<[u64]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &[u32]) -> bool {
+    fn eq(&self, other: &[u64]) -> bool {
         self.as_slice() == other
     }
 }
@@ -361,15 +341,15 @@ impl<const N: usize> PartialEq<[u32]> for ArrayBuf<N> {
 /// use pod::ArrayBuf;
 ///
 /// let array1 = ArrayBuf::from_array([1, 2, 3]);
-/// let slice2: &[u32] = &[1, 2, 3, 4][..];
+/// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, *slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<const N: usize> PartialEq<[u32; N]> for ArrayBuf<N> {
+impl<const N: usize> PartialEq<[u64; N]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &[u32; N]) -> bool {
+    fn eq(&self, other: &[u64; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -382,15 +362,15 @@ impl<const N: usize> PartialEq<[u32; N]> for ArrayBuf<N> {
 /// use pod::ArrayBuf;
 ///
 /// let slice1 = ArrayBuf::from_array([1, 2, 3]);
-/// let slice2: &[u32] = &[1, 2, 3, 4][..];
+/// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(slice1, *slice2);
 /// assert_eq!(slice1, slice1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<const N: usize> PartialEq<&[u32; N]> for ArrayBuf<N> {
+impl<const N: usize> PartialEq<&[u64; N]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &&[u32; N]) -> bool {
+    fn eq(&self, other: &&[u64; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -403,15 +383,15 @@ impl<const N: usize> PartialEq<&[u32; N]> for ArrayBuf<N> {
 /// use pod::ArrayBuf;
 ///
 /// let array1 = ArrayBuf::from_array([1, 2, 3]);
-/// let slice2: &[u32] = &[1, 2, 3, 4][..];
+/// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(slice2, slice2);
 /// ```
-impl<const N: usize> PartialEq<&[u32]> for ArrayBuf<N> {
+impl<const N: usize> PartialEq<&[u64]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &&[u32]) -> bool {
+    fn eq(&self, other: &&[u64]) -> bool {
         self.as_slice() == *other
     }
 }
@@ -438,7 +418,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[u32]) -> Result<Self::Pos, Error> {
+    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
         let write = self.write.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
@@ -469,25 +449,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn write_zeros(&mut self, words: usize) -> Result<(), Error> {
-        let write = self.write.wrapping_add(words);
-
-        // Ensure we have enough space in the buffer.
-        if write > N || write < self.write {
-            return Err(Error::new(ErrorKind::BufferOverflow));
-        }
-
-        // SAFETY: We are writing to valid positions in the buffer.
-        unsafe {
-            self.data.as_mut_ptr().add(self.write).write_bytes(0, words);
-        }
-
-        self.write = write;
-        Ok(())
-    }
-
-    #[inline]
-    fn write_words(&mut self, words: &[u32]) -> Result<(), Error> {
+    fn write_words(&mut self, words: &[u64]) -> Result<(), Error> {
         let write = self.write.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
@@ -508,7 +470,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[u32]) -> Result<(), Error> {
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error> {
         let Pos { write, len } = pos;
 
         if len < words.len() {
@@ -535,7 +497,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let req = full.div_ceil(WORD_SIZE).next_multiple_of(2);
+        let req = full.div_ceil(WORD_SIZE);
         let write = self.write.wrapping_add(req);
 
         if !(self.write..=N).contains(&write) {
@@ -546,7 +508,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         unsafe {
             let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-            let pad = DWORD_SIZE - bytes.len() % DWORD_SIZE;
+            let pad = WORD_SIZE - bytes.len() % WORD_SIZE;
             ptr.add(bytes.len()).write_bytes(0, pad);
         }
 
@@ -567,7 +529,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
         if self.remaining() < out.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
@@ -577,7 +539,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .cast::<MaybeUninit<u32>>()
+                .cast::<MaybeUninit<u64>>()
                 .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
         }
 
@@ -585,7 +547,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
         let read = self.read.wrapping_add(out.len());
 
         if read > self.write || read < self.read {
@@ -597,7 +559,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .cast::<MaybeUninit<u32>>()
+                .cast::<MaybeUninit<u64>>()
                 .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
         }
 
@@ -610,7 +572,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     where
         V: Visitor<'de, [u8]>,
     {
-        let req = len.div_ceil(WORD_SIZE).next_multiple_of(2);
+        let req = len.div_ceil(WORD_SIZE);
         let read = self.read.wrapping_add(req);
 
         if read > self.write || read < self.read {

@@ -43,7 +43,7 @@ pub trait Encode: Sized + self::sealed::Sealed {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(true)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<bool>()?, true);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -57,12 +57,17 @@ impl Encode for bool {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[4, Type::BOOL.into_u32(), if *self { 1 } else { 0 }, 0])
+        writer.write([
+            4u32,
+            Type::BOOL.into_u32(),
+            if *self { 1u32 } else { 0u32 },
+            0u32,
+        ])
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[if *self { 1 } else { 0 }, 0])
+        writer.write([if *self { 1u32 } else { 0u32 }, 0u32])
     }
 }
 
@@ -78,7 +83,7 @@ impl Encode for bool {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(Id(MediaSubType::Opus))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// let Id(value) = pod.decode::<Id<MediaSubType>>()?;
 /// assert_eq!(value, MediaSubType::Opus);
 /// # Ok::<_, pod::Error>(())
@@ -96,12 +101,12 @@ where
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[4, Type::ID.into_u32(), self.0.into_id(), 0])
+        writer.write([4, Type::ID.into_u32(), self.0.into_id(), 0])
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[self.0.into_id(), 0])
+        writer.write([self.0.into_id(), 0])
     }
 }
 
@@ -116,7 +121,7 @@ where
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(10i32)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i32>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -130,12 +135,12 @@ impl Encode for i32 {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[4, Type::INT.into_u32(), self.cast_unsigned(), 0])
+        writer.write([4, Type::INT.into_u32(), self.cast_unsigned(), 0])
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[self.cast_unsigned(), 0])
+        writer.write([self.cast_unsigned(), 0])
     }
 }
 
@@ -150,7 +155,7 @@ impl Encode for i32 {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(10i64)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -164,14 +169,14 @@ impl Encode for i64 {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[8, Type::LONG.into_u32()])?;
-        writer.write(&self.cast_unsigned())?;
+        writer.write([8, Type::LONG.into_u32()])?;
+        writer.write(self.cast_unsigned())?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(&self.cast_unsigned())
+        writer.write(self.cast_unsigned())
     }
 }
 
@@ -186,7 +191,7 @@ impl Encode for i64 {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(42.42f32)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -200,12 +205,12 @@ impl Encode for f32 {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[4, Type::FLOAT.into_u32(), self.to_bits(), 0])
+        writer.write([4, Type::FLOAT.into_u32(), self.to_bits(), 0])
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[self.to_bits(), 0])
+        writer.write([self.to_bits(), 0])
     }
 }
 
@@ -220,7 +225,7 @@ impl Encode for f32 {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(42.42f64)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -234,14 +239,14 @@ impl Encode for f64 {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[8, Type::DOUBLE.into_u32()])?;
-        writer.write(&self.to_bits())?;
+        writer.write([8, Type::DOUBLE.into_u32()])?;
+        writer.write(self.to_bits())?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(&self.to_bits())
+        writer.write(self.to_bits())
     }
 }
 
@@ -257,7 +262,7 @@ impl Encode for f64 {
 ///
 /// pod.encode(Rectangle::new(100, 200))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -271,12 +276,12 @@ impl Encode for Rectangle {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[8, Type::RECTANGLE.into_u32(), self.width, self.height])
+        writer.write([8, Type::RECTANGLE.into_u32(), self.width, self.height])
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[self.width, self.height])
+        writer.write([self.width, self.height])
     }
 }
 
@@ -292,7 +297,7 @@ impl Encode for Rectangle {
 ///
 /// pod.encode(Fraction::new(800, 600))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -306,12 +311,12 @@ impl Encode for Fraction {
 
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[8, Type::FRACTION.into_u32(), self.num, self.denom])
+        writer.write([8, Type::FRACTION.into_u32(), self.num, self.denom])
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(&[self.num, self.denom])
+        writer.write([self.num, self.denom])
     }
 }
 
@@ -327,7 +332,7 @@ impl Encode for Fraction {
 ///
 /// pod.encode(*b"hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -361,7 +366,7 @@ impl<const N: usize> Encode for [u8; N] {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(&b"hello world"[..])?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```

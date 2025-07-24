@@ -1,14 +1,16 @@
 use core::mem::MaybeUninit;
+use core::slice;
 
-use crate::utils::{Align, WordAligned};
+use crate::error::ErrorKind;
+use crate::utils::{UninitAlign, WordSized};
 use crate::visitor::Visitor;
-use crate::{Error, Type};
+use crate::{Error, Type, WORD_SIZE};
 
 mod sealed {
-    use crate::{ArrayBuf, Reader, Slice};
+    use crate::{ArrayBuf, Reader};
 
     pub trait Sealed {}
-    impl Sealed for &Slice {}
+    impl Sealed for &[u64] {}
     impl<const N: usize> Sealed for ArrayBuf<N> {}
     impl<'de, R> Sealed for &mut R where R: ?Sized + Reader<'de> {}
 }
@@ -24,10 +26,10 @@ pub trait Reader<'de>: self::sealed::Sealed {
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
 
     /// Peek into the provided buffer without consuming the reader.
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error>;
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
 
     /// Peek words into the provided buffer.
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error>;
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
 
     /// Read the given number of bytes from the input.
     fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
@@ -36,18 +38,12 @@ pub trait Reader<'de>: self::sealed::Sealed {
 
     /// Read an array of words.
     #[inline]
-    fn peek_array<const N: usize>(&mut self) -> Result<[u32; N], Error> {
-        let mut out = Align::<[u32; N]>::uninit();
+    fn peek<T>(&mut self) -> Result<T, Error>
+    where
+        T: WordSized,
+    {
+        let mut out = UninitAlign::<T>::uninit();
         self.peek_words_uninit(out.as_mut_slice())?;
-        // SAFETY: The slice must have been initialized by the reader.
-        Ok(unsafe { out.assume_init() })
-    }
-
-    /// Read an array of words.
-    #[inline]
-    fn array<const N: usize>(&mut self) -> Result<[u32; N], Error> {
-        let mut out = Align::<[u32; N]>::uninit();
-        self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init() })
     }
@@ -56,9 +52,9 @@ pub trait Reader<'de>: self::sealed::Sealed {
     #[inline]
     fn read<T>(&mut self) -> Result<T, Error>
     where
-        T: WordAligned,
+        T: WordSized,
     {
-        let mut out = Align::<T>::uninit();
+        let mut out = UninitAlign::<T>::uninit();
         self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init() })
@@ -66,7 +62,7 @@ pub trait Reader<'de>: self::sealed::Sealed {
 
     #[inline]
     fn header(&mut self) -> Result<(u32, Type), Error> {
-        let [size, ty] = self.array()?;
+        let [size, ty] = self.read::<[u32; 2]>()?;
         let ty = Type::new(ty);
         Ok((size, ty))
     }
@@ -87,12 +83,12 @@ where
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
         (**self).peek_words_uninit(out)
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
         (**self).read_words_uninit(out)
     }
 
@@ -103,14 +99,66 @@ where
     {
         (**self).read_bytes(len, visitor)
     }
+}
+
+impl<'de> Reader<'de> for &'de [u64] {
+    type Mut<'this>
+        = &'this mut &'de [u64]
+    where
+        Self: 'this;
 
     #[inline]
-    fn peek_array<const N: usize>(&mut self) -> Result<[u32; N], Error> {
-        (**self).peek_array()
+    fn borrow_mut(&mut self) -> Self::Mut<'_> {
+        self
     }
 
     #[inline]
-    fn array<const N: usize>(&mut self) -> Result<[u32; N], Error> {
-        (**self).array()
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+        if out.len() > self.len() {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        }
+
+        // SAFETY: The start pointer is valid since it hasn't reached the end yet.
+        unsafe {
+            self.as_ptr()
+                .cast::<MaybeUninit<u64>>()
+                .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+        if out.len() > self.len() {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        }
+
+        // SAFETY: The start pointer is valid since it hasn't reached the end yet.
+        unsafe {
+            self.as_ptr()
+                .cast::<MaybeUninit<u64>>()
+                .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
+        }
+
+        *self = &self[out.len()..];
+        Ok(())
+    }
+
+    #[inline]
+    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
+    where
+        V: Visitor<'de, [u8]>,
+    {
+        let req = len.div_ceil(WORD_SIZE);
+
+        let Some((head, tail)) = self.split_at_checked(req) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        let value = unsafe { slice::from_raw_parts(head.as_ptr().cast::<u8>(), len) };
+        let ok = visitor.visit_borrowed(value)?;
+        *self = tail;
+        Ok(ok)
     }
 }

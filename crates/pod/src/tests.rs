@@ -1,10 +1,18 @@
-#![cfg(feature = "alloc")]
-
 use core::ffi::CStr;
 
-use super::Reader;
-use super::error::ErrorKind;
-use super::{ArrayBuf, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Slice, Type, Writer};
+use crate::Reader;
+use crate::error::ErrorKind;
+use crate::utils::{Align, WordSized};
+use crate::{ArrayBuf, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
+
+pub(crate) fn read<T, U>(value: T) -> U
+where
+    T: WordSized,
+    U: WordSized,
+{
+    // SAFETY: The value must be word-aligned and packed.
+    unsafe { Align(value).as_ptr().cast::<U>().read() }
+}
 
 #[inline]
 fn encode_none() -> Result<Pod<impl Reader<'static>>, Error> {
@@ -21,26 +29,21 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 
 #[test]
 fn test_encode_decode_u64() -> Result<(), Error> {
-    fn u64_from_array(values: [u32; 2]) -> u64 {
-        // SAFETY: The u64 can inhabit all bit patterns presented.
-        unsafe { (&values as *const [u32; 2]).cast::<u64>().read() }
-    }
-
     let mut buf = ArrayBuf::new();
-    buf.write(&0x1234567890abcdefu64)?;
+    buf.write(0x1234567890abcdefu64)?;
 
-    let &[a, b] = buf.as_slice() else {
+    let Ok([a, b]) = buf.peek::<[u32; 2]>() else {
         panic!();
     };
 
     if cfg!(target_endian = "little") {
         assert_eq!(a, 0x90abcdef);
         assert_eq!(b, 0x12345678);
-        assert_eq!(0x1234567890abcdefu64, u64_from_array([a, b]));
+        assert_eq!(0x1234567890abcdefu64, read([a, b]));
     } else {
         assert_eq!(b, 0x90abcdef);
         assert_eq!(a, 0x12345678);
-        assert_eq!(0x1234567890abcdefu64, u64_from_array([b, a]));
+        assert_eq!(0x1234567890abcdefu64, read([b, a]));
     }
 
     assert_eq!(buf.read::<u64>()?, 0x1234567890abcdef);
@@ -49,7 +52,7 @@ fn test_encode_decode_u64() -> Result<(), Error> {
 
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
-    let mut buf = ArrayBuf::<2>::with_size();
+    let mut buf = ArrayBuf::<1>::with_size();
     let mut pod = Pod::new(&mut buf);
 
     assert!(pod.encode_none().is_ok());
@@ -62,16 +65,16 @@ fn test_write_overflow() -> Result<(), Error> {
 
 #[test]
 fn test_slice_underflow() -> Result<(), Error> {
-    let mut buf = Slice::new(&[1, 2, 3]);
-    assert_eq!(buf.array::<1>()?, [1]);
-    assert_eq!(buf.array::<1>()?, [2]);
+    let mut buf: &[u64] = &[1, 2, 3];
+    assert_eq!(buf.read::<u64>()?, 1);
+    assert_eq!(buf.read::<u64>()?, 2);
     assert_eq!(
-        buf.read::<u64>().unwrap_err().kind(),
+        buf.read::<[u64; 2]>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
-    assert_eq!(buf.array::<1>()?, [3]);
+    assert_eq!(buf.read::<u64>()?, 3);
     assert_eq!(
-        buf.array::<1>().unwrap_err().kind(),
+        buf.read::<u64>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
     Ok(())
@@ -80,15 +83,15 @@ fn test_slice_underflow() -> Result<(), Error> {
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
     let mut buf = ArrayBuf::<3>::from_array([1, 2, 3]);
-    assert_eq!(buf.array::<1>()?, [1]);
-    assert_eq!(buf.array::<1>()?, [2]);
+    assert_eq!(buf.read::<u64>()?, 1);
+    assert_eq!(buf.read::<u64>()?, 2);
     assert_eq!(
-        buf.read::<u64>().unwrap_err().kind(),
+        buf.read::<[u64; 2]>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
-    assert_eq!(buf.array::<1>()?, [3]);
+    assert_eq!(buf.read::<u64>()?, 3);
     assert_eq!(
-        buf.array::<1>().unwrap_err().kind(),
+        buf.read::<u64>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
     Ok(())
@@ -249,7 +252,7 @@ fn test_array() -> Result<(), Error> {
 
     array.close()?;
 
-    let mut pod = Pod::new(buf.as_reader_slice());
+    let mut pod = Pod::new(buf.as_slice());
     let mut array = pod.decode_array()?;
 
     assert_eq!(array.len(), 3);

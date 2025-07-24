@@ -74,7 +74,7 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(10i32)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// let value: i32 = pod.decode()?;
 /// assert_eq!(value, 10i32);
 /// # Ok::<_, pod::Error>(())
@@ -88,7 +88,7 @@ impl<'de> Decode<'de> for bool {
 
         match ty {
             Type::BOOL if size == 4 => {
-                let [value, _pad] = reader.array()?;
+                let [value, _pad] = reader.read::<[u32; 2]>()?;
                 Ok(value != 0)
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -100,7 +100,7 @@ impl<'de> Decode<'de> for bool {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.array()?;
+        let [value, _pad] = reader.read::<[u32; 2]>()?;
         Ok(value != 0)
     }
 }
@@ -116,7 +116,7 @@ impl<'de> Decode<'de> for bool {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(10i32)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -132,7 +132,7 @@ where
 
         match ty {
             Type::ID if size == 4 => {
-                let [value, _pad] = reader.array()?;
+                let [value, _pad] = reader.read()?;
                 Ok(Id(I::from_id(value)))
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -144,7 +144,7 @@ where
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.array()?;
+        let [value, _pad] = reader.read()?;
         Ok(Id(I::from_id(value)))
     }
 }
@@ -160,7 +160,7 @@ where
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(10i32)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -173,7 +173,7 @@ impl<'de> Decode<'de> for i32 {
 
         match ty {
             Type::INT if size == 4 => {
-                let [value, _pad] = reader.array()?;
+                let [value, _pad] = reader.read::<[u32; 2]>()?;
                 Ok(value.cast_signed())
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -185,7 +185,7 @@ impl<'de> Decode<'de> for i32 {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.array()?;
+        let [value, _pad] = reader.read::<[u32; 2]>()?;
         Ok(value.cast_signed())
     }
 }
@@ -201,7 +201,7 @@ impl<'de> Decode<'de> for i32 {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(10i64)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -238,7 +238,7 @@ impl<'de> Decode<'de> for i64 {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(42.42f32)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -251,7 +251,7 @@ impl<'de> Decode<'de> for f32 {
 
         match ty {
             Type::FLOAT if size == 4 => {
-                let [value, _pad] = reader.array()?;
+                let [value, _pad] = reader.read()?;
                 Ok(f32::from_bits(value))
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -263,7 +263,7 @@ impl<'de> Decode<'de> for f32 {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.array()?;
+        let [value, _pad] = reader.read()?;
         Ok(f32::from_bits(value))
     }
 }
@@ -279,7 +279,7 @@ impl<'de> Decode<'de> for f32 {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode(42.42f64)?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -320,7 +320,7 @@ impl<'de> Decode<'de> for f64 {
 ///
 /// pod.encode(Rectangle::new(100, 200))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -333,7 +333,7 @@ impl<'de> Decode<'de> for Rectangle {
 
         match ty {
             Type::RECTANGLE if size == 8 => {
-                let [width, height] = reader.array()?;
+                let [width, height] = reader.read()?;
                 Ok(Rectangle::new(width, height))
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -345,7 +345,7 @@ impl<'de> Decode<'de> for Rectangle {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [width, height] = reader.array()?;
+        let [width, height] = reader.read()?;
         Ok(Rectangle::new(width, height))
     }
 }
@@ -362,7 +362,7 @@ impl<'de> Decode<'de> for Rectangle {
 ///
 /// pod.encode(Fraction::new(800, 600))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -375,7 +375,7 @@ impl<'de> Decode<'de> for Fraction {
 
         match ty {
             Type::FRACTION if size == 8 => {
-                let [num, denom] = reader.array()?;
+                let [num, denom] = reader.read()?;
                 Ok(Fraction::new(num, denom))
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -387,7 +387,7 @@ impl<'de> Decode<'de> for Fraction {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [num, denom] = reader.array()?;
+        let [num, denom] = reader.read()?;
         Ok(Fraction::new(num, denom))
     }
 }
@@ -405,7 +405,7 @@ impl<'de> Decode<'de> for Fraction {
 ///
 /// pod.encode_unsized(c"hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<CString>()?.as_c_str(), c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -450,7 +450,7 @@ impl<'de> Visitor<'de, CStr> for CStrVisitor {
 /// pod.encode_unsized("hello world")?;
 /// pod.encode_unsized("this is right")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<String>()?.as_str(), "hello world");
 /// assert_eq!(pod.decode::<String>()?.as_str(), "this is right");
 /// # Ok::<_, pod::Error>(())
@@ -496,7 +496,7 @@ impl<'de> Visitor<'de, str> for StrVisitor {
 /// pod.encode(*b"hello world")?;
 /// pod.encode(*b"this is right")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Vec<u8>>()?.as_slice(), b"hello world");
 /// assert_eq!(pod.decode::<Vec<u8>>()?.as_slice(), b"this is right");
 /// # Ok::<_, pod::Error>(())
@@ -541,7 +541,7 @@ impl<'de> Visitor<'de, [u8]> for BytesVisitor {
 ///
 /// pod.encode_unsized(Bitmap::new(b"hello world"))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<OwnedBitmap>()?.as_bytes(), b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```

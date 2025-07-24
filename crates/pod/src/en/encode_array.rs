@@ -145,9 +145,9 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        self.writer.write_words_at(
+        self.writer.write_at(
             self.pos,
-            &[
+            [
                 len,
                 Type::ARRAY.into_u32(),
                 child_size,

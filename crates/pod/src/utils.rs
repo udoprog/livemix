@@ -1,65 +1,104 @@
 use core::mem::MaybeUninit;
 use core::slice;
 
-/// Coerce a value into a slice of words.
-pub(crate) fn as_words<T>(value: &T) -> &[u32]
+/// Helper to align a value to a word, making necessary write conversions safe.
+#[repr(align(8))]
+pub(crate) struct Align<T>(pub T)
 where
-    T: WordAligned,
+    T: WordSized;
+
+impl<T> Align<T>
+where
+    T: WordSized,
 {
-    // SAFETY: The value must be word-aligned and packed.
-    unsafe { slice::from_raw_parts(value as *const T as *const u32, T::WORD_SIZE) }
+    /// Coerce a value into a slice of words.
+    #[inline]
+    pub(crate) fn as_words(&self) -> &[u64] {
+        // SAFETY: The value must be word-aligned and packed.
+        unsafe { slice::from_raw_parts(self.as_ptr(), Self::WORD_SIZE) }
+    }
+
+    /// Get a pointer to the word representation of the value.
+    #[inline]
+    pub(crate) fn as_ptr(&self) -> *const u64 {
+        &self.0 as *const T as *const u64
+    }
 }
+
+impl<T> Clone for Align<T>
+where
+    T: WordSized,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for Align<T> where T: WordSized {}
+
+impl<T> Align<T> where T: WordSized {}
 
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
-#[repr(transparent)]
-pub(crate) struct Align<T>(MaybeUninit<T>);
+#[repr(C, align(8))]
+pub(crate) struct UninitAlign<T>(MaybeUninit<T>);
 
-/// Trait implemented for types which are word-aligned and can inhabit all bit
+unsafe impl<T> WordSized for Align<T>
+where
+    T: WordSized,
+{
+    const WORD_SIZE: usize = T::WORD_SIZE;
+}
+
+/// Trait implemented for types which are word-sized and can inhabit all bit
 /// patterns.
 ///
 /// # Safety
 ///
 /// Must only be implemented for types which are word-aligned and packed. That
 /// is, some multiple of `WORD_SIZE` and can inhabit all bit-patterns.
-pub unsafe trait WordAligned: Copy {
+pub unsafe trait WordSized: Copy {
     /// The size of the word in the alignment.
     #[doc(hidden)]
     const WORD_SIZE: usize;
 }
 
-unsafe impl WordAligned for u64 {
-    const WORD_SIZE: usize = 2;
-}
-unsafe impl WordAligned for u32 {
+unsafe impl WordSized for u64 {
     const WORD_SIZE: usize = 1;
 }
-unsafe impl<const N: usize> WordAligned for [u32; N] {
+unsafe impl WordSized for [u32; 2] {
+    const WORD_SIZE: usize = 1;
+}
+unsafe impl WordSized for [u32; 4] {
+    const WORD_SIZE: usize = 2;
+}
+unsafe impl<const N: usize> WordSized for [u64; N] {
     const WORD_SIZE: usize = N;
 }
-unsafe impl<const N: usize> WordAligned for [u64; N] {
-    const WORD_SIZE: usize = N * 2;
+unsafe impl WordSized for u128 {
+    const WORD_SIZE: usize = 2;
 }
 
-impl<T> Align<T>
+impl<T> UninitAlign<T>
 where
-    T: WordAligned,
+    T: WordSized,
 {
     /// Get a mutable slice of the aligned value.
     #[inline]
-    pub(crate) fn as_mut_slice(&mut self) -> &mut [MaybeUninit<u32>] {
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [MaybeUninit<u64>] {
         unsafe {
             slice::from_raw_parts_mut(
-                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<u32>>(),
+                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<u64>>(),
                 T::WORD_SIZE,
             )
         }
     }
 }
 
-impl<T> Align<T>
+impl<T> UninitAlign<T>
 where
-    T: WordAligned,
+    T: WordSized,
 {
     #[inline]
     pub(crate) const fn uninit() -> Self {

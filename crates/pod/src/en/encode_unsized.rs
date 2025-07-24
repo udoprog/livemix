@@ -44,7 +44,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized(&b"hello world"[..])?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -62,7 +62,7 @@ impl EncodeUnsized for [u8] {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        writer.write_words(&[len, Type::BYTES.into_u32()])?;
+        writer.write([len, Type::BYTES.into_u32()])?;
         writer.write_bytes(self, 0)?;
         Ok(())
     }
@@ -85,7 +85,7 @@ impl EncodeUnsized for [u8] {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized(c"hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -105,7 +105,7 @@ impl EncodeUnsized for CStr {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        writer.write_words(&[len, Type::STRING.into_u32()])?;
+        writer.write([len, Type::STRING.into_u32()])?;
         writer.write_bytes(bytes, 0)?;
         Ok(())
     }
@@ -128,7 +128,7 @@ impl EncodeUnsized for CStr {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized("hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -156,7 +156,7 @@ impl EncodeUnsized for str {
             return Err(Error::new(ErrorKind::NullContainingString));
         }
 
-        writer.write_words(&[len, Type::STRING.into_u32()])?;
+        writer.write([len, Type::STRING.into_u32()])?;
         writer.write_bytes(bytes, 1)?;
         Ok(())
     }
@@ -179,7 +179,7 @@ impl EncodeUnsized for str {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized(Bitmap::new(b"asdfasdf"))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -199,7 +199,7 @@ impl EncodeUnsized for Bitmap {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        writer.write_words(&[len, Type::BITMAP.into_u32()])?;
+        writer.write([len, Type::BITMAP.into_u32()])?;
         writer.write_bytes(value, 0)?;
         Ok(())
     }

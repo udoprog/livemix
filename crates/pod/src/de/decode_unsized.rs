@@ -63,7 +63,7 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized(c"hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// let bytes: &CStr = pod.decode_borrowed()?;
 /// assert_eq!(bytes, c"hello world");
 /// # Ok::<_, pod::Error>(())
@@ -141,7 +141,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized("hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -207,7 +207,7 @@ impl<'de> DecodeUnsized<'de> for str {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized(&b"hello world"[..])?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -254,7 +254,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 /// let mut pod = Pod::new(&mut buf);
 /// pod.encode_unsized(Bitmap::new(b"asdfasdf"))?;
 ///
-/// let mut pod = Pod::new(buf.as_reader_slice());
+/// let mut pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
