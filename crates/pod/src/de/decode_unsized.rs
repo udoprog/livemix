@@ -21,31 +21,6 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
     const TYPE: Type;
 
     #[doc(hidden)]
-    fn decode_unsized<V>(reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
-    where
-        V: Visitor<'de, Self>;
-
-    #[inline]
-    #[doc(hidden)]
-    fn decode_borrowed(reader: impl Reader<'de>) -> Result<&'de Self, Error> {
-        struct LocalVisitor;
-
-        impl<'de, T> Visitor<'de, T> for LocalVisitor
-        where
-            T: 'de + ?Sized,
-        {
-            type Ok = &'de T;
-
-            #[inline]
-            fn visit_borrowed(self, value: &'de T) -> Result<Self::Ok, Error> {
-                Ok(value)
-            }
-        }
-
-        Self::decode_unsized(reader, LocalVisitor)
-    }
-
-    #[doc(hidden)]
     fn read_content<V>(reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>;
@@ -90,22 +65,6 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
 /// ```
 impl<'de> DecodeUnsized<'de> for CStr {
     const TYPE: Type = Type::STRING;
-
-    #[inline]
-    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
-    where
-        V: Visitor<'de, Self>,
-    {
-        let (size, ty) = reader.header()?;
-
-        match ty {
-            Type::STRING => CStr::read_content(reader, visitor, size),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::STRING,
-                actual: ty,
-            })),
-        }
-    }
 
     #[inline]
     fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
@@ -165,22 +124,6 @@ impl<'de> DecodeUnsized<'de> for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
-    where
-        V: Visitor<'de, Self>,
-    {
-        let (size, ty) = reader.header()?;
-
-        match ty {
-            Type::STRING => str::read_content(reader, visitor, size),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::STRING,
-                actual: ty,
-            })),
-        }
-    }
-
-    #[inline]
     fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -227,22 +170,6 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
-    where
-        V: Visitor<'de, Self>,
-    {
-        let (size, ty) = reader.header()?;
-
-        match ty {
-            Type::BYTES => <[u8]>::read_content(reader, visitor, size),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::BYTES,
-                actual: ty,
-            })),
-        }
-    }
-
-    #[inline]
     fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -268,22 +195,6 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 /// ```
 impl<'de> DecodeUnsized<'de> for Bitmap {
     const TYPE: Type = Type::BITMAP;
-
-    #[inline]
-    fn decode_unsized<V>(mut reader: impl Reader<'de>, visitor: V) -> Result<V::Ok, Error>
-    where
-        V: Visitor<'de, Self>,
-    {
-        let (size, ty) = reader.header()?;
-
-        match ty {
-            Type::BITMAP => Bitmap::read_content(reader, visitor, size),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::BITMAP,
-                actual: ty,
-            })),
-        }
-    }
 
     #[inline]
     fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>

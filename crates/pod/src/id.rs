@@ -96,12 +96,6 @@ macro_rules! declare_id {
             const TYPE: $crate::Type = $crate::Type::ID;
 
             #[inline]
-            fn decode(reader: impl $crate::Reader<'de>) -> Result<Self, $crate::Error> {
-                let $crate::Id(id) = $crate::Id::<$ty>::decode(reader)?;
-                Ok(id)
-            }
-
-            #[inline]
             fn read_content(reader: impl $crate::Reader<'de>, len: u32) -> Result<Self, $crate::Error> {
                 let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, len)?;
                 Ok(id)

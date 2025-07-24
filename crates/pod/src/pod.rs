@@ -306,7 +306,7 @@ where
     where
         T: Decode<'de>,
     {
-        T::decode(self.buf)
+        self.typed()?.decode::<T>()
     }
 
     /// Decode an unsized value into the pod.
@@ -330,7 +330,7 @@ where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
     {
-        T::decode_unsized(self.buf, visitor)
+        self.typed()?.decode_unsized(visitor)
     }
 
     /// Decode an unsized value into the pod.
@@ -354,7 +354,7 @@ where
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
-        T::decode_borrowed(self.buf)
+        self.typed()?.decode_borrowed()
     }
 
     /// Decode an optional value.

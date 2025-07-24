@@ -10,6 +10,8 @@ use alloc::borrow::ToOwned;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
+use crate::bstr::BStr;
+
 /// An owned bitmap type.
 #[cfg(feature = "alloc")]
 #[derive(Clone, PartialEq, Eq)]
@@ -48,7 +50,7 @@ impl Borrow<Bitmap> for OwnedBitmap {
 impl fmt::Debug for OwnedBitmap {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "OwnedBitmap({} bytes)", self.data.len())
+        write!(f, "OwnedBitmap({:?})", BStr::new(&self.data))
     }
 }
 
@@ -102,7 +104,7 @@ impl Bitmap {
 impl fmt::Debug for Bitmap {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Bitmap({} bytes)", self.data.len())
+        write!(f, "Bitmap({:?})", BStr::new(&self.data))
     }
 }
 

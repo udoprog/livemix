@@ -142,8 +142,8 @@ where
     {
         if T::TYPE != self.ty {
             return Err(Error::new(ErrorKind::Expected {
-                expected: self.ty,
-                actual: T::TYPE,
+                expected: T::TYPE,
+                actual: self.ty,
             }));
         }
 
@@ -204,8 +204,8 @@ where
     {
         if T::TYPE != self.ty {
             return Err(Error::new(ErrorKind::Expected {
-                expected: self.ty,
-                actual: T::TYPE,
+                expected: T::TYPE,
+                actual: self.ty,
             }));
         }
 
