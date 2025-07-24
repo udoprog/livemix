@@ -1,7 +1,30 @@
+#[cfg(feature = "alloc")]
+use core::ffi::CStr;
+
+#[cfg(feature = "alloc")]
+use alloc::borrow::ToOwned;
+#[cfg(feature = "alloc")]
+use alloc::ffi::CString;
+#[cfg(feature = "alloc")]
+use alloc::string::String;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
 use crate::error::ErrorKind;
+#[cfg(feature = "alloc")]
+use crate::{Bitmap, DecodeUnsized, OwnedBitmap, Visitor};
 use crate::{Error, Fraction, Id, IntoId, Reader, Rectangle, Type};
 
 mod sealed {
+    #[cfg(feature = "alloc")]
+    use alloc::ffi::CString;
+    #[cfg(feature = "alloc")]
+    use alloc::string::String;
+    #[cfg(feature = "alloc")]
+    use alloc::vec::Vec;
+
+    #[cfg(feature = "alloc")]
+    use crate::OwnedBitmap;
     use crate::id::IntoId;
     use crate::{DecodeUnsized, Fraction, Id, Rectangle};
 
@@ -14,6 +37,14 @@ mod sealed {
     impl Sealed for f64 {}
     impl Sealed for Rectangle {}
     impl Sealed for Fraction {}
+    #[cfg(feature = "alloc")]
+    impl Sealed for CString {}
+    #[cfg(feature = "alloc")]
+    impl Sealed for String {}
+    #[cfg(feature = "alloc")]
+    impl Sealed for Vec<u8> {}
+    #[cfg(feature = "alloc")]
+    impl Sealed for OwnedBitmap {}
     impl<'de, E> Sealed for &E where E: ?Sized + DecodeUnsized<'de> {}
 }
 
@@ -29,7 +60,7 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 
     /// Read the content of a type.
     #[doc(hidden)]
-    fn read_content(reader: impl Reader<'de>) -> Result<Self, Error>;
+    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error>;
 }
 
 /// [`Decode`] implementation for `i32`.
@@ -68,7 +99,7 @@ impl<'de> Decode<'de> for bool {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(value != 0)
     }
@@ -113,7 +144,7 @@ where
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(Id(I::from_id(value)))
     }
@@ -155,7 +186,7 @@ impl<'de> Decode<'de> for i32 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(value.cast_signed())
     }
@@ -185,10 +216,7 @@ impl<'de> Decode<'de> for i64 {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::LONG if size == 8 => {
-                let value = reader.read_u64()?.cast_signed();
-                Ok(value)
-            }
+            Type::LONG if size == 8 => Ok(reader.read::<u64>()?.cast_signed()),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::LONG,
                 actual: ty,
@@ -197,8 +225,8 @@ impl<'de> Decode<'de> for i64 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
-        Ok(reader.read_u64()?.cast_signed())
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+        Ok(reader.read::<u64>()?.cast_signed())
     }
 }
 
@@ -238,7 +266,7 @@ impl<'de> Decode<'de> for f32 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.array()?;
         Ok(f32::from_bits(value))
     }
@@ -269,7 +297,7 @@ impl<'de> Decode<'de> for f64 {
 
         match ty {
             Type::DOUBLE if size == 8 => {
-                let value = f64::from_bits(reader.read_u64()?);
+                let value = f64::from_bits(reader.read::<u64>()?);
                 Ok(value)
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -280,8 +308,8 @@ impl<'de> Decode<'de> for f64 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
-        Ok(f64::from_bits(reader.read_u64()?))
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+        Ok(f64::from_bits(reader.read::<u64>()?))
     }
 }
 
@@ -321,7 +349,7 @@ impl<'de> Decode<'de> for Rectangle {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
         let [width, height] = reader.array()?;
         Ok(Rectangle::new(width, height))
     }
@@ -363,8 +391,189 @@ impl<'de> Decode<'de> for Fraction {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
         let [num, denom] = reader.array()?;
         Ok(Fraction::new(num, denom))
+    }
+}
+
+/// Decode an owned c-string.
+///
+/// # Examples
+///
+/// ```
+/// use std::ffi::CString;
+/// use pod::{ArrayBuf, Decoder, Encoder};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut en = Encoder::new(&mut buf);
+///
+/// en.encode_unsized(c"hello world")?;
+///
+/// let mut decoder = Decoder::new(buf.as_reader_slice());
+/// assert_eq!(decoder.decode::<CString>()?.as_c_str(), c"hello world");
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[cfg(feature = "alloc")]
+impl<'de> Decode<'de> for CString {
+    const TYPE: Type = Type::STRING;
+
+    #[inline]
+    fn decode(reader: impl Reader<'de>) -> Result<Self, Error> {
+        CStr::decode_unsized(reader, CStrVisitor)
+    }
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+        CStr::read_content(reader, CStrVisitor, size)
+    }
+}
+
+#[cfg(feature = "alloc")]
+struct CStrVisitor;
+
+#[cfg(feature = "alloc")]
+impl<'de> Visitor<'de, CStr> for CStrVisitor {
+    type Ok = CString;
+
+    #[inline]
+    fn visit_ref(self, value: &CStr) -> Result<Self::Ok, Error> {
+        Ok(value.to_owned())
+    }
+}
+
+/// Decode an owned [`String`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Decoder, Encoder};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut en = Encoder::new(&mut buf);
+///
+/// en.encode_unsized("hello world")?;
+/// en.encode_unsized("this is right")?;
+///
+/// let mut decoder = Decoder::new(buf.as_reader_slice());
+/// assert_eq!(decoder.decode::<String>()?.as_str(), "hello world");
+/// assert_eq!(decoder.decode::<String>()?.as_str(), "this is right");
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[cfg(feature = "alloc")]
+impl<'de> Decode<'de> for String {
+    const TYPE: Type = Type::STRING;
+
+    #[inline]
+    fn decode(reader: impl Reader<'de>) -> Result<Self, Error> {
+        str::decode_unsized(reader, StrVisitor)
+    }
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+        str::read_content(reader, StrVisitor, size)
+    }
+}
+
+#[cfg(feature = "alloc")]
+struct StrVisitor;
+
+#[cfg(feature = "alloc")]
+impl<'de> Visitor<'de, str> for StrVisitor {
+    type Ok = String;
+
+    #[inline]
+    fn visit_ref(self, value: &str) -> Result<Self::Ok, Error> {
+        Ok(value.to_owned())
+    }
+}
+
+/// Decode an owned vector of bytes [`Vec<u8>`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Decoder, Encoder};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut en = Encoder::new(&mut buf);
+///
+/// en.encode(*b"hello world")?;
+/// en.encode(*b"this is right")?;
+///
+/// let mut decoder = Decoder::new(buf.as_reader_slice());
+/// assert_eq!(decoder.decode::<Vec<u8>>()?.as_slice(), b"hello world");
+/// assert_eq!(decoder.decode::<Vec<u8>>()?.as_slice(), b"this is right");
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[cfg(feature = "alloc")]
+impl<'de> Decode<'de> for Vec<u8> {
+    const TYPE: Type = Type::BYTES;
+
+    #[inline]
+    fn decode(reader: impl Reader<'de>) -> Result<Self, Error> {
+        <[u8]>::decode_unsized(reader, BytesVisitor)
+    }
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+        <[u8]>::read_content(reader, BytesVisitor, size)
+    }
+}
+
+#[cfg(feature = "alloc")]
+struct BytesVisitor;
+
+#[cfg(feature = "alloc")]
+impl<'de> Visitor<'de, [u8]> for BytesVisitor {
+    type Ok = Vec<u8>;
+
+    #[inline]
+    fn visit_ref(self, value: &[u8]) -> Result<Self::Ok, Error> {
+        Ok(value.to_owned())
+    }
+}
+
+/// Decode an owned [`OwnedBitmap`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Bitmap, Decoder, Encoder, OwnedBitmap};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut en = Encoder::new(&mut buf);
+///
+/// en.encode_unsized(Bitmap::new(b"hello world"))?;
+///
+/// let mut decoder = Decoder::new(buf.as_reader_slice());
+/// assert_eq!(decoder.decode::<OwnedBitmap>()?.as_bytes(), b"hello world");
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[cfg(feature = "alloc")]
+impl<'de> Decode<'de> for OwnedBitmap {
+    const TYPE: Type = Type::BYTES;
+
+    #[inline]
+    fn decode(reader: impl Reader<'de>) -> Result<Self, Error> {
+        Bitmap::decode_unsized(reader, BitmapVisitor)
+    }
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+        Bitmap::read_content(reader, BitmapVisitor, size)
+    }
+}
+
+#[cfg(feature = "alloc")]
+struct BitmapVisitor;
+
+#[cfg(feature = "alloc")]
+impl<'de> Visitor<'de, Bitmap> for BitmapVisitor {
+    type Ok = OwnedBitmap;
+
+    #[inline]
+    fn visit_ref(self, value: &Bitmap) -> Result<Self::Ok, Error> {
+        Ok(value.to_owned())
     }
 }

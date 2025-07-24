@@ -1,5 +1,4 @@
 use core::mem::MaybeUninit;
-use core::slice;
 
 use crate::utils::{Align, WordAligned};
 use crate::visitor::Visitor;
@@ -29,24 +28,6 @@ pub trait Reader<'de>: self::sealed::Sealed {
 
     /// Peek words into the provided buffer.
     fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error>;
-
-    /// Peek words into the provided buffer.
-    #[inline]
-    fn read_words(&mut self, out: &mut [u32]) -> Result<(), Error> {
-        let base = out.as_mut_ptr();
-        let len = out.len();
-        // SAFETY: An initialized slice can always be treated as an uninitialized slice of the same length.
-        let out = unsafe { slice::from_raw_parts_mut(base.cast(), len) };
-        self.read_words_uninit(out)
-    }
-
-    /// Read a `u64` value from the reader.
-    fn read_u64(&mut self) -> Result<u64, Error> {
-        let mut out = Align::<u64>::uninit();
-        self.read_words_uninit(out.as_mut_slice())?;
-        // SAFETY: The slice is guaranteed to be 2 elements u64 long.
-        Ok(unsafe { out.assume_init() })
-    }
 
     /// Read the given number of bytes from the input.
     fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
@@ -113,16 +94,6 @@ where
     #[inline]
     fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
         (**self).read_words_uninit(out)
-    }
-
-    #[inline]
-    fn read_words(&mut self, out: &mut [u32]) -> Result<(), Error> {
-        (**self).read_words(out)
-    }
-
-    #[inline]
-    fn read_u64(&mut self) -> Result<u64, Error> {
-        (**self).read_u64()
     }
 
     #[inline]

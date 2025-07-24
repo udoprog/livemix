@@ -46,7 +46,7 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
     }
 
     #[doc(hidden)]
-    fn read_content<V>(reader: impl Reader<'de>, size: usize, visitor: V) -> Result<V::Ok, Error>
+    fn read_content<V>(reader: impl Reader<'de>, visitor: V, size: usize) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>;
 }
@@ -79,7 +79,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::STRING => CStr::read_content(reader, size as usize, visitor),
+            Type::STRING => CStr::read_content(reader, visitor, size as usize),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -90,8 +90,8 @@ impl<'de> DecodeUnsized<'de> for CStr {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de>,
-        size: usize,
         visitor: V,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -142,8 +142,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
 /// encoder.encode_unsized("hello world")?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &str = de.decode_borrowed()?;
-/// assert_eq!(bytes, "hello world");
+/// assert_eq!(de.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for str {
@@ -157,7 +156,7 @@ impl<'de> DecodeUnsized<'de> for str {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::STRING => str::read_content(reader, size as usize, visitor),
+            Type::STRING => str::read_content(reader, visitor, size as usize),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -168,8 +167,8 @@ impl<'de> DecodeUnsized<'de> for str {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de>,
-        size: usize,
         visitor: V,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -209,8 +208,7 @@ impl<'de> DecodeUnsized<'de> for str {
 /// encoder.encode_unsized(&b"hello world"[..])?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &[u8] = de.decode_borrowed()?;
-/// assert_eq!(bytes, b"hello world");
+/// assert_eq!(de.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for [u8] {
@@ -224,7 +222,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::BYTES => <[u8]>::read_content(reader, size as usize, visitor),
+            Type::BYTES => <[u8]>::read_content(reader, visitor, size as usize),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BYTES,
                 actual: ty,
@@ -235,8 +233,8 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de>,
-        size: usize,
         visitor: V,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -257,8 +255,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 /// encoder.encode_unsized(Bitmap::new(b"asdfasdf"))?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bitmap: &Bitmap = de.decode_borrowed()?;
-/// assert_eq!(bitmap, b"asdfasdf");
+/// assert_eq!(de.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for Bitmap {
@@ -272,7 +269,7 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::BITMAP => Bitmap::read_content(reader, size as usize, visitor),
+            Type::BITMAP => Bitmap::read_content(reader, visitor, size as usize),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BITMAP,
                 actual: ty,
@@ -283,8 +280,8 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de>,
-        size: usize,
         visitor: V,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,

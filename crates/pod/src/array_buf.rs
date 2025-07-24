@@ -18,14 +18,14 @@ const DEFAULT_SIZE: usize = 1024;
 /// use pod::{ArrayBuf, Reader, Writer};
 ///
 /// let mut buf = ArrayBuf::<16>::from_slice(&[1, 2, 3, 4]);
-/// assert_eq!(buf.read(), 4);
-/// buf.write_u32(5)?;
+/// assert_eq!(buf.remaining(), 4);
+/// buf.write(&5u32)?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
-/// assert_eq!(buf.read(), 5);
+/// assert_eq!(buf.remaining(), 5);
 /// assert_eq!(buf.array()?, [1]);
 /// assert_eq!(buf.as_slice(), &[2, 3, 4, 5]);
-/// assert_eq!(buf.read_u64()?, 2u64 + (3u64 << 32));
-/// assert_eq!(buf.read(), 2);
+/// assert_eq!(buf.read::<u64>()?, 2u64 + (3u64 << 32));
+/// assert_eq!(buf.remaining(), 2);
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[repr(C, align(8))]
@@ -91,7 +91,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::ArrayBuf;
     ///
     /// let buf = ArrayBuf::from_array([1, 2, 3]);
-    /// assert_eq!(buf.read(), 3);
+    /// assert_eq!(buf.remaining(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
     pub const fn from_array(words: [u32; N]) -> Self {
@@ -125,7 +125,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::ArrayBuf;
     ///
     /// let buf = ArrayBuf::<16>::from_slice(&[1, 2, 3]);
-    /// assert_eq!(buf.read(), 3);
+    /// assert_eq!(buf.remaining(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
     pub const fn from_slice(words: &[u32]) -> Self {
@@ -157,17 +157,17 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::{ArrayBuf, Reader};
     ///
     /// let mut array = ArrayBuf::from_array([1, 2, 3]);
-    /// assert_eq!(array.read(), 3);
+    /// assert_eq!(array.remaining(), 3);
     ///
     /// assert_eq!(array.array()?, [1]);
-    /// assert_eq!(array.read(), 2);
+    /// assert_eq!(array.remaining(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read_u64()?, 2u64 + (3u64 << 32));
-    /// assert_eq!(array.read(), 0);
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(array.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub const fn read(&self) -> usize {
+    pub const fn remaining(&self) -> usize {
         self.write - self.read
     }
 
@@ -179,18 +179,18 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::{ArrayBuf, Reader};
     ///
     /// let mut array = ArrayBuf::<16>::from_slice(&[1, 2, 3]);
-    /// assert_eq!(array.read(), 3);
-    /// assert_eq!(array.write(), 13);
+    /// assert_eq!(array.remaining(), 3);
+    /// assert_eq!(array.remaining_mut(), 13);
     ///
     /// assert_eq!(array.array::<1>()?, [1]);
-    /// assert_eq!(array.read(), 2);
+    /// assert_eq!(array.remaining(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read_u64()?, 2u64 + (3u64 << 32));
-    /// assert_eq!(array.read(), 0);
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(array.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub const fn write(&self) -> usize {
+    pub const fn remaining_mut(&self) -> usize {
         N - self.write
     }
 
@@ -206,17 +206,17 @@ impl<const N: usize> ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::from_array([1, 2, 3]);
     ///
-    /// assert_eq!(buf.read(), 3);
+    /// assert_eq!(buf.remaining(), 3);
     ///
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// assert_eq!(buf.array()?, [1]);
     /// assert_eq!(buf.as_slice(), &[2, 3]);
-    /// buf.clear_read();
+    /// buf.clear_remaining();
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// assert_eq!(buf.array()?, [1]);
     /// buf.clear();
     /// assert_eq!(buf.as_slice(), &[]);
-    /// assert_eq!(buf.write(), 3);
+    /// assert_eq!(buf.remaining_mut(), 3);
     /// # Ok::<_, pod::Error>(())
     #[inline]
     pub fn clear(&mut self) {
@@ -235,18 +235,18 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::{ArrayBuf, Reader, Writer};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// buf.write_u32(42)?;
+    /// buf.write(&42u32)?;
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
     /// assert_eq!(buf.array()?, [42]);
     /// assert_eq!(buf.as_slice(), &[]);
-    /// buf.clear_read();
+    /// buf.clear_remaining();
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
     /// assert_eq!(buf.array()?, [42]);
     /// # Ok::<_, pod::Error>(())
     #[inline]
-    pub fn clear_read(&mut self) {
+    pub fn clear_remaining(&mut self) {
         self.read = 0;
     }
 
@@ -260,14 +260,14 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut buf = ArrayBuf::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
-    /// buf.write_u32(42)?;
+    /// buf.write(&42u32)?;
     /// assert_eq!(buf.as_slice(), &[42]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
     pub fn as_slice(&self) -> &[u32] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
-        unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.read()) }
+        unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.remaining()) }
     }
 
     /// Returns the initialized slice wrapped as a [`Slice`].
@@ -280,9 +280,9 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut buf = ArrayBuf::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
-    /// buf.write_u32(42)?;
-    /// assert_eq!(buf.as_slice(), &[42u32]);
-    /// assert_eq!(buf.as_slice(), &[42u32][..]);
+    /// buf.write(&42u32)?;
+    /// assert_eq!(buf.as_slice(), &[42]);
+    /// assert_eq!(buf.as_slice(), &[42][..]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -568,7 +568,7 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
 
     #[inline]
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u32>]) -> Result<(), Error> {
-        if self.read() < out.len() {
+        if self.remaining() < out.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
 

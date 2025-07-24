@@ -118,7 +118,7 @@ where
         }
 
         self.remaining -= 1;
-        let ok = T::read_content(self.reader.borrow_mut())?;
+        let ok = T::read_content(self.reader.borrow_mut(), self.child_size)?;
         Ok(ok)
     }
 
@@ -169,7 +169,7 @@ where
             }));
         }
 
-        let ok = T::read_content(self.reader.borrow_mut(), self.child_size, visitor)?;
+        let ok = T::read_content(self.reader.borrow_mut(), visitor, self.child_size)?;
         self.remaining -= 1;
         Ok(ok)
     }

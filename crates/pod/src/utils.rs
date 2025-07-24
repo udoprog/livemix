@@ -1,6 +1,15 @@
 use core::mem::MaybeUninit;
 use core::slice;
 
+/// Coerce a value into a slice of words.
+pub(crate) fn as_words<T>(value: &T) -> &[u32]
+where
+    T: WordAligned,
+{
+    // SAFETY: The value must be word-aligned and packed.
+    unsafe { slice::from_raw_parts(value as *const T as *const u32, T::WORD_SIZE) }
+}
+
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
 #[repr(transparent)]

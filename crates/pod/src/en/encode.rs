@@ -13,6 +13,7 @@ mod sealed {
     impl Sealed for f64 {}
     impl Sealed for Rectangle {}
     impl Sealed for Fraction {}
+    impl<const N: usize> Sealed for [u8; N] {}
     impl<E> Sealed for &E where E: ?Sized + EncodeUnsized {}
 }
 
@@ -167,13 +168,13 @@ impl Encode for i64 {
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_words(&[8, Type::LONG.into_u32()])?;
-        writer.write_u64(self.cast_unsigned())?;
+        writer.write(&self.cast_unsigned())?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_u64(self.cast_unsigned())
+        writer.write(&self.cast_unsigned())
     }
 }
 
@@ -239,13 +240,13 @@ impl Encode for f64 {
     #[inline]
     fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_words(&[8, Type::DOUBLE.into_u32()])?;
-        writer.write_u64(self.to_bits())?;
+        writer.write(&self.to_bits())?;
         Ok(())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_u64(self.to_bits())
+        writer.write(&self.to_bits())
     }
 }
 
@@ -319,6 +320,41 @@ impl Encode for Fraction {
     }
 }
 
+/// [`Encode`] a an array of bytes `[u8; N]`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Decoder, Encoder, Fraction};
+///
+/// let mut buf = ArrayBuf::new();
+/// let mut en = Encoder::new(&mut buf);
+///
+/// en.encode(*b"hello world")?;
+///
+/// let mut decoder = Decoder::new(buf.as_reader_slice());
+/// assert_eq!(decoder.decode_borrowed::<[u8]>()?, b"hello world");
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<const N: usize> Encode for [u8; N] {
+    const TYPE: Type = Type::BYTES;
+
+    #[inline]
+    fn size(&self) -> usize {
+        N
+    }
+
+    #[inline]
+    fn encode(&self, writer: impl Writer) -> Result<(), Error> {
+        <[u8]>::encode_unsized(self, writer)
+    }
+
+    #[inline]
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
+        <[u8]>::write_content(self, writer)
+    }
+}
+
 /// [`Encode`] an unsized type through a reference.
 ///
 /// # Examples
@@ -331,8 +367,7 @@ impl Encode for Fraction {
 /// encoder.encode(&b"hello world"[..])?;
 ///
 /// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &[u8] = de.decode_borrowed_bytes()?;
-/// assert_eq!(bytes, b"hello world");
+/// assert_eq!(de.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<T> Encode for &T

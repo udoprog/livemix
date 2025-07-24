@@ -4,7 +4,10 @@ use core::ffi::CStr;
 
 use super::Reader;
 use super::error::ErrorKind;
-use super::{ArrayBuf, Decoder, Encoder, Error, Slice, Type, Writer};
+use super::{
+    ArrayBuf, Bitmap, Decoder, Encoder, Error, Fraction, OwnedBitmap, Rectangle, Slice, Type,
+    Writer,
+};
 
 #[inline]
 fn encode_none() -> Result<Decoder<impl Reader<'static>>, Error> {
@@ -27,7 +30,7 @@ fn test_encode_decode_u64() -> Result<(), Error> {
     }
 
     let mut buf = ArrayBuf::new();
-    buf.write_u64(0x1234567890abcdef)?;
+    buf.write(&0x1234567890abcdefu64)?;
 
     let &[a, b] = buf.as_slice() else {
         panic!();
@@ -43,7 +46,7 @@ fn test_encode_decode_u64() -> Result<(), Error> {
         assert_eq!(0x1234567890abcdefu64, u64_from_array([b, a]));
     }
 
-    assert_eq!(buf.read_u64()?, 0x1234567890abcdef);
+    assert_eq!(buf.read::<u64>()?, 0x1234567890abcdef);
     Ok(())
 }
 
@@ -66,7 +69,7 @@ fn test_slice_underflow() -> Result<(), Error> {
     assert_eq!(buf.array::<1>()?, [1]);
     assert_eq!(buf.array::<1>()?, [2]);
     assert_eq!(
-        buf.read_u64().unwrap_err().kind(),
+        buf.read::<u64>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
     assert_eq!(buf.array::<1>()?, [3]);
@@ -83,7 +86,7 @@ fn test_array_underflow() -> Result<(), Error> {
     assert_eq!(buf.array::<1>()?, [1]);
     assert_eq!(buf.array::<1>()?, [2]);
     assert_eq!(
-        buf.read_u64().unwrap_err().kind(),
+        buf.read::<u64>().unwrap_err().kind(),
         ErrorKind::BufferUnderflow
     );
     assert_eq!(buf.array::<1>()?, [3]);
@@ -103,7 +106,7 @@ fn test_none() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_bool().unwrap_err().kind(),
+        de.decode::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -115,7 +118,7 @@ fn test_bool() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_bool().unwrap_err().kind(),
+        de.decode::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -127,7 +130,7 @@ fn test_int() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_int().unwrap_err().kind(),
+        de.decode::<i32>().unwrap_err().kind(),
         expected(Type::INT, Type::NONE)
     );
 
@@ -139,7 +142,7 @@ fn test_long() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_long().unwrap_err().kind(),
+        de.decode::<i64>().unwrap_err().kind(),
         expected(Type::LONG, Type::NONE)
     );
 
@@ -151,7 +154,7 @@ fn test_float() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_float().unwrap_err().kind(),
+        de.decode::<f32>().unwrap_err().kind(),
         expected(Type::FLOAT, Type::NONE)
     );
 
@@ -163,7 +166,7 @@ fn test_double() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_double().unwrap_err().kind(),
+        de.decode::<f64>().unwrap_err().kind(),
         expected(Type::DOUBLE, Type::NONE)
     );
 
@@ -175,7 +178,7 @@ fn test_string() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_borrowed_c_str().unwrap_err().kind(),
+        de.decode_borrowed::<CStr>().unwrap_err().kind(),
         expected(Type::STRING, Type::NONE)
     );
 
@@ -187,7 +190,7 @@ fn test_bytes() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_borrowed_bytes().unwrap_err().kind(),
+        de.decode_borrowed::<[u8]>().unwrap_err().kind(),
         expected(Type::BYTES, Type::NONE)
     );
 
@@ -199,7 +202,7 @@ fn test_rectangle() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_rectangle().unwrap_err().kind(),
+        de.decode::<Rectangle>().unwrap_err().kind(),
         expected(Type::RECTANGLE, Type::NONE)
     );
 
@@ -211,7 +214,7 @@ fn test_fraction() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_fraction().unwrap_err().kind(),
+        de.decode::<Fraction>().unwrap_err().kind(),
         expected(Type::FRACTION, Type::NONE)
     );
 
@@ -223,14 +226,14 @@ fn test_bitmap() -> Result<(), Error> {
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_borrowed_bitmap().unwrap_err().kind(),
+        de.decode_borrowed::<Bitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
     let mut de = encode_none()?;
 
     assert_eq!(
-        de.decode_owned_bitmap().unwrap_err().kind(),
+        de.decode::<OwnedBitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 

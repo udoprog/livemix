@@ -1,4 +1,5 @@
 use crate::Error;
+use crate::utils::{WordAligned, as_words};
 
 mod sealed {
     use crate::ArrayBuf;
@@ -44,17 +45,13 @@ pub trait Writer: self::sealed::Sealed {
     /// reserved space.
     fn write_words_at(&mut self, pos: Self::Pos, words: &[u32]) -> Result<(), Error>;
 
-    /// Write a `u32` value to the writer.
-    #[inline]
-    fn write_u32(&mut self, value: u32) -> Result<(), Error> {
-        self.write_words(&[value])
-    }
-
     /// Write a `u64` value to the writer.
     #[inline]
-    fn write_u64(&mut self, value: u64) -> Result<(), Error> {
-        let [a, b] = unsafe { (&value as *const u64).cast::<[u32; 2]>().read() };
-        self.write_words(&[a, b])
+    fn write<T>(&mut self, value: &T) -> Result<(), Error>
+    where
+        T: WordAligned,
+    {
+        self.write_words(as_words(value))
     }
 
     /// Write bytes to the writer.
@@ -100,16 +97,6 @@ where
     #[inline]
     fn write_words_at(&mut self, pos: Self::Pos, value: &[u32]) -> Result<(), Error> {
         (**self).write_words_at(pos, value)
-    }
-
-    #[inline]
-    fn write_u32(&mut self, value: u32) -> Result<(), Error> {
-        (**self).write_u32(value)
-    }
-
-    #[inline]
-    fn write_u64(&mut self, value: u64) -> Result<(), Error> {
-        (**self).write_u64(value)
     }
 
     #[inline]

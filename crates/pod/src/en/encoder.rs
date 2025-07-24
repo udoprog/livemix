@@ -1,8 +1,6 @@
-use core::ffi::CStr;
-
 use crate::error::ErrorKind;
 use crate::id::IntoId;
-use crate::{Bitmap, Error, Fraction, Id, Rectangle, Type, Writer};
+use crate::{Error, Id, Type, Writer};
 
 use super::{Encode, EncodeArray, EncodeUnsized};
 
@@ -88,23 +86,6 @@ where
         Ok(())
     }
 
-    /// Encode a `bool` value.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_bool(true)?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_bool(&mut self, value: bool) -> Result<(), Error> {
-        value.encode(self.w.borrow_mut())
-    }
-
     /// Encode an `id` value.
     ///
     /// # Examples
@@ -121,165 +102,6 @@ where
     #[inline]
     pub fn encode_id(&mut self, value: impl IntoId) -> Result<(), Error> {
         Id(value).encode(self.w.borrow_mut())
-    }
-
-    /// Encode a signed 32-bit integer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_int(-42)?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_int(&mut self, value: i32) -> Result<(), Error> {
-        value.encode(self.w.borrow_mut())
-    }
-
-    /// Encode a signed 64-bit integer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_long(-42)?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_long(&mut self, value: i64) -> Result<(), Error> {
-        value.encode(self.w.borrow_mut())
-    }
-
-    /// Encode a signed 32-bit float.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_float(-42.42)?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_float(&mut self, value: f32) -> Result<(), Error> {
-        value.encode(self.w.borrow_mut())
-    }
-
-    /// Encode a signed 64-bit float.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_double(-42.42)?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_double(&mut self, value: f64) -> Result<(), Error> {
-        value.encode(self.w.borrow_mut())
-    }
-
-    /// Encode a null-terminated C-string.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use core::ffi::CStr;
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_c_str(c"hello world")?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_c_str(&mut self, value: &CStr) -> Result<(), Error> {
-        value.encode_unsized(self.w.borrow_mut())
-    }
-
-    /// Encode a UTF-8 string.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_str("hello world")?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_str(&mut self, value: &str) -> Result<(), Error> {
-        value.encode_unsized(self.w.borrow_mut())
-    }
-
-    /// Encode bytes.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_bytes(b"hello world")?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_bytes(&mut self, value: &[u8]) -> Result<(), Error> {
-        value.encode_unsized(self.w.borrow_mut())
-    }
-
-    /// Encode a rectangle.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder, Rectangle};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_rectangle(Rectangle::new(2, 3))?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_rectangle(&mut self, rectangle: Rectangle) -> Result<(), Error> {
-        rectangle.encode(self.w.borrow_mut())
-    }
-
-    /// Encode a fraction.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Encoder, Fraction};
-    ///
-    /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// encoder.encode_fraction(Fraction::new(2, 3))?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn encode_fraction(&mut self, fraction: Fraction) -> Result<(), Error> {
-        fraction.encode(self.w.borrow_mut())
-    }
-
-    #[inline]
-    pub fn encode_bitmap(&mut self, value: &Bitmap) -> Result<(), Error> {
-        value.encode_unsized(self.w.borrow_mut())
     }
 
     /// Encode an array with the given type.
