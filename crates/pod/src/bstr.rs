@@ -19,7 +19,7 @@ impl fmt::Debug for BStr {
             write!(f, "{}", chunk.valid())?;
 
             for byte in chunk.invalid() {
-                write!(f, "\\x{:02x}", byte)?;
+                write!(f, "\\x{byte:02x}")?;
             }
         }
 

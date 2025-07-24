@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
 use crate::{Bitmap, DecodeUnsized, OwnedBitmap, Visitor};
-use crate::{Error, Fraction, Id, IntoId, Reader, Rectangle, Type};
+use crate::{Error, Fraction, Id, IntoId, Pointer, Reader, Rectangle, Type, utils::WordBytes};
 
 pub(crate) mod sealed {
     #[cfg(feature = "alloc")]
@@ -25,7 +25,7 @@ pub(crate) mod sealed {
     #[cfg(feature = "alloc")]
     use crate::OwnedBitmap;
     use crate::id::IntoId;
-    use crate::{DecodeUnsized, Fraction, Id, Rectangle};
+    use crate::{DecodeUnsized, Fraction, Id, Pointer, Rectangle};
 
     pub trait Sealed {}
     impl Sealed for bool {}
@@ -44,6 +44,7 @@ pub(crate) mod sealed {
     impl Sealed for Vec<u8> {}
     #[cfg(feature = "alloc")]
     impl Sealed for OwnedBitmap {}
+    impl Sealed for Pointer {}
     impl<'de, E> Sealed for &E where E: ?Sized + DecodeUnsized<'de> {}
 }
 
@@ -210,7 +211,7 @@ impl<'de> Decode<'de> for f64 {
     }
 }
 
-/// [`Decode`] implementation for `Rectangle`.
+/// [`Decode`] implementation for [`Rectangle`].
 ///
 /// # Examples
 ///
@@ -235,7 +236,7 @@ impl<'de> Decode<'de> for Rectangle {
     }
 }
 
-/// [`Decode`] a [`Fraction`].
+/// [`Decode`] implementation for a [`Fraction`].
 ///
 /// # Examples
 ///
@@ -415,5 +416,35 @@ impl<'de> Visitor<'de, Bitmap> for BitmapVisitor {
     #[inline]
     fn visit_ref(self, value: &Bitmap) -> Result<Self::Ok, Error> {
         Ok(value.to_owned())
+    }
+}
+
+/// [`Decode`] implementation for [`Pointer`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Pod, Pointer};
+///
+/// let value = 1u32;
+///
+/// let mut buf = ArrayBuf::new();
+/// let pod = Pod::new(&mut buf);
+/// pod.encode(Pointer::new((&value as *const u32).addr()))?;
+///
+/// let pod = Pod::new(buf.as_slice());
+/// assert_eq!(pod.decode::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for Pointer {
+    const TYPE: Type = Type::POINTER;
+
+    #[inline]
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
+        let [ty, _pad, p1, p2] = reader.read::<[u32; 4]>()?;
+
+        let mut bytes = WordBytes::new();
+        bytes.write_half_words([p1, p2]);
+        Ok(Pointer::new_with_type(bytes.read_usize(), ty))
     }
 }

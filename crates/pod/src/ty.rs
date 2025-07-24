@@ -92,5 +92,7 @@ declare! {
         pub const OBJECT = 15;
         #[name = "Sequence", size = None]
         pub const SEQUENCE = 16;
+        #[name = "Pointer", size = Some(16)]
+        pub const POINTER = 17;
     }
 }

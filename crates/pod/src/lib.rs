@@ -64,3 +64,6 @@ pub use self::property::Property;
 
 mod control;
 pub use self::control::Control;
+
+mod pointer;
+pub use self::pointer::Pointer;

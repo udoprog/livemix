@@ -1,8 +1,10 @@
-use crate::{EncodeUnsized, Error, Fraction, Id, IntoId, Rectangle, Type, Writer};
+use crate::{
+    EncodeUnsized, Error, Fraction, Id, IntoId, Pointer, Rectangle, Type, Writer, utils::WordBytes,
+};
 
 pub(crate) mod sealed {
     use crate::id::IntoId;
-    use crate::{EncodeUnsized, Fraction, Id, Rectangle};
+    use crate::{EncodeUnsized, Fraction, Id, Pointer, Rectangle};
 
     pub trait Sealed {}
     impl Sealed for bool {}
@@ -14,6 +16,7 @@ pub(crate) mod sealed {
     impl Sealed for Rectangle {}
     impl Sealed for Fraction {}
     impl<const N: usize> Sealed for [u8; N] {}
+    impl Sealed for Pointer {}
     impl<E> Sealed for &E where E: ?Sized + EncodeUnsized {}
 }
 
@@ -248,7 +251,7 @@ impl Encode for f64 {
     }
 }
 
-/// [`Encode`] implementation for `Rectangle`.
+/// [`Encode`] implementation for [`Rectangle`].
 ///
 /// # Examples
 ///
@@ -347,6 +350,52 @@ impl<const N: usize> Encode for [u8; N] {
     #[inline]
     fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         <[u8]>::write_content(self, writer)
+    }
+}
+
+/// [`Encode`] implementation for [`Pointer`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Pod, Pointer};
+///
+/// let value = 1u32;
+///
+/// let mut buf = ArrayBuf::new();
+/// let pod = Pod::new(&mut buf);
+/// pod.encode(Pointer::new((&value as *const u32).addr()))?;
+///
+/// let pod = Pod::new(buf.as_slice());
+/// assert_eq!(pod.decode::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for Pointer {
+    const TYPE: Type = Type::POINTER;
+
+    #[inline]
+    fn size(&self) -> usize {
+        16
+    }
+
+    #[inline]
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let mut bytes = WordBytes::new();
+        bytes.write_usize(self.pointer());
+
+        writer.write([16, Type::POINTER.into_u32(), self.ty(), 0])?;
+        writer.write_words(bytes.as_slice())?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let mut bytes = WordBytes::new();
+        bytes.write_usize(self.pointer());
+
+        writer.write([self.ty(), 0])?;
+        writer.write_words(bytes.as_slice())?;
+        Ok(())
     }
 }
 

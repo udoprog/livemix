@@ -113,3 +113,46 @@ where
         unsafe { self.0.assume_init() }
     }
 }
+
+#[repr(align(8))]
+pub(crate) struct WordBytes([u8; 16]);
+
+impl WordBytes {
+    pub(crate) fn new() -> Self {
+        // SAFETY: This just constructs an array of uninitialized values.
+        Self([0; 16])
+    }
+
+    /// Write a `usize` value to the lower end of the region.
+    #[inline]
+    pub(crate) fn write_usize(&mut self, value: usize) {
+        // SAFETY: 8-byte alignment ensures that the pointer is valid for
+        // writing.
+        unsafe {
+            self.0.as_mut_ptr().cast::<usize>().write(value);
+        }
+    }
+
+    /// Reading a `usize` value from the lower end of the region..
+    #[inline]
+    pub(crate) fn read_usize(&self) -> usize {
+        // SAFETY: 8-byte alignment ensures that the pointer is valid for
+        // reading.
+        unsafe { self.0.as_ptr().cast::<usize>().read() }
+    }
+
+    /// Write literal half-words to the entirety for the region.
+    #[inline]
+    pub(crate) fn write_half_words(&mut self, value: [u32; 2]) {
+        // SAFETY: The region is valid for writing.
+        unsafe {
+            self.0.as_mut_ptr().cast::<[u32; 2]>().write(value);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn as_slice(&self) -> &[u64] {
+        // SAFETY: Type is always initialized to something valid.
+        unsafe { slice::from_raw_parts(self.0.as_ptr().cast::<u64>(), 2) }
+    }
+}
