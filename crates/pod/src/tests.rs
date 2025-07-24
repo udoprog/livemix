@@ -4,17 +4,14 @@ use core::ffi::CStr;
 
 use super::Reader;
 use super::error::ErrorKind;
-use super::{
-    ArrayBuf, Bitmap, Decoder, Encoder, Error, Fraction, OwnedBitmap, Rectangle, Slice, Type,
-    Writer,
-};
+use super::{ArrayBuf, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Slice, Type, Writer};
 
 #[inline]
-fn encode_none() -> Result<Decoder<impl Reader<'static>>, Error> {
+fn encode_none() -> Result<Pod<impl Reader<'static>>, Error> {
     let mut buf = ArrayBuf::new();
-    let mut en = Encoder::new(&mut buf);
-    en.encode_none()?;
-    Ok(Decoder::new(buf))
+    let mut pod = Pod::new(&mut buf);
+    pod.encode_none()?;
+    Ok(Pod::new(buf))
 }
 
 #[inline]
@@ -53,11 +50,11 @@ fn test_encode_decode_u64() -> Result<(), Error> {
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
     let mut buf = ArrayBuf::<2>::with_size();
-    let mut en = Encoder::new(&mut buf);
+    let mut pod = Pod::new(&mut buf);
 
-    assert!(en.encode_none().is_ok());
+    assert!(pod.encode_none().is_ok());
     assert_eq!(
-        en.encode_none().unwrap_err().kind(),
+        pod.encode_none().unwrap_err().kind(),
         ErrorKind::BufferOverflow
     );
     Ok(())
@@ -99,14 +96,14 @@ fn test_array_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_none() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
-    assert!(de.decode_option()?.is_none());
+    assert!(pod.decode_option()?.is_none());
 
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<bool>().unwrap_err().kind(),
+        pod.decode::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -115,10 +112,10 @@ fn test_none() -> Result<(), Error> {
 
 #[test]
 fn test_bool() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<bool>().unwrap_err().kind(),
+        pod.decode::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -127,10 +124,10 @@ fn test_bool() -> Result<(), Error> {
 
 #[test]
 fn test_int() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<i32>().unwrap_err().kind(),
+        pod.decode::<i32>().unwrap_err().kind(),
         expected(Type::INT, Type::NONE)
     );
 
@@ -139,10 +136,10 @@ fn test_int() -> Result<(), Error> {
 
 #[test]
 fn test_long() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<i64>().unwrap_err().kind(),
+        pod.decode::<i64>().unwrap_err().kind(),
         expected(Type::LONG, Type::NONE)
     );
 
@@ -151,10 +148,10 @@ fn test_long() -> Result<(), Error> {
 
 #[test]
 fn test_float() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<f32>().unwrap_err().kind(),
+        pod.decode::<f32>().unwrap_err().kind(),
         expected(Type::FLOAT, Type::NONE)
     );
 
@@ -163,10 +160,10 @@ fn test_float() -> Result<(), Error> {
 
 #[test]
 fn test_double() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<f64>().unwrap_err().kind(),
+        pod.decode::<f64>().unwrap_err().kind(),
         expected(Type::DOUBLE, Type::NONE)
     );
 
@@ -175,10 +172,10 @@ fn test_double() -> Result<(), Error> {
 
 #[test]
 fn test_string() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode_borrowed::<CStr>().unwrap_err().kind(),
+        pod.decode_borrowed::<CStr>().unwrap_err().kind(),
         expected(Type::STRING, Type::NONE)
     );
 
@@ -187,10 +184,10 @@ fn test_string() -> Result<(), Error> {
 
 #[test]
 fn test_bytes() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode_borrowed::<[u8]>().unwrap_err().kind(),
+        pod.decode_borrowed::<[u8]>().unwrap_err().kind(),
         expected(Type::BYTES, Type::NONE)
     );
 
@@ -199,10 +196,10 @@ fn test_bytes() -> Result<(), Error> {
 
 #[test]
 fn test_rectangle() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<Rectangle>().unwrap_err().kind(),
+        pod.decode::<Rectangle>().unwrap_err().kind(),
         expected(Type::RECTANGLE, Type::NONE)
     );
 
@@ -211,10 +208,10 @@ fn test_rectangle() -> Result<(), Error> {
 
 #[test]
 fn test_fraction() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<Fraction>().unwrap_err().kind(),
+        pod.decode::<Fraction>().unwrap_err().kind(),
         expected(Type::FRACTION, Type::NONE)
     );
 
@@ -223,17 +220,17 @@ fn test_fraction() -> Result<(), Error> {
 
 #[test]
 fn test_bitmap() -> Result<(), Error> {
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode_borrowed::<Bitmap>().unwrap_err().kind(),
+        pod.decode_borrowed::<Bitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
-    let mut de = encode_none()?;
+    let mut pod = encode_none()?;
 
     assert_eq!(
-        de.decode::<OwnedBitmap>().unwrap_err().kind(),
+        pod.decode::<OwnedBitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
@@ -243,8 +240,8 @@ fn test_bitmap() -> Result<(), Error> {
 #[test]
 fn test_array() -> Result<(), Error> {
     let mut buf = ArrayBuf::new();
-    let mut encoder = Encoder::new(&mut buf);
-    let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    let mut pod = Pod::new(&mut buf);
+    let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
 
     array.encode_unsized("foo")?;
     array.encode_unsized("bar")?;
@@ -252,8 +249,8 @@ fn test_array() -> Result<(), Error> {
 
     array.close()?;
 
-    let mut decoder = Decoder::new(buf.as_reader_slice());
-    let mut array = decoder.decode_array()?;
+    let mut pod = Pod::new(buf.as_reader_slice());
+    let mut array = pod.decode_array()?;
 
     assert_eq!(array.len(), 3);
     assert_eq!(array.decode_borrowed::<CStr>()?, c"foo");

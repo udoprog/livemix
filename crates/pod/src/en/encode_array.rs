@@ -1,7 +1,7 @@
 use crate::error::ErrorKind;
 use crate::{Encode, EncodeUnsized, Error, Type, Writer};
 
-/// An encoder for an array.
+/// An pod for an array.
 #[must_use = "Array encoders must be closed to ensure all elements are encoded"]
 pub struct EncodeArray<W>
 where
@@ -18,7 +18,7 @@ impl<W> EncodeArray<W>
 where
     W: Writer,
 {
-    /// Create a new encoder for an array with the given writer and length.
+    /// Create a new pod for an array with the given writer and length.
     #[inline]
     pub(crate) fn new(writer: W, child_size: usize, child_type: Type, pos: W::Pos) -> Self {
         EncodeArray {
@@ -35,11 +35,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_array(Type::INT)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
     /// array.encode(2i32)?;
@@ -78,11 +78,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
     /// array.encode_unsized("bar")?;
@@ -121,11 +121,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
     /// array.encode_unsized("bar")?;

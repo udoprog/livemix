@@ -12,6 +12,9 @@ mod tests;
 pub(crate) const WORD_SIZE: usize = 4;
 pub(crate) const DWORD_SIZE: usize = 8;
 
+mod pod;
+pub use self::pod::Pod;
+
 pub(crate) mod ty;
 pub use self::ty::Type;
 
@@ -21,10 +24,10 @@ pub mod id;
 pub use self::id::{Id, IntoId};
 
 mod en;
-pub use self::en::{Encode, EncodeUnsized, Encoder};
+pub use self::en::{Encode, EncodeUnsized};
 
 mod de;
-pub use self::de::{Decode, DecodeUnsized, Decoder};
+pub use self::de::{Decode, DecodeUnsized};
 
 mod array_buf;
 pub use self::array_buf::ArrayBuf;

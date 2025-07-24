@@ -1,7 +1,7 @@
 use crate::error::ErrorKind;
 use crate::{Decode, DecodeUnsized, Error, Reader, Type, Visitor};
 
-/// A decoder for arrays.
+/// A pod for arrays.
 pub struct DecodeArray<R> {
     reader: R,
     child_type: Type,
@@ -28,17 +28,17 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Decoder, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_array(Type::INT)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
     /// array.close()?;
     ///
-    /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// let mut array = decoder.decode_array()?;
+    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut array = pod.decode_array()?;
     ///
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
@@ -53,16 +53,16 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Decoder, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_array(Type::INT)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.close()?;
     ///
-    /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// let mut array = decoder.decode_array()?;
+    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut array = pod.decode_array()?;
     ///
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -76,11 +76,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Decoder, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_array(Type::INT)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
     /// array.encode(2i32)?;
@@ -88,8 +88,8 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// let mut array = decoder.decode_array()?;
+    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
@@ -127,11 +127,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Decoder, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
     /// array.encode_unsized("bar")?;
@@ -139,8 +139,8 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// let mut array = decoder.decode_array()?;
+    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
@@ -179,11 +179,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Decoder, Encoder, Type};
+    /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut encoder = Encoder::new(&mut buf);
-    /// let mut array = encoder.encode_unsized_array(Type::STRING, 4)?;
+    /// let mut pod = Pod::new(&mut buf);
+    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
     /// array.encode_unsized("bar")?;
@@ -191,8 +191,8 @@ where
     ///
     /// array.close()?;
     ///
-    /// let mut decoder = Decoder::new(buf.as_reader_slice());
-    /// let mut array = decoder.decode_array()?;
+    /// let mut pod = Pod::new(buf.as_reader_slice());
+    /// let mut array = pod.decode_array()?;
     ///
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);

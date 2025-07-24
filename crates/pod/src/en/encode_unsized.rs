@@ -38,15 +38,14 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Encoder, Decoder};
+/// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut encoder = Encoder::new(&mut buf);
-/// encoder.encode_unsized(&b"hello world"[..])?;
+/// let mut pod = Pod::new(&mut buf);
+/// pod.encode_unsized(&b"hello world"[..])?;
 ///
-/// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &[u8] = de.decode_borrowed()?;
-/// assert_eq!(bytes, b"hello world");
+/// let mut pod = Pod::new(buf.as_reader_slice());
+/// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for [u8] {
@@ -80,15 +79,14 @@ impl EncodeUnsized for [u8] {
 ///
 /// ```
 /// use core::ffi::CStr;
-/// use pod::{ArrayBuf, Encoder, Decoder};
+/// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut encoder = Encoder::new(&mut buf);
-/// encoder.encode_unsized(c"hello world")?;
+/// let mut pod = Pod::new(&mut buf);
+/// pod.encode_unsized(c"hello world")?;
 ///
-/// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &CStr = de.decode_borrowed()?;
-/// assert_eq!(bytes, c"hello world");
+/// let mut pod = Pod::new(buf.as_reader_slice());
+/// assert_eq!(pod.decode_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for CStr {
@@ -124,15 +122,14 @@ impl EncodeUnsized for CStr {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Encoder, Decoder};
+/// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut encoder = Encoder::new(&mut buf);
-/// encoder.encode_unsized("hello world")?;
+/// let mut pod = Pod::new(&mut buf);
+/// pod.encode_unsized("hello world")?;
 ///
-/// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bytes: &str = de.decode_borrowed()?;
-/// assert_eq!(bytes, "hello world");
+/// let mut pod = Pod::new(buf.as_reader_slice());
+/// assert_eq!(pod.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for str {
@@ -176,15 +173,14 @@ impl EncodeUnsized for str {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Bitmap, Encoder, Decoder};
+/// use pod::{ArrayBuf, Bitmap, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut encoder = Encoder::new(&mut buf);
-/// encoder.encode_unsized(Bitmap::new(b"asdfasdf"))?;
+/// let mut pod = Pod::new(&mut buf);
+/// pod.encode_unsized(Bitmap::new(b"asdfasdf"))?;
 ///
-/// let mut de = Decoder::new(buf.as_reader_slice());
-/// let bitmap: &Bitmap = de.decode_borrowed()?;
-/// assert_eq!(bitmap, b"asdfasdf");
+/// let mut pod = Pod::new(buf.as_reader_slice());
+/// assert_eq!(pod.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for Bitmap {
