@@ -22,8 +22,16 @@ pub trait Reader<'de>: self::sealed::Sealed {
     where
         Self: 'this;
 
+    /// A clone of the reader.
+    type Clone<'this>: Reader<'this>
+    where
+        Self: 'this;
+
     /// Borrow the current reader mutably.
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
+
+    /// Clone the reader.
+    fn clone_reader(&self) -> Self::Clone<'_>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
@@ -77,9 +85,19 @@ where
     where
         Self: 'this;
 
+    type Clone<'this>
+        = R::Clone<'this>
+    where
+        Self: 'this;
+
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         (**self).borrow_mut()
+    }
+
+    #[inline]
+    fn clone_reader(&self) -> Self::Clone<'_> {
+        (**self).clone_reader()
     }
 
     #[inline]
@@ -107,9 +125,19 @@ impl<'de> Reader<'de> for &'de [u64] {
     where
         Self: 'this;
 
+    type Clone<'this>
+        = &'this [u64]
+    where
+        Self: 'this;
+
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         self
+    }
+
+    #[inline]
+    fn clone_reader(&self) -> Self::Clone<'_> {
+        *self
     }
 
     #[inline]

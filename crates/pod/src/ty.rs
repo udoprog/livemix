@@ -86,5 +86,7 @@ declare! {
         pub const BITMAP = 12;
         #[name = "Array", size = None]
         pub const ARRAY = 13;
+        #[name = "Struct", size = None]
+        pub const STRUCT = 14;
     }
 }

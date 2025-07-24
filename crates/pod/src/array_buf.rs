@@ -523,9 +523,16 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     where
         Self: 'this;
 
+    type Clone<'this> = &'this [u64];
+
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         self
+    }
+
+    #[inline]
+    fn clone_reader(&self) -> Self::Clone<'_> {
+        self.as_slice()
     }
 
     #[inline]

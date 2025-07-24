@@ -1,7 +1,24 @@
 use crate::error::ErrorKind;
-use crate::{Encode, EncodeUnsized, Error, Type, Writer};
+use crate::{Encode, EncodeUnsized, Error, Type, WORD_SIZE, Writer};
 
-/// An pod for an array.
+/// An encoder for an array.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ArrayBuf, Pod, Type};
+///
+/// let mut buf = ArrayBuf::new();
+/// let pod = Pod::new(&mut buf);
+/// let mut array = pod.encode_array(Type::INT)?;
+///
+/// array.encode(1i32)?;
+/// array.encode(2i32)?;
+/// array.encode(3i32)?;
+///
+/// array.close()?;
+/// # Ok::<_, pod::Error>(())
+/// ```
 #[must_use = "Array encoders must be closed to ensure all elements are encoded"]
 pub struct EncodeArray<W>
 where
@@ -38,7 +55,7 @@ where
     /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut pod = Pod::new(&mut buf);
+    /// let pod = Pod::new(&mut buf);
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
     /// array.encode(1i32)?;
@@ -81,7 +98,7 @@ where
     /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut pod = Pod::new(&mut buf);
+    /// let pod = Pod::new(&mut buf);
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
@@ -124,7 +141,7 @@ where
     /// use pod::{ArrayBuf, Pod, Type};
     ///
     /// let mut buf = ArrayBuf::new();
-    /// let mut pod = Pod::new(&mut buf);
+    /// let pod = Pod::new(&mut buf);
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// array.encode_unsized("foo")?;
@@ -135,7 +152,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn close(mut self) -> Result<(), Error> {
-        let len = self.writer.distance_from(self.pos) - 8;
+        let len = self.writer.distance_from(self.pos) - WORD_SIZE;
 
         let Ok(len) = u32::try_from(len) else {
             return Err(Error::new(ErrorKind::SizeOverflow));

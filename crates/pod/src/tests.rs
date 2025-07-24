@@ -17,8 +17,7 @@ where
 #[inline]
 fn encode_none() -> Result<Pod<impl Reader<'static>>, Error> {
     let mut buf = ArrayBuf::new();
-    let mut pod = Pod::new(&mut buf);
-    pod.encode_none()?;
+    Pod::new(&mut buf).encode_none()?;
     Ok(Pod::new(buf))
 }
 
@@ -53,9 +52,11 @@ fn test_encode_decode_u64() -> Result<(), Error> {
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
     let mut buf = ArrayBuf::<1>::with_size();
-    let mut pod = Pod::new(&mut buf);
 
+    let pod = Pod::new(&mut buf);
     assert!(pod.encode_none().is_ok());
+
+    let pod = Pod::new(&mut buf);
     assert_eq!(
         pod.encode_none().unwrap_err().kind(),
         ErrorKind::BufferOverflow
@@ -99,11 +100,11 @@ fn test_array_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_none() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert!(pod.decode_option()?.is_none());
 
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<bool>().unwrap_err().kind(),
@@ -115,7 +116,7 @@ fn test_none() -> Result<(), Error> {
 
 #[test]
 fn test_bool() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<bool>().unwrap_err().kind(),
@@ -127,7 +128,7 @@ fn test_bool() -> Result<(), Error> {
 
 #[test]
 fn test_int() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<i32>().unwrap_err().kind(),
@@ -139,7 +140,7 @@ fn test_int() -> Result<(), Error> {
 
 #[test]
 fn test_long() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<i64>().unwrap_err().kind(),
@@ -151,7 +152,7 @@ fn test_long() -> Result<(), Error> {
 
 #[test]
 fn test_float() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<f32>().unwrap_err().kind(),
@@ -163,7 +164,7 @@ fn test_float() -> Result<(), Error> {
 
 #[test]
 fn test_double() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<f64>().unwrap_err().kind(),
@@ -175,7 +176,7 @@ fn test_double() -> Result<(), Error> {
 
 #[test]
 fn test_string() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode_borrowed::<CStr>().unwrap_err().kind(),
@@ -187,7 +188,7 @@ fn test_string() -> Result<(), Error> {
 
 #[test]
 fn test_bytes() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode_borrowed::<[u8]>().unwrap_err().kind(),
@@ -199,7 +200,7 @@ fn test_bytes() -> Result<(), Error> {
 
 #[test]
 fn test_rectangle() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<Rectangle>().unwrap_err().kind(),
@@ -211,7 +212,7 @@ fn test_rectangle() -> Result<(), Error> {
 
 #[test]
 fn test_fraction() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<Fraction>().unwrap_err().kind(),
@@ -223,14 +224,14 @@ fn test_fraction() -> Result<(), Error> {
 
 #[test]
 fn test_bitmap() -> Result<(), Error> {
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode_borrowed::<Bitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
-    let mut pod = encode_none()?;
+    let pod = encode_none()?;
 
     assert_eq!(
         pod.decode::<OwnedBitmap>().unwrap_err().kind(),
@@ -243,7 +244,7 @@ fn test_bitmap() -> Result<(), Error> {
 #[test]
 fn test_array() -> Result<(), Error> {
     let mut buf = ArrayBuf::new();
-    let mut pod = Pod::new(&mut buf);
+    let pod = Pod::new(&mut buf);
     let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
 
     array.encode_unsized("foo")?;
@@ -252,7 +253,7 @@ fn test_array() -> Result<(), Error> {
 
     array.close()?;
 
-    let mut pod = Pod::new(buf.as_slice());
+    let pod = Pod::new(buf.as_slice());
     let mut array = pod.decode_array()?;
 
     assert_eq!(array.len(), 3);

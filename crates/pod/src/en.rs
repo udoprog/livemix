@@ -6,3 +6,6 @@ pub use self::encode::Encode;
 
 mod encode_array;
 pub use self::encode_array::EncodeArray;
+
+mod encode_struct;
+pub use self::encode_struct::EncodeStruct;

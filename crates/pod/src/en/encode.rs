@@ -40,10 +40,10 @@ pub trait Encode: Sized + self::sealed::Sealed {
 /// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(true)?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<bool>()?, true);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -80,10 +80,10 @@ impl Encode for bool {
 /// use pod::id::{Id, MediaSubType};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(Id(MediaSubType::Opus))?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// let Id(value) = pod.decode::<Id<MediaSubType>>()?;
 /// assert_eq!(value, MediaSubType::Opus);
 /// # Ok::<_, pod::Error>(())
@@ -118,10 +118,10 @@ where
 /// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(10i32)?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i32>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -152,10 +152,10 @@ impl Encode for i32 {
 /// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(10i64)?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -188,10 +188,10 @@ impl Encode for i64 {
 /// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(42.42f32)?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -222,10 +222,10 @@ impl Encode for f32 {
 /// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(42.42f64)?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -258,11 +258,10 @@ impl Encode for f64 {
 /// use pod::{ArrayBuf, Pod, Rectangle};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
-///
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(Rectangle::new(100, 200))?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -293,11 +292,10 @@ impl Encode for Rectangle {
 /// use pod::{ArrayBuf, Pod, Fraction};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
-///
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(Fraction::new(800, 600))?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -328,11 +326,10 @@ impl Encode for Fraction {
 /// use pod::{ArrayBuf, Pod, Fraction};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
-///
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(*b"hello world")?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -363,10 +360,10 @@ impl<const N: usize> Encode for [u8; N] {
 /// use pod::{ArrayBuf, Pod};
 ///
 /// let mut buf = ArrayBuf::new();
-/// let mut pod = Pod::new(&mut buf);
+/// let pod = Pod::new(&mut buf);
 /// pod.encode(&b"hello world"[..])?;
 ///
-/// let mut pod = Pod::new(buf.as_slice());
+/// let pod = Pod::new(buf.as_slice());
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```

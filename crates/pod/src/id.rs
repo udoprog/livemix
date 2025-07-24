@@ -79,6 +79,7 @@ declare_enum! {
 
 mod sealed {
     pub trait Sealed {}
+    impl Sealed for u32 {}
 }
 
 /// Helper trait to convert a type into an `Id`.
@@ -92,6 +93,18 @@ pub trait IntoId: Copy + self::sealed::Sealed {
     fn from_id(id: u32) -> Self
     where
         Self: Sized;
+}
+
+impl IntoId for u32 {
+    #[inline]
+    fn into_id(self) -> u32 {
+        self
+    }
+
+    #[inline]
+    fn from_id(id: u32) -> Self {
+        id
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

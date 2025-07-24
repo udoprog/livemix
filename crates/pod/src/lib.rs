@@ -14,6 +14,9 @@ pub(crate) const WORD_SIZE: usize = 8;
 mod pod;
 pub use self::pod::Pod;
 
+mod typed_pod;
+pub use self::typed_pod::TypedPod;
+
 pub(crate) mod ty;
 pub use self::ty::Type;
 
