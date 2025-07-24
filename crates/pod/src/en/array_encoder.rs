@@ -152,9 +152,11 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn close(mut self) -> Result<(), Error> {
-        let len = self.writer.distance_from(self.pos) - WORD_SIZE;
-
-        let Ok(len) = u32::try_from(len) else {
+        let Some(len) = self
+            .writer
+            .distance_from(self.pos)
+            .and_then(|v| v.checked_sub(WORD_SIZE))
+        else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 

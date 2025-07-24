@@ -60,7 +60,7 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 
     /// Read the content of a type.
     #[doc(hidden)]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error>;
+    fn read_content(reader: impl Reader<'de>, size: u32) -> Result<Self, Error>;
 }
 
 /// [`Decode`] implementation for `i32`.
@@ -99,7 +99,7 @@ impl<'de> Decode<'de> for bool {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         let [value, _pad] = reader.read::<[u32; 2]>()?;
         Ok(value != 0)
     }
@@ -143,7 +143,7 @@ where
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         let [value, _pad] = reader.read()?;
         Ok(Id(I::from_id(value)))
     }
@@ -184,7 +184,7 @@ impl<'de> Decode<'de> for i32 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         let [value, _pad] = reader.read::<[u32; 2]>()?;
         Ok(value.cast_signed())
     }
@@ -222,7 +222,7 @@ impl<'de> Decode<'de> for i64 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         Ok(reader.read::<u64>()?.cast_signed())
     }
 }
@@ -262,7 +262,7 @@ impl<'de> Decode<'de> for f32 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         let [value, _pad] = reader.read()?;
         Ok(f32::from_bits(value))
     }
@@ -303,7 +303,7 @@ impl<'de> Decode<'de> for f64 {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         Ok(f64::from_bits(reader.read::<u64>()?))
     }
 }
@@ -343,7 +343,7 @@ impl<'de> Decode<'de> for Rectangle {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         let [width, height] = reader.read()?;
         Ok(Rectangle::new(width, height))
     }
@@ -384,7 +384,7 @@ impl<'de> Decode<'de> for Fraction {
     }
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
         let [num, denom] = reader.read()?;
         Ok(Fraction::new(num, denom))
     }
@@ -416,7 +416,7 @@ impl<'de> Decode<'de> for CString {
     }
 
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, size: u32) -> Result<Self, Error> {
         CStr::read_content(reader, CStrVisitor, size)
     }
 }
@@ -462,7 +462,7 @@ impl<'de> Decode<'de> for String {
     }
 
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, size: u32) -> Result<Self, Error> {
         str::read_content(reader, StrVisitor, size)
     }
 }
@@ -507,7 +507,7 @@ impl<'de> Decode<'de> for Vec<u8> {
     }
 
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, size: u32) -> Result<Self, Error> {
         <[u8]>::read_content(reader, BytesVisitor, size)
     }
 }
@@ -550,7 +550,7 @@ impl<'de> Decode<'de> for OwnedBitmap {
     }
 
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, size: u32) -> Result<Self, Error> {
         Bitmap::read_content(reader, BitmapVisitor, size)
     }
 }

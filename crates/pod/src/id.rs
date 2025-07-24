@@ -102,7 +102,7 @@ macro_rules! declare_id {
             }
 
             #[inline]
-            fn read_content(reader: impl $crate::Reader<'de>, len: usize) -> Result<Self, $crate::Error> {
+            fn read_content(reader: impl $crate::Reader<'de>, len: u32) -> Result<Self, $crate::Error> {
                 let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, len)?;
                 Ok(id)
             }

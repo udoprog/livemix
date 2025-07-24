@@ -1,26 +1,45 @@
 use crate::error::ErrorKind;
-use crate::{Decode, DecodeUnsized, Error, Reader, Type, TypedPod, Visitor};
+use crate::{Decode, DecodeUnsized, Error, Reader, Type, TypedPod, Visitor, WORD_SIZE};
 
 /// A decoder for an array.
 pub struct ArrayDecoder<R> {
     reader: R,
     child_size: u32,
     child_type: Type,
-    remaining: usize,
+    remaining: u32,
 }
 
 impl<'de, R> ArrayDecoder<R>
 where
     R: Reader<'de>,
 {
-    #[inline]
-    pub(crate) fn new(reader: R, child_size: u32, child_type: Type, remaining: usize) -> Self {
-        Self {
+    pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
+        let (child_size, child_type) = reader.header()?;
+
+        let Some(size) = size.checked_sub(WORD_SIZE) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let remaining = 'out: {
+            if size == 0 {
+                break 'out 0;
+            }
+
+            let padded_child_size = child_size.next_multiple_of(WORD_SIZE);
+
+            let Some(size) = size.checked_div(padded_child_size) else {
+                break 'out 0;
+            };
+
+            size
+        };
+
+        Ok(Self {
             reader,
-            child_type,
             child_size,
+            child_type,
             remaining,
-        }
+        })
     }
 
     /// Return the type of the child element.
@@ -49,7 +68,7 @@ where
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> u32 {
         self.remaining
     }
 
@@ -113,11 +132,7 @@ where
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
 
-        let Ok(child_size) = usize::try_from(self.child_size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let tail = self.reader.split(child_size)?;
+        let tail = self.reader.split(self.child_size)?;
 
         let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
@@ -170,12 +185,8 @@ where
             }));
         }
 
-        let Ok(child_size) = usize::try_from(self.child_size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
         self.remaining -= 1;
-        let ok = T::read_content(self.reader.borrow_mut(), child_size)?;
+        let ok = T::read_content(self.reader.borrow_mut(), self.child_size)?;
         Ok(ok)
     }
 
@@ -226,11 +237,7 @@ where
             }));
         }
 
-        let Ok(child_size) = usize::try_from(self.child_size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let ok = T::read_content(self.reader.borrow_mut(), visitor, child_size)?;
+        let ok = T::read_content(self.reader.borrow_mut(), visitor, self.child_size)?;
         self.remaining -= 1;
         Ok(ok)
     }

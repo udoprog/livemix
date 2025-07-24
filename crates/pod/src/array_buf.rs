@@ -444,8 +444,11 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
-        (self.write - pos.write) * WORD_SIZE
+    fn distance_from(&self, pos: Self::Pos) -> Option<u32> {
+        u32::try_from(self.write)
+            .ok()?
+            .checked_sub(u32::try_from(pos.write).ok()?)?
+            .checked_mul(WORD_SIZE)
     }
 
     #[inline]
@@ -497,7 +500,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let req = full.div_ceil(WORD_SIZE);
+        let req = full.div_ceil(WORD_SIZE as usize);
         let write = self.write.wrapping_add(req);
 
         if !(self.write..=N).contains(&write) {
@@ -508,7 +511,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         unsafe {
             let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-            let pad = WORD_SIZE - bytes.len() % WORD_SIZE;
+            let pad = WORD_SIZE as usize - bytes.len() % WORD_SIZE as usize;
             ptr.add(bytes.len()).write_bytes(0, pad);
         }
 
@@ -536,8 +539,13 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error> {
+    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
         let at = at.div_ceil(WORD_SIZE);
+
+        let Ok(at) = usize::try_from(at) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         let read = self.read.wrapping_add(at);
 
         if read > self.write || read < self.read {
@@ -590,11 +598,16 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
-    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, [u8]>,
     {
-        let req = len.div_ceil(WORD_SIZE);
+        let Ok(len) = usize::try_from(len) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let req = len.div_ceil(WORD_SIZE as usize);
+
         let read = self.read.wrapping_add(req);
 
         if read > self.write || read < self.read {

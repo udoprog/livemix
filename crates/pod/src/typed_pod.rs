@@ -63,6 +63,7 @@ impl<B> TypedPod<B> {
     /// assert_eq!(pod.size(), 4);
     /// # Ok::<_, pod::Error>(())
     /// ```
+    #[inline]
     pub const fn ty(&self) -> Type {
         self.ty
     }
@@ -83,15 +84,15 @@ impl<B> TypedPod<B> {
     /// assert_eq!(pod.size(), 4);
     /// # Ok::<_, pod::Error>(())
     /// ```
+    #[inline]
     pub const fn size(&self) -> u32 {
         self.size
     }
 
     /// Get the size of the padded pod including the header.
+    #[inline]
     pub(crate) fn size_with_header(&self) -> Option<u32> {
-        self.size
-            .next_multiple_of(WORD_SIZE as u32)
-            .checked_add(WORD_SIZE as u32)
+        self.size.next_multiple_of(WORD_SIZE).checked_add(WORD_SIZE)
     }
 }
 
@@ -113,6 +114,7 @@ where
     /// assert_eq!(pod.decode::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
+    #[inline]
     pub fn from_reader(mut buf: B) -> Result<Self, Error> {
         let (size, ty) = buf.header()?;
         Ok(TypedPod { size, ty, buf })
@@ -145,11 +147,7 @@ where
             }));
         }
 
-        let Ok(size) = usize::try_from(self.size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        T::read_content(self.buf, size)
+        T::read_content(self.buf, self.size)
     }
 
     /// Decode an unsized value into the pod.
@@ -180,11 +178,7 @@ where
             }));
         }
 
-        let Ok(size) = usize::try_from(self.size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        T::read_content(self.buf, visitor, size)
+        T::read_content(self.buf, visitor, self.size)
     }
 
     /// Decode an unsized value into the pod.
@@ -215,11 +209,7 @@ where
             }));
         }
 
-        let Ok(size) = usize::try_from(self.size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        T::read_borrowed(self.buf, size)
+        T::read_borrowed(self.buf, self.size)
     }
 
     /// Decode an optional value.
@@ -293,34 +283,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(mut self) -> Result<ArrayDecoder<B>, Error> {
+    pub fn decode_array(self) -> Result<ArrayDecoder<B>, Error> {
         match self.ty {
-            Type::ARRAY if self.size >= 8 => {
-                let [child_size, child_type] = self.buf.read()?;
-                let child_type = Type::new(child_type);
-
-                let size = self.size - 8;
-
-                let remaining = if size > 0 && child_size > 0 {
-                    if size % child_size != 0 {
-                        return Err(Error::new(ErrorKind::InvalidArraySize { size, child_size }));
-                    }
-
-                    let padded_child_size = child_size.next_multiple_of(WORD_SIZE as u32);
-
-                    let Ok(size) = usize::try_from(size / padded_child_size) else {
-                        return Err(Error::new(ErrorKind::SizeOverflow));
-                    };
-
-                    size
-                } else {
-                    0
-                };
-
-                Ok(ArrayDecoder::new(
-                    self.buf, child_size, child_type, remaining,
-                ))
-            }
+            Type::ARRAY => ArrayDecoder::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::ARRAY,
                 actual: self.ty,

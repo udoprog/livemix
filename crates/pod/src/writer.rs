@@ -27,8 +27,8 @@ pub trait Writer: self::sealed::Sealed {
     fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error>;
 
     /// Get the distance from the given position to the current writer position
-    /// in words.
-    fn distance_from(&self, pos: Self::Pos) -> usize;
+    /// in bytes.
+    fn distance_from(&self, pos: Self::Pos) -> Option<u32>;
 
     /// Write a slice of `u32` values to the writer.
     fn write_words(&mut self, words: &[u64]) -> Result<(), Error>;
@@ -80,7 +80,7 @@ where
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
+    fn distance_from(&self, pos: Self::Pos) -> Option<u32> {
         (**self).distance_from(pos)
     }
 

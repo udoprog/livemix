@@ -46,13 +46,13 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
     }
 
     #[doc(hidden)]
-    fn read_content<V>(reader: impl Reader<'de>, visitor: V, size: usize) -> Result<V::Ok, Error>
+    fn read_content<V>(reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>;
 
     #[inline]
     #[doc(hidden)]
-    fn read_borrowed(reader: impl Reader<'de>, size: usize) -> Result<&'de Self, Error> {
+    fn read_borrowed(reader: impl Reader<'de>, size: u32) -> Result<&'de Self, Error> {
         struct LocalVisitor;
 
         impl<'de, T> Visitor<'de, T> for LocalVisitor
@@ -99,13 +99,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::STRING => {
-                let Ok(size) = usize::try_from(size) else {
-                    return Err(Error::new(ErrorKind::SizeOverflow));
-                };
-
-                CStr::read_content(reader, visitor, size)
-            }
+            Type::STRING => CStr::read_content(reader, visitor, size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -114,11 +108,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
     }
 
     #[inline]
-    fn read_content<V>(
-        mut reader: impl Reader<'de>,
-        visitor: V,
-        size: usize,
-    ) -> Result<V::Ok, Error>
+    fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
     {
@@ -182,13 +172,7 @@ impl<'de> DecodeUnsized<'de> for str {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::STRING => {
-                let Ok(size) = usize::try_from(size) else {
-                    return Err(Error::new(ErrorKind::SizeOverflow));
-                };
-
-                str::read_content(reader, visitor, size)
-            }
+            Type::STRING => str::read_content(reader, visitor, size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -197,11 +181,7 @@ impl<'de> DecodeUnsized<'de> for str {
     }
 
     #[inline]
-    fn read_content<V>(
-        mut reader: impl Reader<'de>,
-        visitor: V,
-        size: usize,
-    ) -> Result<V::Ok, Error>
+    fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
     {
@@ -254,13 +234,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::BYTES => {
-                let Ok(size) = usize::try_from(size) else {
-                    return Err(Error::new(ErrorKind::SizeOverflow));
-                };
-
-                <[u8]>::read_content(reader, visitor, size)
-            }
+            Type::BYTES => <[u8]>::read_content(reader, visitor, size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BYTES,
                 actual: ty,
@@ -269,11 +243,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     }
 
     #[inline]
-    fn read_content<V>(
-        mut reader: impl Reader<'de>,
-        visitor: V,
-        size: usize,
-    ) -> Result<V::Ok, Error>
+    fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
     {
@@ -307,13 +277,7 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::BITMAP => {
-                let Ok(size) = usize::try_from(size) else {
-                    return Err(Error::new(ErrorKind::SizeOverflow));
-                };
-
-                Bitmap::read_content(reader, visitor, size)
-            }
+            Type::BITMAP => Bitmap::read_content(reader, visitor, size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BITMAP,
                 actual: ty,
@@ -322,11 +286,7 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     }
 
     #[inline]
-    fn read_content<V>(
-        mut reader: impl Reader<'de>,
-        visitor: V,
-        size: usize,
-    ) -> Result<V::Ok, Error>
+    fn read_content<V>(mut reader: impl Reader<'de>, visitor: V, size: u32) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
     {

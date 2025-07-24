@@ -62,9 +62,11 @@ where
     /// ```
     pub fn close(mut self) -> Result<(), Error> {
         // Write the size of the struct at the header position.
-        let size = self.writer.distance_from(self.header) - WORD_SIZE;
-
-        let Ok(size) = u32::try_from(size) else {
+        let Some(size) = self
+            .writer
+            .distance_from(self.header)
+            .and_then(|v| v.checked_sub(WORD_SIZE))
+        else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 

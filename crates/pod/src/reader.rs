@@ -34,7 +34,7 @@ pub trait Reader<'de>: self::sealed::Sealed {
     fn clone_reader(&self) -> Self::Clone<'_>;
 
     /// Split off the head of the current buffer.
-    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error>;
+    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
@@ -43,7 +43,7 @@ pub trait Reader<'de>: self::sealed::Sealed {
     fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
 
     /// Read the given number of bytes from the input.
-    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, [u8]>;
 
@@ -104,7 +104,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error> {
+    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
         (**self).split(at)
     }
 
@@ -119,7 +119,7 @@ where
     }
 
     #[inline]
-    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, [u8]>,
     {
@@ -149,8 +149,12 @@ impl<'de> Reader<'de> for &'de [u64] {
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error> {
-        let at = at.div_ceil(WORD_SIZE);
+    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
+        let Ok(at) = usize::try_from(at) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let at = at.div_ceil(WORD_SIZE as usize);
 
         let Some((head, tail)) = self.split_at_checked(at) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
@@ -194,16 +198,21 @@ impl<'de> Reader<'de> for &'de [u64] {
     }
 
     #[inline]
-    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, [u8]>,
     {
-        let req = len.div_ceil(WORD_SIZE);
+        let Ok(len) = usize::try_from(len) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let req = len.div_ceil(WORD_SIZE as usize);
 
         let Some((head, tail)) = self.split_at_checked(req) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
+        // SAFETY: The head is guaranteed to be valid since it was split from the original slice.
         let value = unsafe { slice::from_raw_parts(head.as_ptr().cast::<u8>(), len) };
         let ok = visitor.visit_borrowed(value)?;
         *self = tail;

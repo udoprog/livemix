@@ -40,7 +40,6 @@ pub(crate) enum ErrorKind {
     PositionSizeMismatch { expected: usize, actual: usize },
     ArrayChildSizeMismatch { expected: usize, actual: usize },
     ArrayTypeMismatch { expected: Type, actual: Type },
-    InvalidArraySize { size: u32, child_size: u32 },
 }
 
 #[cfg(test)]
@@ -103,9 +102,6 @@ impl fmt::Display for Error {
                     f,
                     "Expected array element type {expected:?}, but found {actual:?}"
                 )
-            }
-            ErrorKind::InvalidArraySize { size, child_size } => {
-                write!(f, "Invalid array size {size} for child size {child_size}")
             }
         }
     }

@@ -81,12 +81,7 @@ where
 
         let (size, ty) = self.reader.header()?;
 
-        let Ok(split_size) = usize::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let head = self.reader.split(split_size)?;
-
+        let head = self.reader.split(size)?;
         let pod = TypedPod::new(size, ty, head);
 
         let Some(size_with_header) = pod.size_with_header() else {
