@@ -2,7 +2,7 @@ use core::ffi::CStr;
 use core::fmt;
 
 use crate::bstr::BStr;
-use crate::de::{DecodeArray, DecodeStruct};
+use crate::de::{ArrayDecoder, StructDecoder};
 use crate::error::ErrorKind;
 use crate::id::IntoId;
 use crate::{
@@ -338,7 +338,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(mut self) -> Result<DecodeArray<B>, Error> {
+    pub fn decode_array(mut self) -> Result<ArrayDecoder<B>, Error> {
         match self.ty {
             Type::ARRAY if self.size >= 8 => {
                 let [child_size, child_type] = self.buf.read()?;
@@ -362,7 +362,7 @@ where
                     0
                 };
 
-                Ok(DecodeArray::new(
+                Ok(ArrayDecoder::new(
                     self.buf, child_size, child_type, remaining,
                 ))
             }
@@ -384,9 +384,9 @@ where
     /// let pod = Pod::new(&mut buf);
     /// let mut st = pod.encode_struct()?;
     ///
-    /// st.add()?.encode(1i32)?;
-    /// st.add()?.encode(2i32)?;
-    /// st.add()?.encode(3i32)?;
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
     ///
     /// st.close()?;
     ///
@@ -394,16 +394,16 @@ where
     /// let mut st = pod.decode_struct()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.next()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.next()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_struct(self) -> Result<DecodeStruct<B>, Error> {
+    pub fn decode_struct(self) -> Result<StructDecoder<B>, Error> {
         match self.ty {
-            Type::STRUCT => Ok(DecodeStruct::new(self.buf, self.size)),
+            Type::STRUCT => Ok(StructDecoder::new(self.buf, self.size)),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRUCT,
                 actual: self.ty,
@@ -482,7 +482,7 @@ where
                 write!(f, "Array[{:?}](", array.child_type())?;
 
                 while !array.is_empty() {
-                    array.next().map_err(|_| fmt::Error)?.debug_fmt(f)?;
+                    array.item().map_err(|_| fmt::Error)?.debug_fmt(f)?;
 
                     if !array.is_empty() {
                         write!(f, ", ")?;
@@ -497,7 +497,7 @@ where
                 write!(f, "Struct(")?;
 
                 while !st.is_empty() {
-                    let pod = st.next().map_err(|_| fmt::Error)?;
+                    let pod = st.field().map_err(|_| fmt::Error)?;
 
                     write!(f, "{:?}: ", pod.ty())?;
                     pod.debug_fmt(f)?;

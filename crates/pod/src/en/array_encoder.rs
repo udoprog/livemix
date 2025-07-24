@@ -20,7 +20,7 @@ use crate::{Encode, EncodeUnsized, Error, Type, WORD_SIZE, Writer};
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[must_use = "Array encoders must be closed to ensure all elements are encoded"]
-pub struct EncodeArray<W>
+pub struct ArrayEncoder<W>
 where
     W: Writer,
 {
@@ -31,14 +31,14 @@ where
     len: usize,
 }
 
-impl<W> EncodeArray<W>
+impl<W> ArrayEncoder<W>
 where
     W: Writer,
 {
     /// Create a new pod for an array with the given writer and length.
     #[inline]
     pub(crate) fn new(writer: W, child_size: usize, child_type: Type, pos: W::Pos) -> Self {
-        EncodeArray {
+        ArrayEncoder {
             writer,
             child_size,
             child_type,

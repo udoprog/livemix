@@ -2,12 +2,12 @@ use crate::error::ErrorKind;
 use crate::{Error, Reader, TypedPod};
 
 /// A decoder for a struct.
-pub struct DecodeStruct<R> {
+pub struct StructDecoder<R> {
     reader: R,
     size: u32,
 }
 
-impl<'de, R> DecodeStruct<R>
+impl<'de, R> StructDecoder<R>
 where
     R: Reader<'de>,
 {
@@ -26,9 +26,9 @@ where
     /// let pod = Pod::new(&mut buf);
     /// let mut st = pod.encode_struct()?;
     ///
-    /// st.add()?.encode(1i32)?;
-    /// st.add()?.encode(2i32)?;
-    /// st.add()?.encode(3i32)?;
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
     ///
     /// st.close()?;
     ///
@@ -36,9 +36,9 @@ where
     /// let mut st = pod.decode_struct()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.next()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.next()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -47,8 +47,34 @@ where
     }
 
     /// Decode the next field in the struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, TypedPod};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut st = pod.encode_struct()?;
+    ///
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
+    ///
+    /// st.close()?;
+    ///
+    /// let pod = Pod::new(buf.as_slice());
+    /// let mut st = pod.decode_struct()?;
+    ///
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
-    pub fn next(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
+    pub fn field(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::StructUnderflow));
         }

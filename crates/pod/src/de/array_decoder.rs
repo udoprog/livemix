@@ -2,14 +2,14 @@ use crate::error::ErrorKind;
 use crate::{Decode, DecodeUnsized, Error, Reader, Type, TypedPod, Visitor};
 
 /// A decoder for an array.
-pub struct DecodeArray<R> {
+pub struct ArrayDecoder<R> {
     reader: R,
     child_size: u32,
     child_type: Type,
     remaining: usize,
 }
 
-impl<'de, R> DecodeArray<R>
+impl<'de, R> ArrayDecoder<R>
 where
     R: Reader<'de>,
 {
@@ -99,7 +99,7 @@ where
     /// let mut count = 0;
     ///
     /// while !array.is_empty() {
-    ///     let pod = array.next()?;
+    ///     let pod = array.item()?;
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -108,7 +108,7 @@ where
     /// assert_eq!(count, 3);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn next(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
+    pub fn item(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }

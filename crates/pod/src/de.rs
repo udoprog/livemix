@@ -4,8 +4,8 @@ pub use self::decode_unsized::DecodeUnsized;
 mod decode;
 pub use self::decode::Decode;
 
-mod decode_array;
-pub use self::decode_array::DecodeArray;
+mod array_decoder;
+pub use self::array_decoder::ArrayDecoder;
 
-mod decode_struct;
-pub use self::decode_struct::DecodeStruct;
+mod struct_decoder;
+pub use self::struct_decoder::StructDecoder;

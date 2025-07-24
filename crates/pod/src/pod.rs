@@ -1,7 +1,7 @@
 use core::fmt;
 
-use crate::de::{DecodeArray, DecodeStruct};
-use crate::en::{EncodeArray, EncodeStruct};
+use crate::de::{ArrayDecoder, StructDecoder};
+use crate::en::{ArrayEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::id::IntoId;
 use crate::{
@@ -142,13 +142,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_array(mut self, child_type: Type) -> Result<EncodeArray<B>, Error> {
+    pub fn encode_array(mut self, child_type: Type) -> Result<ArrayEncoder<B>, Error> {
         let Some(child_size) = child_type.size() else {
             return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
         };
 
         let pos = self.buf.reserve_words(&[0, 0])?;
-        Ok(EncodeArray::new(self.buf, child_size, child_type, pos))
+        Ok(ArrayEncoder::new(self.buf, child_size, child_type, pos))
     }
 
     /// Encode a struct.
@@ -162,18 +162,18 @@ where
     /// let pod = Pod::new(&mut buf);
     /// let mut st = pod.encode_struct()?;
     ///
-    /// st.add()?.encode(1i32)?;
-    /// st.add()?.encode(2i32)?;
-    /// st.add()?.encode(3i32)?;
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
     ///
     /// st.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_struct(mut self) -> Result<EncodeStruct<B>, Error> {
+    pub fn encode_struct(mut self) -> Result<StructEncoder<B>, Error> {
         // Reserve space for the header of the struct which includes its size that will be determined later.
         let header = self.buf.reserve_words(&[0])?;
-        Ok(EncodeStruct::new(self.buf, header))
+        Ok(StructEncoder::new(self.buf, header))
     }
 
     /// Encode an array with elements of an unsized type.
@@ -203,7 +203,7 @@ where
         mut self,
         child_type: Type,
         len: usize,
-    ) -> Result<EncodeArray<B>, Error> {
+    ) -> Result<ArrayEncoder<B>, Error> {
         if let Some(child_size) = child_type.size() {
             if child_size != len {
                 return Err(Error::new(ErrorKind::ArrayChildSizeMismatch {
@@ -214,7 +214,7 @@ where
         };
 
         let pos = self.buf.reserve_words(&[0, 0])?;
-        Ok(EncodeArray::new(self.buf, len, child_type, pos))
+        Ok(ArrayEncoder::new(self.buf, len, child_type, pos))
     }
 }
 
@@ -395,7 +395,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(self) -> Result<DecodeArray<B>, Error> {
+    pub fn decode_array(self) -> Result<ArrayDecoder<B>, Error> {
         self.typed()?.decode_array()
     }
 
@@ -410,9 +410,9 @@ where
     /// let pod = Pod::new(&mut buf);
     /// let mut st = pod.encode_struct()?;
     ///
-    /// st.add()?.encode(1i32)?;
-    /// st.add()?.encode(2i32)?;
-    /// st.add()?.encode(3i32)?;
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
     ///
     /// st.close()?;
     ///
@@ -420,14 +420,14 @@ where
     /// let mut st = pod.decode_struct()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.next()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.next()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_struct(self) -> Result<DecodeStruct<B>, Error> {
+    pub fn decode_struct(self) -> Result<StructDecoder<B>, Error> {
         self.typed()?.decode_struct()
     }
 

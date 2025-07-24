@@ -295,15 +295,15 @@ fn test_format_l1_struct() -> Result<(), Error> {
     let pod = Pod::new(&mut buf);
     let mut st = pod.encode_struct()?;
 
-    st.add()?.encode(*b"a")?;
-    st.add()?.encode(*b"b")?;
+    st.field()?.encode(*b"a")?;
+    st.field()?.encode(*b"b")?;
     st.close()?;
 
     let pod = Pod::new(buf.as_slice());
 
     let mut st = pod.decode_struct()?;
-    assert_eq!(format!("{:?}", st.next()?), "Bytes(b\"a\")");
-    assert_eq!(format!("{:?}", st.next()?), "Bytes(b\"b\")");
+    assert_eq!(format!("{:?}", st.field()?), "Bytes(b\"a\")");
+    assert_eq!(format!("{:?}", st.field()?), "Bytes(b\"b\")");
 
     // assert_eq!(format!("{pod:?}"), "Struct(Int: 1, Int: 2, Int: 3)");
     Ok(())
@@ -315,13 +315,13 @@ fn test_format_struct() -> Result<(), Error> {
     let pod = Pod::new(&mut buf);
     let mut st = pod.encode_struct()?;
 
-    st.add()?.encode(1i32)?;
-    st.add()?.encode(2i32)?;
+    st.field()?.encode(1i32)?;
+    st.field()?.encode(2i32)?;
 
-    let mut inner = st.add()?.encode_struct()?;
-    inner.add()?.encode(*b"hello world")?;
-    inner.add()?.encode(Rectangle::new(800, 600))?;
-    inner.add()?.encode(*b"goodbye world")?;
+    let mut inner = st.field()?.encode_struct()?;
+    inner.field()?.encode(*b"hello world")?;
+    inner.field()?.encode(Rectangle::new(800, 600))?;
+    inner.field()?.encode(*b"goodbye world")?;
     inner.close()?;
 
     st.close()?;
@@ -340,13 +340,13 @@ fn test_decode_complex_struct() -> Result<(), Error> {
     let pod = Pod::new(&mut buf);
     let mut st = pod.encode_struct()?;
 
-    st.add()?.encode(1i32)?;
-    st.add()?.encode(2i32)?;
+    st.field()?.encode(1i32)?;
+    st.field()?.encode(2i32)?;
 
-    let mut inner = st.add()?.encode_struct()?;
-    inner.add()?.encode(c"hello world")?;
-    inner.add()?.encode(Rectangle::new(800, 600))?;
-    inner.add()?.encode(c"goodbye world")?;
+    let mut inner = st.field()?.encode_struct()?;
+    inner.field()?.encode(c"hello world")?;
+    inner.field()?.encode(Rectangle::new(800, 600))?;
+    inner.field()?.encode(c"goodbye world")?;
     inner.close()?;
 
     st.close()?;
@@ -355,21 +355,21 @@ fn test_decode_complex_struct() -> Result<(), Error> {
 
     let mut st = pod.decode_struct()?;
     assert!(!st.is_empty());
-    assert_eq!(st.next()?.decode::<i32>()?, 1i32);
-    assert_eq!(st.next()?.decode::<i32>()?, 2i32);
+    assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    assert_eq!(st.field()?.decode::<i32>()?, 2i32);
     assert!(!st.is_empty());
 
-    let mut inner = st.next()?.decode_struct()?;
+    let mut inner = st.field()?.decode_struct()?;
     assert!(!inner.is_empty());
-    assert_eq!(inner.next()?.decode_borrowed::<CStr>()?, c"hello world");
+    assert_eq!(inner.field()?.decode_borrowed::<CStr>()?, c"hello world");
     assert_eq!(
-        inner.next()?.decode::<Rectangle>()?,
+        inner.field()?.decode::<Rectangle>()?,
         Rectangle::new(800, 600)
     );
-    assert_eq!(inner.next()?.decode_borrowed::<CStr>()?, c"goodbye world");
+    assert_eq!(inner.field()?.decode_borrowed::<CStr>()?, c"goodbye world");
     assert!(inner.is_empty());
 
-    assert!(inner.next().is_err());
+    assert!(inner.field().is_err());
 
     assert!(st.is_empty());
     Ok(())
@@ -381,9 +381,9 @@ fn test_decode_struct() -> Result<(), Error> {
     let pod = Pod::new(&mut buf);
     let mut st = pod.encode_struct()?;
 
-    st.add()?.encode(1i32)?;
-    st.add()?.encode(2i32)?;
-    st.add()?.encode(3i32)?;
+    st.field()?.encode(1i32)?;
+    st.field()?.encode(2i32)?;
+    st.field()?.encode(3i32)?;
 
     st.close()?;
 
@@ -391,9 +391,9 @@ fn test_decode_struct() -> Result<(), Error> {
     let mut st = pod.decode_struct()?;
 
     assert!(!st.is_empty());
-    assert_eq!(st.next()?.decode::<i32>()?, 1i32);
-    assert_eq!(st.next()?.decode::<i32>()?, 2i32);
-    assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    assert_eq!(st.field()?.decode::<i32>()?, 3i32);
     assert!(st.is_empty());
     Ok(())
 }

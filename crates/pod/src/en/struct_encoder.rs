@@ -3,7 +3,7 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
-pub struct EncodeStruct<W>
+pub struct StructEncoder<W>
 where
     W: Writer,
 {
@@ -11,7 +11,7 @@ where
     header: W::Pos,
 }
 
-impl<W> EncodeStruct<W>
+impl<W> StructEncoder<W>
 where
     W: Writer,
 {
@@ -20,8 +20,25 @@ where
     }
 
     /// Add a field into the struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, Type};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut st = pod.encode_struct()?;
+    ///
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
+    ///
+    /// st.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
-    pub fn add(&mut self) -> Result<Pod<W::Mut<'_>>, Error> {
+    pub fn field(&mut self) -> Result<Pod<W::Mut<'_>>, Error> {
         Ok(Pod::new(self.writer.borrow_mut()))
     }
 
@@ -36,9 +53,9 @@ where
     /// let pod = Pod::new(&mut buf);
     /// let mut st = pod.encode_struct()?;
     ///
-    /// st.add()?.encode(1i32)?;
-    /// st.add()?.encode(2i32)?;
-    /// st.add()?.encode(3i32)?;
+    /// st.field()?.encode(1i32)?;
+    /// st.field()?.encode(2i32)?;
+    /// st.field()?.encode(3i32)?;
     ///
     /// st.close()?;
     /// # Ok::<_, pod::Error>(())

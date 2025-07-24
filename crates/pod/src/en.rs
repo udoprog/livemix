@@ -4,8 +4,8 @@ pub use self::encode_unsized::EncodeUnsized;
 mod encode;
 pub use self::encode::Encode;
 
-mod encode_array;
-pub use self::encode_array::EncodeArray;
+mod array_encoder;
+pub use self::array_encoder::ArrayEncoder;
 
-mod encode_struct;
-pub use self::encode_struct::EncodeStruct;
+mod struct_encoder;
+pub use self::struct_encoder::StructEncoder;
