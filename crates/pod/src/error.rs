@@ -26,7 +26,9 @@ impl Error {
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum ErrorKind {
     ArrayUnderflow,
+    StructUnderflow,
     SizeOverflow,
+    SizeUnderflow { size: u32, sub: u32 },
     BufferOverflow,
     BufferUnderflow,
     NonTerminatedString,
@@ -63,7 +65,11 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             ErrorKind::ArrayUnderflow => write!(f, "Array underflow"),
+            ErrorKind::StructUnderflow => write!(f, "Struct underflow"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
+            ErrorKind::SizeUnderflow { size, sub } => {
+                write!(f, "Size {size} underflowed when subtracting {sub}")
+            }
             ErrorKind::BufferOverflow => write!(f, "Buffer overflow"),
             ErrorKind::BufferUnderflow => write!(f, "Buffer underflow"),
             ErrorKind::NonTerminatedString => write!(f, "Non-terminated c-string"),

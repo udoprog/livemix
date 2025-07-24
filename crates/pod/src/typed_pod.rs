@@ -1,7 +1,8 @@
 use core::ffi::CStr;
 use core::fmt;
 
-use crate::de::DecodeArray;
+use crate::bstr::BStr;
+use crate::de::{DecodeArray, DecodeStruct};
 use crate::error::ErrorKind;
 use crate::id::IntoId;
 use crate::{
@@ -86,6 +87,13 @@ impl<B> TypedPod<B> {
     pub const fn size(&self) -> u32 {
         self.size
     }
+
+    /// Get the size of the padded pod including the header.
+    pub(crate) fn size_with_header(&self) -> Option<u32> {
+        self.size
+            .next_multiple_of(WORD_SIZE as u32)
+            .checked_add(WORD_SIZE as u32)
+    }
 }
 
 impl<'de, B> TypedPod<B>
@@ -138,7 +146,11 @@ where
             }));
         }
 
-        T::read_content(self.buf, self.size as usize)
+        let Ok(size) = usize::try_from(self.size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        T::read_content(self.buf, size)
     }
 
     /// Decode an unsized value into the pod.
@@ -169,7 +181,11 @@ where
             }));
         }
 
-        T::read_content(self.buf, visitor, self.size as usize)
+        let Ok(size) = usize::try_from(self.size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        T::read_content(self.buf, visitor, size)
     }
 
     /// Decode an unsized value into the pod.
@@ -200,7 +216,11 @@ where
             }));
         }
 
-        T::read_borrowed(self.buf, self.size as usize)
+        let Ok(size) = usize::try_from(self.size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        T::read_borrowed(self.buf, size)
     }
 
     /// Decode an optional value.
@@ -278,7 +298,11 @@ where
             }));
         }
 
-        let Id(id) = Id::<I>::read_content(self.buf, self.size as usize)?;
+        let Ok(size) = usize::try_from(self.size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let Id(id) = Id::<I>::read_content(self.buf, size)?;
         Ok(id)
     }
 
@@ -328,7 +352,12 @@ where
                     }
 
                     let padded_child_size = child_size.next_multiple_of(WORD_SIZE as u32);
-                    (size / padded_child_size) as usize
+
+                    let Ok(size) = usize::try_from(size / padded_child_size) else {
+                        return Err(Error::new(ErrorKind::SizeOverflow));
+                    };
+
+                    size
                 } else {
                     0
                 };
@@ -344,6 +373,149 @@ where
         }
     }
 
+    /// Decode a struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, TypedPod};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut st = pod.encode_struct()?;
+    ///
+    /// st.add()?.encode(1i32)?;
+    /// st.add()?.encode(2i32)?;
+    /// st.add()?.encode(3i32)?;
+    ///
+    /// st.close()?;
+    ///
+    /// let pod = TypedPod::from_reader(buf.as_slice())?;
+    /// let mut st = pod.decode_struct()?;
+    ///
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.next()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.next()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_struct(self) -> Result<DecodeStruct<B>, Error> {
+        match self.ty {
+            Type::STRUCT => Ok(DecodeStruct::new(self.buf, self.size)),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::STRUCT,
+                actual: self.ty,
+            })),
+        }
+    }
+
+    fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let primitive = !matches!(self.ty, Type::ARRAY | Type::STRUCT);
+
+        if primitive {
+            write!(f, "{}(", self.ty)?;
+        }
+
+        self.debug_fmt(f)?;
+
+        if primitive {
+            write!(f, ")")?;
+        }
+
+        Ok(())
+    }
+
+    fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.ty {
+            Type::NONE => f.write_str("None"),
+            Type::BOOL => {
+                let value = self.decode::<bool>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::ID => {
+                let Id(value) = self.decode::<Id<u32>>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::INT => {
+                let value = self.decode::<i32>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::LONG => {
+                let value = self.decode::<i64>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::FLOAT => {
+                let value = self.decode::<f32>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::DOUBLE => {
+                let value = self.decode::<f64>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::STRING => {
+                let value = self.decode_borrowed::<CStr>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::BYTES => {
+                let value = self.decode_borrowed::<[u8]>().map_err(|_| fmt::Error)?;
+                write!(f, "{:?}", BStr::new(value))
+            }
+            Type::RECTANGLE => {
+                let value = self.decode::<Rectangle>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::FRACTION => {
+                let value = self.decode::<Fraction>().map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::BITMAP => {
+                let value = self
+                    .typed()
+                    .decode_borrowed::<Bitmap>()
+                    .map_err(|_| fmt::Error)?;
+                write!(f, "{value:?}")
+            }
+            Type::ARRAY => {
+                let mut array = self.decode_array().map_err(|_| fmt::Error)?;
+                write!(f, "Array[{:?}](", array.child_type())?;
+
+                while !array.is_empty() {
+                    array.next().map_err(|_| fmt::Error)?.debug_fmt(f)?;
+
+                    if !array.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                write!(f, ")")?;
+                Ok(())
+            }
+            Type::STRUCT => {
+                let mut st = self.decode_struct().map_err(|_| fmt::Error)?;
+                write!(f, "Struct(")?;
+
+                while !st.is_empty() {
+                    let pod = st.next().map_err(|_| fmt::Error)?;
+
+                    write!(f, "{:?}: ", pod.ty())?;
+                    pod.debug_fmt(f)?;
+
+                    if !st.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                write!(f, ")")?;
+                Ok(())
+            }
+            ty => {
+                write!(f, "{ty:?}")
+            }
+        }
+    }
+
     #[inline]
     fn typed(&self) -> TypedPod<B::Clone<'_>> {
         TypedPod::new(self.size, self.ty, self.buf.clone_reader())
@@ -356,76 +528,6 @@ where
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.ty {
-            Type::NONE => f.write_str("None"),
-            Type::BOOL => {
-                let value = self.typed().decode::<bool>().map_err(|_| fmt::Error)?;
-                write!(f, "Bool({value:?})")
-            }
-            Type::ID => {
-                let Id(value) = self.typed().decode::<Id<u32>>().map_err(|_| fmt::Error)?;
-                write!(f, "Id({value:?})")
-            }
-            Type::INT => {
-                let value = self.typed().decode::<i32>().map_err(|_| fmt::Error)?;
-                write!(f, "Int({value:?})")
-            }
-            Type::LONG => {
-                let value = self.typed().decode::<i64>().map_err(|_| fmt::Error)?;
-                write!(f, "Long({value:?})")
-            }
-            Type::FLOAT => {
-                let value = self.typed().decode::<f32>().map_err(|_| fmt::Error)?;
-                write!(f, "Float({value:?})")
-            }
-            Type::DOUBLE => {
-                let value = self.typed().decode::<f64>().map_err(|_| fmt::Error)?;
-                write!(f, "Double({value:?})")
-            }
-            Type::STRING => {
-                let value = self
-                    .typed()
-                    .decode_borrowed::<CStr>()
-                    .map_err(|_| fmt::Error)?;
-                write!(f, "String({value:?})")
-            }
-            Type::BYTES => {
-                let value = self
-                    .typed()
-                    .decode_borrowed::<[u8]>()
-                    .map_err(|_| fmt::Error)?;
-                write!(f, "Bytes({value:?})")
-            }
-            Type::RECTANGLE => {
-                let value = self.typed().decode::<Rectangle>().map_err(|_| fmt::Error)?;
-                write!(f, "Rectangle({value:?})")
-            }
-            Type::FRACTION => {
-                let value = self.typed().decode::<Fraction>().map_err(|_| fmt::Error)?;
-                write!(f, "Fraction({value:?})")
-            }
-            Type::BITMAP => {
-                let value = self
-                    .typed()
-                    .decode_borrowed::<Bitmap>()
-                    .map_err(|_| fmt::Error)?;
-                write!(f, "Bitmap({value:?})")
-            }
-            Type::ARRAY => {
-                let mut array = self.typed().decode_array().map_err(|_| fmt::Error)?;
-                write!(f, "Array[{:?}](", array.child_type())?;
-
-                while !array.is_empty() {
-                    let pod = array.next().map_err(|_| fmt::Error)?;
-                    write!(f, "{pod:?}")?;
-                }
-
-                write!(f, ")")?;
-                Ok(())
-            }
-            ty => {
-                write!(f, "{ty:?}")
-            }
-        }
+        self.typed().debug_fmt_with_type(f)
     }
 }

@@ -11,6 +11,8 @@ mod tests;
 
 pub(crate) const WORD_SIZE: usize = 8;
 
+pub(crate) mod bstr;
+
 mod pod;
 pub use self::pod::Pod;
 

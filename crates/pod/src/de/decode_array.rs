@@ -108,12 +108,18 @@ where
     /// assert_eq!(count, 3);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn next(&mut self) -> Result<TypedPod<R::Mut<'_>>, Error> {
+    pub fn next(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
 
-        let pod = TypedPod::new(self.child_size, self.child_type, self.reader.borrow_mut());
+        let Ok(child_size) = usize::try_from(self.child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let tail = self.reader.split(child_size)?;
+
+        let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
         Ok(pod)
     }
@@ -164,8 +170,12 @@ where
             }));
         }
 
+        let Ok(child_size) = usize::try_from(self.child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         self.remaining -= 1;
-        let ok = T::read_content(self.reader.borrow_mut(), self.child_size as usize)?;
+        let ok = T::read_content(self.reader.borrow_mut(), child_size)?;
         Ok(ok)
     }
 
@@ -216,7 +226,11 @@ where
             }));
         }
 
-        let ok = T::read_content(self.reader.borrow_mut(), visitor, self.child_size as usize)?;
+        let Ok(child_size) = usize::try_from(self.child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let ok = T::read_content(self.reader.borrow_mut(), visitor, child_size)?;
         self.remaining -= 1;
         Ok(ok)
     }

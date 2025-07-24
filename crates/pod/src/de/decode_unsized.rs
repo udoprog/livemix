@@ -99,7 +99,13 @@ impl<'de> DecodeUnsized<'de> for CStr {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::STRING => CStr::read_content(reader, visitor, size as usize),
+            Type::STRING => {
+                let Ok(size) = usize::try_from(size) else {
+                    return Err(Error::new(ErrorKind::SizeOverflow));
+                };
+
+                CStr::read_content(reader, visitor, size)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -176,7 +182,13 @@ impl<'de> DecodeUnsized<'de> for str {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::STRING => str::read_content(reader, visitor, size as usize),
+            Type::STRING => {
+                let Ok(size) = usize::try_from(size) else {
+                    return Err(Error::new(ErrorKind::SizeOverflow));
+                };
+
+                str::read_content(reader, visitor, size)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRING,
                 actual: ty,
@@ -242,7 +254,13 @@ impl<'de> DecodeUnsized<'de> for [u8] {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::BYTES => <[u8]>::read_content(reader, visitor, size as usize),
+            Type::BYTES => {
+                let Ok(size) = usize::try_from(size) else {
+                    return Err(Error::new(ErrorKind::SizeOverflow));
+                };
+
+                <[u8]>::read_content(reader, visitor, size)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BYTES,
                 actual: ty,
@@ -289,7 +307,13 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
         let (size, ty) = reader.header()?;
 
         match ty {
-            Type::BITMAP => Bitmap::read_content(reader, visitor, size as usize),
+            Type::BITMAP => {
+                let Ok(size) = usize::try_from(size) else {
+                    return Err(Error::new(ErrorKind::SizeOverflow));
+                };
+
+                Bitmap::read_content(reader, visitor, size)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::BITMAP,
                 actual: ty,

@@ -1,9 +1,13 @@
 use core::ffi::CStr;
 
+use alloc::format;
+
 use crate::Reader;
 use crate::error::ErrorKind;
 use crate::utils::{Align, WordSized};
-use crate::{ArrayBuf, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
+use crate::{
+    ArrayBuf, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, TypedPod, Writer,
+};
 
 pub(crate) fn read<T, U>(value: T) -> U
 where
@@ -265,5 +269,131 @@ fn test_array() -> Result<(), Error> {
 
     assert!(array.is_empty());
     assert_eq!(array.len(), 0);
+    Ok(())
+}
+
+#[test]
+fn test_format_array() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let pod = Pod::new(&mut buf);
+    let mut st = pod.encode_array(Type::INT)?;
+
+    st.encode(1i32)?;
+    st.encode(2i32)?;
+    st.encode(3i32)?;
+
+    st.close()?;
+
+    let pod = Pod::new(buf.as_slice());
+    assert_eq!(format!("{pod:?}"), "Array[Int](1, 2, 3)");
+    Ok(())
+}
+
+#[test]
+fn test_format_l1_struct() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let pod = Pod::new(&mut buf);
+    let mut st = pod.encode_struct()?;
+
+    st.add()?.encode(*b"a")?;
+    st.add()?.encode(*b"b")?;
+    st.close()?;
+
+    let pod = Pod::new(buf.as_slice());
+
+    let mut st = pod.decode_struct()?;
+    assert_eq!(format!("{:?}", st.next()?), "Bytes(b\"a\")");
+    assert_eq!(format!("{:?}", st.next()?), "Bytes(b\"b\")");
+
+    // assert_eq!(format!("{pod:?}"), "Struct(Int: 1, Int: 2, Int: 3)");
+    Ok(())
+}
+
+#[test]
+fn test_format_struct() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let pod = Pod::new(&mut buf);
+    let mut st = pod.encode_struct()?;
+
+    st.add()?.encode(1i32)?;
+    st.add()?.encode(2i32)?;
+
+    let mut inner = st.add()?.encode_struct()?;
+    inner.add()?.encode(*b"hello world")?;
+    inner.add()?.encode(Rectangle::new(800, 600))?;
+    inner.add()?.encode(*b"goodbye world")?;
+    inner.close()?;
+
+    st.close()?;
+
+    let pod = Pod::new(buf.as_slice());
+    assert_eq!(
+        format!("{pod:?}"),
+        "Struct(Int: 1, Int: 2, Struct: Struct(Bytes: b\"hello world\", Rectangle: Rectangle { width: 800, height: 600 }, Bytes: b\"goodbye world\"))"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_decode_complex_struct() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let pod = Pod::new(&mut buf);
+    let mut st = pod.encode_struct()?;
+
+    st.add()?.encode(1i32)?;
+    st.add()?.encode(2i32)?;
+
+    let mut inner = st.add()?.encode_struct()?;
+    inner.add()?.encode(c"hello world")?;
+    inner.add()?.encode(Rectangle::new(800, 600))?;
+    inner.add()?.encode(c"goodbye world")?;
+    inner.close()?;
+
+    st.close()?;
+
+    let pod = Pod::new(buf.as_slice());
+
+    let mut st = pod.decode_struct()?;
+    assert!(!st.is_empty());
+    assert_eq!(st.next()?.decode::<i32>()?, 1i32);
+    assert_eq!(st.next()?.decode::<i32>()?, 2i32);
+    assert!(!st.is_empty());
+
+    let mut inner = st.next()?.decode_struct()?;
+    assert!(!inner.is_empty());
+    assert_eq!(inner.next()?.decode_borrowed::<CStr>()?, c"hello world");
+    assert_eq!(
+        inner.next()?.decode::<Rectangle>()?,
+        Rectangle::new(800, 600)
+    );
+    assert_eq!(inner.next()?.decode_borrowed::<CStr>()?, c"goodbye world");
+    assert!(inner.is_empty());
+
+    assert!(inner.next().is_err());
+
+    assert!(st.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_decode_struct() -> Result<(), Error> {
+    let mut buf = ArrayBuf::new();
+    let pod = Pod::new(&mut buf);
+    let mut st = pod.encode_struct()?;
+
+    st.add()?.encode(1i32)?;
+    st.add()?.encode(2i32)?;
+    st.add()?.encode(3i32)?;
+
+    st.close()?;
+
+    let pod = TypedPod::from_reader(buf.as_slice())?;
+    let mut st = pod.decode_struct()?;
+
+    assert!(!st.is_empty());
+    assert_eq!(st.next()?.decode::<i32>()?, 1i32);
+    assert_eq!(st.next()?.decode::<i32>()?, 2i32);
+    assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    assert!(st.is_empty());
     Ok(())
 }

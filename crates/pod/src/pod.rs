@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::de::DecodeArray;
+use crate::de::{DecodeArray, DecodeStruct};
 use crate::en::{EncodeArray, EncodeStruct};
 use crate::error::ErrorKind;
 use crate::id::IntoId;
@@ -151,7 +151,7 @@ where
         Ok(EncodeArray::new(self.buf, child_size, child_type, pos))
     }
 
-    /// Encode an array with the given type.
+    /// Encode a struct.
     ///
     /// # Examples
     ///
@@ -160,13 +160,13 @@ where
     ///
     /// let mut buf = ArrayBuf::new();
     /// let pod = Pod::new(&mut buf);
-    /// let mut array = pod.encode_array(Type::INT)?;
+    /// let mut st = pod.encode_struct()?;
     ///
-    /// array.encode(1i32)?;
-    /// array.encode(2i32)?;
-    /// array.encode(3i32)?;
+    /// st.add()?.encode(1i32)?;
+    /// st.add()?.encode(2i32)?;
+    /// st.add()?.encode(3i32)?;
     ///
-    /// array.close()?;
+    /// st.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -397,6 +397,38 @@ where
     #[inline]
     pub fn decode_array(self) -> Result<DecodeArray<B>, Error> {
         self.typed()?.decode_array()
+    }
+
+    /// Decode a struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod, TypedPod};
+    ///
+    /// let mut buf = ArrayBuf::new();
+    /// let pod = Pod::new(&mut buf);
+    /// let mut st = pod.encode_struct()?;
+    ///
+    /// st.add()?.encode(1i32)?;
+    /// st.add()?.encode(2i32)?;
+    /// st.add()?.encode(3i32)?;
+    ///
+    /// st.close()?;
+    ///
+    /// let pod = Pod::new(buf.as_slice());
+    /// let mut st = pod.decode_struct()?;
+    ///
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.next()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.next()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.next()?.decode::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_struct(self) -> Result<DecodeStruct<B>, Error> {
+        self.typed()?.decode_struct()
     }
 
     #[inline]

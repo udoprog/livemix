@@ -33,6 +33,9 @@ pub trait Reader<'de>: self::sealed::Sealed {
     /// Clone the reader.
     fn clone_reader(&self) -> Self::Clone<'_>;
 
+    /// Split off the head of the current buffer.
+    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error>;
+
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
 
@@ -101,6 +104,11 @@ where
     }
 
     #[inline]
+    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error> {
+        (**self).split(at)
+    }
+
+    #[inline]
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
         (**self).peek_words_uninit(out)
     }
@@ -138,6 +146,18 @@ impl<'de> Reader<'de> for &'de [u64] {
     #[inline]
     fn clone_reader(&self) -> Self::Clone<'_> {
         *self
+    }
+
+    #[inline]
+    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error> {
+        let at = at.div_ceil(WORD_SIZE);
+
+        let Some((head, tail)) = self.split_at_checked(at) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        *self = tail;
+        Ok(head)
     }
 
     #[inline]

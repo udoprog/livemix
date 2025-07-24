@@ -536,6 +536,21 @@ impl<'de, const N: usize> Reader<'de> for ArrayBuf<N> {
     }
 
     #[inline]
+    fn split(&mut self, at: usize) -> Result<Self::Clone<'_>, Error> {
+        let at = at.div_ceil(WORD_SIZE);
+        let read = self.read.wrapping_add(at);
+
+        if read > self.write || read < self.read {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        }
+
+        let tail = unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), at) };
+
+        self.read = read;
+        Ok(tail)
+    }
+
+    #[inline]
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
         if self.remaining() < out.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
