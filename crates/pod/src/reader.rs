@@ -1,10 +1,10 @@
-use core::mem::MaybeUninit;
+use core::mem::{self, MaybeUninit};
 use core::slice;
 
 use crate::error::ErrorKind;
-use crate::utils::{UninitAlign, WordSized};
+use crate::utils::{BytesInhabited, UninitAlign, WordSized};
 use crate::visitor::Visitor;
-use crate::{Error, Type, WORD_SIZE};
+use crate::{Error, Type};
 
 mod sealed {
     use crate::{Array, Reader};
@@ -12,11 +12,20 @@ mod sealed {
     pub trait Sealed<T> {}
     impl<T> Sealed<T> for &[T] {}
     impl<T, const N: usize> Sealed<T> for Array<T, N> {}
-    impl<'de, R, T> Sealed<T> for &mut R where R: ?Sized + Reader<'de, T> {}
+    impl<'de, R, T> Sealed<T> for &mut R
+    where
+        R: ?Sized + Reader<'de, T>,
+        T: Copy,
+    {
+    }
 }
 
 /// A type that u32 words can be read from.
-pub trait Reader<'de, T>: self::sealed::Sealed<T> {
+pub trait Reader<'de, T>
+where
+    Self: self::sealed::Sealed<T>,
+    T: Copy,
+{
     /// The mutable borrow of a reader.
     type Mut<'this>: Reader<'de, T>
     where
@@ -48,6 +57,7 @@ pub trait Reader<'de, T>: self::sealed::Sealed<T> {
     /// Read the given number of bytes from the input.
     fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
+        T: BytesInhabited,
         V: Visitor<'de, [u8]>;
 
     /// Read an array of words.
@@ -88,6 +98,7 @@ pub trait Reader<'de, T>: self::sealed::Sealed<T> {
 impl<'de, R, T> Reader<'de, T> for &mut R
 where
     R: ?Sized + Reader<'de, T>,
+    T: Copy,
 {
     type Mut<'this>
         = R::Mut<'this>
@@ -132,6 +143,7 @@ where
     #[inline]
     fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
+        T: BytesInhabited,
         V: Visitor<'de, [u8]>,
     {
         (**self).read_bytes(len, visitor)
@@ -140,7 +152,7 @@ where
 
 impl<'de, T> Reader<'de, T> for &'de [T]
 where
-    T: 'de,
+    T: 'de + Copy,
 {
     type Mut<'this>
         = &'this mut &'de [T]
@@ -164,7 +176,7 @@ where
 
     #[inline]
     fn skip(&mut self, size: u32) -> Result<(), Error> {
-        let size = size.div_ceil(WORD_SIZE);
+        let size = size.div_ceil(mem::size_of::<T>() as u32);
 
         let Ok(size) = usize::try_from(size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -184,7 +196,7 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let at = at.div_ceil(WORD_SIZE as usize);
+        let at = at.div_ceil(mem::size_of::<T>());
 
         let Some((head, tail)) = self.split_at_checked(at) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
@@ -236,7 +248,7 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let req = len.div_ceil(WORD_SIZE as usize);
+        let req = len.div_ceil(mem::size_of::<T>());
 
         let Some((head, tail)) = self.split_at_checked(req) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));

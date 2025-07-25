@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::utils::{Align, WordSized};
+use crate::utils::{Align, BytesInhabited, WordSized};
 
 mod sealed {
     use crate::Array;
@@ -7,11 +7,20 @@ mod sealed {
 
     pub trait Sealed<T> {}
     impl<T, const N: usize> Sealed<T> for Array<T, N> {}
-    impl<W, T> Sealed<T> for &mut W where W: ?Sized + Writer<T> {}
+    impl<W, T> Sealed<T> for &mut W
+    where
+        W: ?Sized + Writer<T>,
+        T: Copy,
+    {
+    }
 }
 
 /// A type that can have PODs written to it.
-pub trait Writer<T>: self::sealed::Sealed<T> {
+pub trait Writer<T>
+where
+    Self: self::sealed::Sealed<T>,
+    T: Copy,
+{
     /// The mutable borrow of a writer.
     type Mut<'this>: Writer<T>
     where
@@ -24,11 +33,11 @@ pub trait Writer<T>: self::sealed::Sealed<T> {
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
 
     /// Reserve space for the given number of words.
-    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error>;
+    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error>;
 
     /// Reserve space for a single value while writing.
     #[inline(always)]
-    fn reserve(&mut self, value: impl WordSized<u64>) -> Result<Self::Pos, Error> {
+    fn reserve(&mut self, value: impl WordSized<T>) -> Result<Self::Pos, Error> {
         self.reserve_words(Align(value).as_words())
     }
 
@@ -37,11 +46,11 @@ pub trait Writer<T>: self::sealed::Sealed<T> {
     fn distance_from(&self, pos: Self::Pos) -> Option<u32>;
 
     /// Write a slice of `u32` values to the writer.
-    fn write_words(&mut self, words: &[u64]) -> Result<(), Error>;
+    fn write_words(&mut self, words: &[T]) -> Result<(), Error>;
 
     /// Write a value to the writer.
     #[inline(always)]
-    fn write(&mut self, value: impl WordSized<u64>) -> Result<(), Error> {
+    fn write(&mut self, value: impl WordSized<T>) -> Result<(), Error> {
         self.write_words(Align(value).as_words())
     }
 
@@ -52,21 +61,24 @@ pub trait Writer<T>: self::sealed::Sealed<T> {
     ///
     /// Returns an error if the given number of words written overflows the
     /// reserved space.
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error>;
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error>;
 
     /// Write a value to the specified position in the writer.
     #[inline(always)]
-    fn write_at(&mut self, pos: Self::Pos, value: impl WordSized<u64>) -> Result<(), Error> {
+    fn write_at(&mut self, pos: Self::Pos, value: impl WordSized<T>) -> Result<(), Error> {
         self.write_words_at(pos, Align(value).as_words())
     }
 
     /// Write bytes to the writer.
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>;
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
+    where
+        T: BytesInhabited;
 }
 
 impl<W, T> Writer<T> for &mut W
 where
     W: ?Sized + Writer<T>,
+    T: Copy,
 {
     type Mut<'this>
         = W::Mut<'this>
@@ -81,7 +93,7 @@ where
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
+    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error> {
         (**self).reserve_words(words)
     }
 
@@ -91,17 +103,20 @@ where
     }
 
     #[inline]
-    fn write_words(&mut self, value: &[u64]) -> Result<(), Error> {
+    fn write_words(&mut self, value: &[T]) -> Result<(), Error> {
         (**self).write_words(value)
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, value: &[u64]) -> Result<(), Error> {
+    fn write_words_at(&mut self, pos: Self::Pos, value: &[T]) -> Result<(), Error> {
         (**self).write_words_at(pos, value)
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
+    where
+        T: BytesInhabited,
+    {
         (**self).write_bytes(bytes, pad)
     }
 }

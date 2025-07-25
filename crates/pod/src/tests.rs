@@ -1,6 +1,7 @@
 use core::ffi::CStr;
 
 use alloc::format;
+use alloc::string::String;
 
 use crate::error::ErrorKind;
 use crate::utils::{Align, WordSized};
@@ -436,5 +437,14 @@ fn test_format_buggy() -> Result<(), Error> {
 
     let pod = Pod::new(array.as_slice());
     assert_eq!(format!("{pod:?}"), "Choice{Size overflow}");
+    Ok(())
+}
+
+#[test]
+fn test_array_drop() -> Result<(), Error> {
+    let mut array = Array::<String>::new();
+    array.push(String::from("foo"))?;
+    array.push(String::from("bar"))?;
+    array.push(String::from("baz"))?;
     Ok(())
 }

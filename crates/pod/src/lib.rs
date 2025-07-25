@@ -9,7 +9,7 @@ extern crate std;
 #[cfg(all(test, feature = "alloc"))]
 mod tests;
 
-pub(crate) const WORD_SIZE: u32 = 8;
+pub(crate) const WORD_SIZE: u32 = core::mem::size_of::<u64>() as u32;
 
 pub(crate) mod bstr;
 

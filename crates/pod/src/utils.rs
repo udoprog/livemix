@@ -204,3 +204,17 @@ pub(crate) fn array_remaining(size: u32, child_size: u32, header_size: u32) -> R
 
     Ok(remaining)
 }
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for u32 {}
+    impl Sealed for u64 {}
+    impl Sealed for u128 {}
+}
+
+/// Indicates a type which has all bit patterns inhabited.
+pub unsafe trait BytesInhabited: Copy + self::sealed::Sealed {}
+
+unsafe impl BytesInhabited for u32 {}
+unsafe impl BytesInhabited for u64 {}
+unsafe impl BytesInhabited for u128 {}

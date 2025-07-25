@@ -4,7 +4,8 @@ use core::ptr;
 use core::slice;
 
 use crate::error::ErrorKind;
-use crate::{Error, Reader, Visitor, WORD_SIZE, Writer};
+use crate::utils::BytesInhabited;
+use crate::{Error, Reader, Visitor, Writer};
 
 const DEFAULT_SIZE: usize = 128;
 
@@ -54,6 +55,25 @@ impl<T, const N: usize> Array<T, N> {
             read: 0,
             write: 0,
         }
+    }
+
+    /// Push a value into the array.
+    pub fn push(&mut self, value: T) -> Result<(), Error> {
+        if self.write >= N {
+            return Err(Error::new(ErrorKind::BufferOverflow));
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data
+                .as_mut_ptr()
+                .add(self.write)
+                .cast::<T>()
+                .write(value);
+        }
+
+        self.write += 1;
+        Ok(())
     }
 }
 
@@ -158,7 +178,7 @@ impl<T, const N: usize> Array<T, N> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn len(&self) -> usize {
-        self.remaining() * WORD_SIZE as usize
+        self.remaining() * mem::size_of::<T>() as usize
     }
 
     /// Returns the number of words that can be read.
@@ -233,15 +253,23 @@ impl<T, const N: usize> Array<T, N> {
     #[inline]
     pub fn clear(&mut self) {
         if mem::needs_drop::<T>() {
-            // SAFETY: We are only dropping the elements that are currently
-            // initialized.
-            unsafe {
-                ptr::drop_in_place(self.as_slice_mut());
-            }
-        }
+            let read = mem::take(&mut self.read);
+            let write = mem::take(&mut self.write);
 
-        self.read = 0;
-        self.write = 0;
+            // SAFETY: The buffer is guaranteed to be initialized from the
+            // `self.read..self.write` range.
+            unsafe {
+                let slice = slice::from_raw_parts_mut(
+                    self.data.as_mut_ptr().add(read).cast::<T>(),
+                    write - read,
+                );
+
+                ptr::drop_in_place(slice);
+            }
+        } else {
+            self.read = 0;
+            self.write = 0;
+        }
     }
 
     /// Resets the buffer for reading.
@@ -266,7 +294,10 @@ impl<T, const N: usize> Array<T, N> {
     /// assert_eq!(buf.read::<[u64; 1]>()?, [42]);
     /// # Ok::<_, pod::Error>(())
     #[inline]
-    pub fn clear_remaining(&mut self) {
+    pub fn clear_remaining(&mut self)
+    where
+        T: Copy,
+    {
         self.read = 0;
     }
 
@@ -307,8 +338,9 @@ impl<T, const N: usize> Array<T, N> {
     /// assert_eq!(buf.as_slice(), &[43]);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn as_slice_mut(&mut self) -> &mut [u64] {
-        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
+    pub fn as_slice_mut(&mut self) -> &mut [T] {
+        // SAFETY: The buffer is guaranteed to be initialized from the
+        // `self.read..self.write` range.
         unsafe {
             slice::from_raw_parts_mut(
                 self.data.as_mut_ptr().add(self.read).cast(),
@@ -496,7 +528,10 @@ pub struct Pos {
     len: usize,
 }
 
-impl<T, const N: usize> Writer<T> for Array<T, N> {
+impl<T, const N: usize> Writer<T> for Array<T, N>
+where
+    T: Copy,
+{
     type Mut<'this>
         = &'this mut Array<T, N>
     where
@@ -510,7 +545,7 @@ impl<T, const N: usize> Writer<T> for Array<T, N> {
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
+    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error> {
         let write = self.write.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
@@ -537,14 +572,16 @@ impl<T, const N: usize> Writer<T> for Array<T, N> {
 
     #[inline]
     fn distance_from(&self, pos: Self::Pos) -> Option<u32> {
-        u32::try_from(self.write)
-            .ok()?
-            .checked_sub(u32::try_from(pos.write).ok()?)?
-            .checked_mul(WORD_SIZE)
+        u32::try_from(
+            self.write
+                .checked_sub(pos.write)?
+                .checked_mul(mem::size_of::<T>())?,
+        )
+        .ok()
     }
 
     #[inline]
-    fn write_words(&mut self, words: &[u64]) -> Result<(), Error> {
+    fn write_words(&mut self, words: &[T]) -> Result<(), Error> {
         let write = self.write.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
@@ -565,7 +602,7 @@ impl<T, const N: usize> Writer<T> for Array<T, N> {
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error> {
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error> {
         let Pos { write, len } = pos;
 
         if len < words.len() {
@@ -587,12 +624,15 @@ impl<T, const N: usize> Writer<T> for Array<T, N> {
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
+    where
+        T: BytesInhabited,
+    {
         let Some(full) = bytes.len().checked_add(pad) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let req = full.div_ceil(WORD_SIZE as usize);
+        let req = full.div_ceil(mem::size_of::<T>());
         let write = self.write.wrapping_add(req);
 
         if !(self.write..=N).contains(&write) {
@@ -603,7 +643,7 @@ impl<T, const N: usize> Writer<T> for Array<T, N> {
         unsafe {
             let ptr = self.data.as_mut_ptr().add(self.write).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-            let pad = WORD_SIZE as usize - bytes.len() % WORD_SIZE as usize;
+            let pad = mem::size_of::<T>() - bytes.len() % mem::size_of::<T>();
             ptr.add(bytes.len()).write_bytes(0, pad);
         }
 
@@ -614,7 +654,7 @@ impl<T, const N: usize> Writer<T> for Array<T, N> {
 
 impl<'de, T, const N: usize> Reader<'de, T> for Array<T, N>
 where
-    T: 'static,
+    T: 'static + Copy,
 {
     type Mut<'this>
         = &'this mut Array<T, N>
@@ -635,7 +675,7 @@ where
 
     #[inline]
     fn skip(&mut self, size: u32) -> Result<(), Error> {
-        let size = size.div_ceil(WORD_SIZE);
+        let size = size.div_ceil(mem::size_of::<T>() as u32);
 
         let Ok(size) = usize::try_from(size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -653,7 +693,7 @@ where
 
     #[inline]
     fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
-        let at = at.div_ceil(WORD_SIZE);
+        let at = at.div_ceil(mem::size_of::<T>() as u32);
 
         let Ok(at) = usize::try_from(at) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -713,13 +753,14 @@ where
     #[inline]
     fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
     where
+        T: BytesInhabited,
         V: Visitor<'de, [u8]>,
     {
         let Ok(len) = usize::try_from(len) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let req = len.div_ceil(WORD_SIZE as usize);
+        let req = len.div_ceil(mem::size_of::<T>());
         let read = self.read.wrapping_add(req);
 
         if read > self.write || read < self.read {
