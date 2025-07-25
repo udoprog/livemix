@@ -1,24 +1,31 @@
 use crate::error::ErrorKind;
+use crate::pod::PodKind;
 use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
-pub struct StructEncoder<W>
+pub struct StructEncoder<W, K>
 where
     W: Writer,
 {
     writer: W,
     header: W::Pos,
+    kind: K,
 }
 
-impl<W> StructEncoder<W>
+impl<W, K> StructEncoder<W, K>
 where
     W: Writer,
+    K: PodKind,
 {
-    pub(crate) fn to_writer(mut writer: W) -> Result<Self, Error> {
+    pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
         // Reserve space for the header of the struct which includes its size that will be determined later.
         let header = writer.reserve_words(&[0])?;
-        Ok(Self { writer, header })
+        Ok(Self {
+            writer,
+            header,
+            kind,
+        })
     }
 
     /// Add a field into the struct.
@@ -69,6 +76,8 @@ where
         else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
+
+        self.kind.check(Type::STRUCT, size)?;
 
         self.writer
             .write_at(self.header, [size, Type::STRUCT.into_u32()])?;

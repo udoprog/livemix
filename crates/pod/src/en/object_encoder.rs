@@ -1,24 +1,28 @@
 use crate::error::ErrorKind;
+use crate::pod::PodKind;
 use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for an object.
 #[must_use = "Object encoders must be closed to ensure all elements are initialized"]
-pub struct ObjectEncoder<W>
+pub struct ObjectEncoder<W, K>
 where
     W: Writer,
 {
     writer: W,
+    kind: K,
     header: W::Pos,
     object_type: u32,
     object_id: u32,
 }
 
-impl<W> ObjectEncoder<W>
+impl<W, K> ObjectEncoder<W, K>
 where
     W: Writer,
+    K: PodKind,
 {
     pub(crate) fn to_writer(
         mut writer: W,
+        kind: K,
         object_type: u32,
         object_id: u32,
     ) -> Result<Self, Error> {
@@ -28,6 +32,7 @@ where
 
         Ok(Self {
             writer,
+            kind,
             header,
             object_type,
             object_id,
@@ -83,6 +88,8 @@ where
         else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
+
+        self.kind.check(Type::OBJECT, size)?;
 
         self.writer.write_at(
             self.header,

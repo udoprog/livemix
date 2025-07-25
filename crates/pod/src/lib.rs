@@ -13,7 +13,8 @@ pub(crate) const WORD_SIZE: u32 = 8;
 
 pub(crate) mod bstr;
 
-mod pod;
+pub mod pod;
+#[doc(inline)]
 pub use self::pod::Pod;
 
 mod typed_pod;

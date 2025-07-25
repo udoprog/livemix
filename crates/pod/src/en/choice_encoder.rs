@@ -1,14 +1,15 @@
 use crate::error::ErrorKind;
-use crate::pod::ChildLimit;
+use crate::pod::{ChildPod, PodKind};
 use crate::{Choice, Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for a choice.
 #[must_use = "Choice encoders must be closed to ensure all elements are initialized"]
-pub struct ChoiceEncoder<W>
+pub struct ChoiceEncoder<W, K>
 where
     W: Writer,
 {
     writer: W,
+    kind: K,
     header: W::Pos,
     ty: u32,
     flags: u32,
@@ -16,12 +17,14 @@ where
     child_type: Type,
 }
 
-impl<W> ChoiceEncoder<W>
+impl<W, K> ChoiceEncoder<W, K>
 where
     W: Writer,
+    K: PodKind,
 {
     pub(crate) fn to_writer(
         mut writer: W,
+        kind: K,
         choice: Choice,
         child_type: Type,
     ) -> Result<Self, Error> {
@@ -35,6 +38,7 @@ where
 
         Ok(Self {
             writer,
+            kind,
             header,
             ty: choice.into_u32(),
             flags: 0,
@@ -59,7 +63,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn entry(&mut self) -> Result<Pod<W::Mut<'_>, ChildLimit>, Error> {
+    pub fn entry(&mut self) -> Result<Pod<W::Mut<'_>, ChildPod>, Error> {
         Ok(Pod::new_child(
             self.writer.borrow_mut(),
             self.child_size,
@@ -88,6 +92,8 @@ where
         else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
+
+        self.kind.check(Type::CHOICE, size)?;
 
         self.writer.write_at(
             self.header,

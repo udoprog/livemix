@@ -11,17 +11,57 @@ use crate::{
 /// An unlimited pod.
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
-pub struct Unlimited;
+pub struct EnvelopePod;
 
 /// A pod limited for a specific child type and size.
 #[derive(Clone, Copy, Debug)]
-pub struct ChildLimit {
+pub struct ChildPod {
     size: u32,
     ty: Type,
 }
 
-impl PodLimit for ChildLimit {
+mod sealed {
+    use super::{ChildPod, EnvelopePod};
+
+    pub trait Sealed {}
+    impl Sealed for EnvelopePod {}
+    impl Sealed for ChildPod {}
+}
+
+pub trait PodKind: Copy + self::sealed::Sealed {
+    const ENVELOPE: bool;
+
+    fn encode<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    where
+        T: Encode;
+
+    fn encode_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    where
+        T: ?Sized + EncodeUnsized;
+
+    fn check(&self, ty: Type, size: u32) -> Result<(), Error>;
+}
+
+impl PodKind for ChildPod {
     const ENVELOPE: bool = false;
+
+    #[inline]
+    fn encode<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    where
+        T: Encode,
+    {
+        self.check(T::TYPE, value.size())?;
+        value.write_content(buf)
+    }
+
+    #[inline]
+    fn encode_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    where
+        T: ?Sized + EncodeUnsized,
+    {
+        self.check(T::TYPE, value.size())?;
+        value.write_content(buf)
+    }
 
     #[inline]
     fn check(&self, ty: Type, size: u32) -> Result<(), Error> {
@@ -41,35 +81,29 @@ impl PodLimit for ChildLimit {
 
         Ok(())
     }
-
-    #[inline]
-    fn check_unsized(&self, _: Type) -> Result<(), Error> {
-        Err(Error::new(ErrorKind::ChildUnsizedMismatch {
-            expected: self.size,
-        }))
-    }
 }
 
-pub trait PodLimit: Clone {
-    const ENVELOPE: bool;
-
-    /// Check if the type [`Type`] of the given size is allowed.
-    fn check(&self, ty: Type, size: u32) -> Result<(), Error>;
-
-    /// Check a type of unknown size.
-    fn check_unsized(&self, ty: Type) -> Result<(), Error>;
-}
-
-impl PodLimit for Unlimited {
+impl PodKind for EnvelopePod {
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn check(&self, _: Type, _: u32) -> Result<(), Error> {
-        Ok(())
+    fn encode<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    where
+        T: Encode,
+    {
+        value.encode(buf)
     }
 
     #[inline]
-    fn check_unsized(&self, _: Type) -> Result<(), Error> {
+    fn encode_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    where
+        T: ?Sized + EncodeUnsized,
+    {
+        value.encode_unsized(buf)
+    }
+
+    #[inline]
+    fn check(&self, _: Type, _: u32) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -77,23 +111,21 @@ impl PodLimit for Unlimited {
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct Pod<B, L = Unlimited>
-where
-    L: PodLimit,
-{
+pub struct Pod<B, K = EnvelopePod> {
     buf: B,
-    limit: L,
+    kind: K,
 }
 
-impl<B> Clone for Pod<B>
+impl<B, K> Clone for Pod<B, K>
 where
     B: Clone,
+    K: PodKind,
 {
     #[inline]
     fn clone(&self) -> Self {
         Pod {
             buf: self.buf.clone(),
-            limit: self.limit.clone(),
+            kind: self.kind,
         }
     }
 }
@@ -116,7 +148,7 @@ impl Pod<Array<256>> {
     pub const fn array() -> Self {
         Pod {
             buf: Array::with_size(),
-            limit: Unlimited,
+            kind: EnvelopePod,
         }
     }
 }
@@ -139,7 +171,7 @@ impl<const N: usize> Pod<Array<N>> {
     pub const fn with_size<const U: usize>(self) -> Pod<Array<U>> {
         Pod {
             buf: Array::with_size(),
-            limit: self.limit,
+            kind: self.kind,
         }
     }
 }
@@ -159,10 +191,22 @@ impl<B> Pod<B> {
     pub const fn new(buf: B) -> Self {
         Pod {
             buf,
-            limit: Unlimited,
+            kind: EnvelopePod,
         }
     }
+}
 
+impl<B> Pod<B, ChildPod> {
+    /// Construct a new child pod.
+    pub(crate) const fn new_child(buf: B, size: u32, ty: Type) -> Self {
+        Pod {
+            buf,
+            kind: ChildPod { size, ty },
+        }
+    }
+}
+
+impl<B, K> Pod<B, K> {
     /// Coerce into the underlying buffer.
     ///
     /// # Examples
@@ -183,20 +227,10 @@ impl<B> Pod<B> {
     }
 }
 
-impl<B> Pod<B, ChildLimit> {
-    /// Construct a new pod with a child limit.
-    pub(crate) const fn new_child(buf: B, size: u32, ty: Type) -> Self {
-        Pod {
-            buf,
-            limit: ChildLimit { size, ty },
-        }
-    }
-}
-
-impl<B, I> Pod<B, I>
+impl<B, K> Pod<B, K>
 where
     B: Writer,
-    I: PodLimit,
+    K: PodKind,
 {
     /// Encode a value into the pod.
     ///
@@ -213,13 +247,7 @@ where
     where
         T: Encode,
     {
-        self.limit.check(T::TYPE, value.size())?;
-
-        if I::ENVELOPE {
-            value.encode(self.buf.borrow_mut())
-        } else {
-            value.write_content(self.buf.borrow_mut())
-        }
+        self.kind.encode(value, self.buf.borrow_mut())
     }
 
     /// Encode an unsized value into the pod.
@@ -237,13 +265,7 @@ where
     where
         T: ?Sized + EncodeUnsized,
     {
-        self.limit.check(T::TYPE, value.size())?;
-
-        if I::ENVELOPE {
-            value.encode_unsized(self.buf.borrow_mut())
-        } else {
-            value.write_content(self.buf.borrow_mut())
-        }
+        self.kind.encode_unsized(value, self.buf.borrow_mut())
     }
 
     /// Encode a `None` value.
@@ -259,9 +281,9 @@ where
     /// ```
     #[inline]
     pub fn encode_none(&mut self) -> Result<(), Error> {
-        self.limit.check(Type::NONE, 0)?;
+        self.kind.check(Type::NONE, 0)?;
 
-        if I::ENVELOPE {
+        if K::ENVELOPE {
             self.buf.write([0, Type::NONE.into_u32()])?;
         }
 
@@ -309,9 +331,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_array(&mut self, child_type: Type) -> Result<ArrayEncoder<B::Mut<'_>>, Error> {
-        self.limit.check_unsized(Type::ARRAY)?;
-        ArrayEncoder::to_writer(self.buf.borrow_mut(), child_type)
+    pub fn encode_array(&mut self, child_type: Type) -> Result<ArrayEncoder<B::Mut<'_>, K>, Error> {
+        ArrayEncoder::to_writer(self.buf.borrow_mut(), self.kind, child_type)
     }
 
     /// Encode an array with items of an unsized type.
@@ -374,9 +395,8 @@ where
         &mut self,
         child_type: Type,
         len: u32,
-    ) -> Result<ArrayEncoder<B::Mut<'_>>, Error> {
-        self.limit.check_unsized(Type::ARRAY)?;
-        ArrayEncoder::to_writer_unsized(self.buf.borrow_mut(), len, child_type)
+    ) -> Result<ArrayEncoder<B::Mut<'_>, K>, Error> {
+        ArrayEncoder::to_writer_unsized(self.buf.borrow_mut(), self.kind, len, child_type)
     }
 
     /// Encode a struct.
@@ -397,9 +417,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_struct(&mut self) -> Result<StructEncoder<B::Mut<'_>>, Error> {
-        self.limit.check_unsized(Type::STRUCT)?;
-        StructEncoder::to_writer(self.buf.borrow_mut())
+    pub fn encode_struct(&mut self) -> Result<StructEncoder<B::Mut<'_>, K>, Error> {
+        StructEncoder::to_writer(self.buf.borrow_mut(), self.kind)
     }
 
     /// Encode an object.
@@ -424,9 +443,8 @@ where
         &mut self,
         object_type: u32,
         object_id: u32,
-    ) -> Result<ObjectEncoder<B::Mut<'_>>, Error> {
-        self.limit.check_unsized(Type::OBJECT)?;
-        ObjectEncoder::to_writer(self.buf.borrow_mut(), object_type, object_id)
+    ) -> Result<ObjectEncoder<B::Mut<'_>, K>, Error> {
+        ObjectEncoder::to_writer(self.buf.borrow_mut(), self.kind, object_type, object_id)
     }
 
     /// Encode a sequence.
@@ -447,9 +465,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_sequence(&mut self) -> Result<SequenceEncoder<B::Mut<'_>>, Error> {
-        self.limit.check_unsized(Type::SEQUENCE)?;
-        SequenceEncoder::to_writer(self.buf.borrow_mut())
+    pub fn encode_sequence(&mut self) -> Result<SequenceEncoder<B::Mut<'_>, K>, Error> {
+        SequenceEncoder::to_writer(self.buf.borrow_mut(), self.kind)
     }
 
     /// Encode a choice.
@@ -472,9 +489,8 @@ where
         &mut self,
         choice: Choice,
         child_type: Type,
-    ) -> Result<ChoiceEncoder<B::Mut<'_>>, Error> {
-        self.limit.check_unsized(Type::SEQUENCE)?;
-        ChoiceEncoder::to_writer(self.buf.borrow_mut(), choice, child_type)
+    ) -> Result<ChoiceEncoder<B::Mut<'_>, K>, Error> {
+        ChoiceEncoder::to_writer(self.buf.borrow_mut(), self.kind, choice, child_type)
     }
 }
 

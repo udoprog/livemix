@@ -1,5 +1,5 @@
 use crate::error::ErrorKind;
-use crate::pod::ChildLimit;
+use crate::pod::{ChildPod, PodKind};
 use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for an array.
@@ -36,22 +36,24 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[must_use = "Array encoders must be closed to ensure all elements are encoded"]
-pub struct ArrayEncoder<W>
+pub struct ArrayEncoder<W, K>
 where
     W: Writer,
 {
     writer: W,
+    kind: K,
     child_size: u32,
     child_type: Type,
     pos: W::Pos,
 }
 
-impl<W> ArrayEncoder<W>
+impl<W, K> ArrayEncoder<W, K>
 where
     W: Writer,
+    K: PodKind,
 {
     #[inline]
-    pub(crate) fn to_writer(mut writer: W, child_type: Type) -> Result<Self, Error> {
+    pub(crate) fn to_writer(mut writer: W, kind: K, child_type: Type) -> Result<Self, Error> {
         let Some(child_size) = child_type.size() else {
             return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
         };
@@ -60,6 +62,7 @@ where
 
         Ok(Self {
             writer,
+            kind,
             child_size,
             child_type,
             pos,
@@ -69,6 +72,7 @@ where
     #[inline]
     pub(crate) fn to_writer_unsized(
         mut writer: W,
+        kind: K,
         len: u32,
         child_type: Type,
     ) -> Result<Self, Error> {
@@ -85,6 +89,7 @@ where
 
         Ok(Self {
             writer,
+            kind,
             child_size: len,
             child_type,
             pos,
@@ -105,7 +110,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push(&mut self) -> Result<Pod<W::Mut<'_>, ChildLimit>, Error> {
+    pub fn push(&mut self) -> Result<Pod<W::Mut<'_>, ChildPod>, Error> {
         Ok(Pod::new_child(
             self.writer.borrow_mut(),
             self.child_size,
@@ -138,6 +143,8 @@ where
         else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
+
+        self.kind.check(Type::ARRAY, len)?;
 
         self.writer.write_at(
             self.pos,
