@@ -1,4 +1,5 @@
 use crate::error::ErrorKind;
+use crate::utils::array_remaining;
 use crate::{Choice, Error, Reader, Type, TypedPod, WORD_SIZE};
 
 /// A decoder for a choice.
@@ -16,32 +17,16 @@ impl<'de, R> ChoiceDecoder<R>
 where
     R: Reader<'de>,
 {
+    #[inline]
     pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
         let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
-
+        let ty = Choice::from_u32(ty);
         let child_type = Type::new(child_type);
-
-        let Some(size) = size.checked_sub(WORD_SIZE * 2) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let remaining = 'out: {
-            if size == 0 {
-                break 'out 0;
-            }
-
-            let padded_child_size = child_size.next_multiple_of(WORD_SIZE);
-
-            let Some(size) = size.checked_div(padded_child_size) else {
-                break 'out 0;
-            };
-
-            size
-        };
+        let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
 
         Ok(Self {
             reader,
-            ty: Choice::from_u32(ty),
+            ty,
             flags,
             child_size,
             child_type,
@@ -57,7 +42,7 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.encode_choice(Choice::RANGE, Type::INT)?;
+    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
     ///
     /// choice.entry()?.encode(10i32)?;
     /// choice.entry()?.encode(0i32)?;
@@ -82,17 +67,19 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn ty(&self) -> Choice {
+    pub const fn ty(&self) -> Choice {
         self.ty
     }
 
     /// Return the type of the child element.
-    pub fn child_type(&self) -> Type {
+    #[inline]
+    pub const fn child_type(&self) -> Type {
         self.child_type
     }
 
     /// Return the size of the child element.
-    pub fn child_size(&self) -> u32 {
+    #[inline]
+    pub const fn child_size(&self) -> u32 {
         self.child_size
     }
 
@@ -104,10 +91,8 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.encode_array(Type::INT)?;
-    ///
+    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
     /// array.push()?.encode(1i32)?;
-    ///
     /// array.close()?;
     ///
     /// let mut array = pod.decode_array()?;
@@ -116,7 +101,8 @@ where
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn len(&self) -> u32 {
+    #[inline]
+    pub const fn len(&self) -> u32 {
         self.remaining
     }
 
@@ -128,8 +114,7 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.encode_array(Type::INT)?;
-    ///
+    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
     /// array.close()?;
     ///
     /// let mut array = pod.decode_array()?;
@@ -137,7 +122,8 @@ where
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn is_empty(&self) -> bool {
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
         self.remaining == 0
     }
 
@@ -149,7 +135,7 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.encode_choice(Choice::RANGE, Type::INT)?;
+    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
     ///
     /// choice.entry()?.encode(10i32)?;
     /// choice.entry()?.encode(0i32)?;
@@ -173,6 +159,7 @@ where
     /// assert_eq!(count, 3);
     /// # Ok::<_, pod::Error>(())
     /// ```
+    #[inline]
     pub fn entry(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));

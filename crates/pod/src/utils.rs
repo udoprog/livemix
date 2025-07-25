@@ -1,6 +1,9 @@
 use core::mem::MaybeUninit;
 use core::slice;
 
+use crate::error::ErrorKind;
+use crate::{Error, WORD_SIZE};
+
 /// Helper to align a value to a word, making necessary write conversions safe.
 #[repr(align(8))]
 pub(crate) struct Align<T>(pub T)
@@ -174,4 +177,26 @@ impl WordBytes {
         // SAFETY: Type is always initialized to something valid.
         unsafe { &*self.0.as_ptr().cast::<[u32; 2]>() }
     }
+}
+
+pub(crate) fn array_remaining(size: u32, child_size: u32, header_size: u32) -> Result<u32, Error> {
+    let Some(size) = size.checked_sub(header_size) else {
+        return Err(Error::new(ErrorKind::SizeOverflow));
+    };
+
+    let remaining = 'out: {
+        if size == 0 {
+            break 'out 0;
+        }
+
+        let padded_child_size = child_size.next_multiple_of(WORD_SIZE);
+
+        let Some(size) = size.checked_div(padded_child_size) else {
+            break 'out 0;
+        };
+
+        size
+    };
+
+    Ok(remaining)
 }

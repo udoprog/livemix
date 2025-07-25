@@ -33,7 +33,7 @@ impl<B> TypedPod<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode(10i32)?;
+    /// pod.as_mut().encode(10i32)?;
     ///
     /// let pod = pod.typed()?;
     /// assert_eq!(pod.ty(), Type::INT);
@@ -53,7 +53,7 @@ impl<B> TypedPod<B> {
     /// use pod::{Pod, TypedPod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode(10i32)?;
+    /// pod.as_mut().encode(10i32)?;
     ///
     /// let pod = pod.typed()?;
     /// assert_eq!(pod.ty(), Type::INT);
@@ -84,7 +84,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode(10i32)?;
+    /// pod.as_mut().encode(10i32)?;
     ///
     /// let pod = pod.typed()?;
     /// assert_eq!(pod.decode::<i32>()?, 10i32);
@@ -105,7 +105,7 @@ where
     ///
     /// let mut pod = Pod::array();
     ///
-    /// let mut array = pod.encode_array(Type::INT)?;
+    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
     /// array.push()?.encode(10i32)?;
     /// array.push()?.encode(20i32)?;
     /// array.close()?;
@@ -131,8 +131,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    ///
-    /// pod.encode(10i32)?;
+    /// pod.as_mut().encode(10i32)?;
     ///
     /// let pod = pod.typed()?;
     /// assert_eq!(pod.decode::<i32>()?, 10i32);
@@ -161,8 +160,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    ///
-    /// pod.encode_unsized(&b"hello world"[..])?;
+    /// pod.as_mut().encode_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.typed()?;
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
@@ -192,8 +190,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    ///
-    /// pod.encode_unsized(&b"hello world"[..])?;
+    /// pod.as_mut().encode_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.typed()?;
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
@@ -225,13 +222,13 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode_none()?;
+    /// pod.as_mut().encode_none()?;
     ///
     /// let pod = pod.typed()?;
     /// assert!(pod.decode_option()?.is_none());
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode(true)?;
+    /// pod.as_mut().encode(true)?;
     ///
     /// let pod = pod.typed()?;
     ///
@@ -258,12 +255,10 @@ where
     /// use pod::{Pod, TypedPod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.encode_array(Type::INT)?;
-    ///
+    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
     /// array.push()?.encode(1i32)?;
     /// array.push()?.encode(2i32)?;
     /// array.push()?.encode(3i32)?;
-    ///
     /// array.close()?;
     ///
     /// let pod = pod.typed()?;
@@ -272,9 +267,9 @@ where
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
     ///
-    /// assert_eq!(array.decode::<i32>()?, 1i32);
-    /// assert_eq!(array.decode::<i32>()?, 2i32);
-    /// assert_eq!(array.decode::<i32>()?, 3i32);
+    /// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);
@@ -299,12 +294,10 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
+    /// let mut st = pod.as_mut().encode_struct()?;
     /// st.field()?.encode(1i32)?;
     /// st.field()?.encode(2i32)?;
     /// st.field()?.encode(3i32)?;
-    ///
     /// st.close()?;
     ///
     /// let pod = pod.typed()?;
@@ -336,12 +329,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.encode_object(10, 20)?;
-    ///
+    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.property(2, 20)?.encode(2i32)?;
     /// obj.property(3, 30)?.encode(3i32)?;
-    ///
     /// obj.close()?;
     ///
     /// let mut obj = pod.decode_object()?;
@@ -385,12 +376,10 @@ where
     /// use pod::{Pod, TypedPod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.encode_sequence()?;
-    ///
+    /// let mut seq = pod.as_mut().encode_sequence()?;
     /// seq.control(1, 10)?.encode(1i32)?;
     /// seq.control(2, 20)?.encode(2i32)?;
     /// seq.control(3, 30)?.encode(3i32)?;
-    ///
     /// seq.close()?;
     ///
     /// let mut pod = pod.typed()?;
@@ -435,7 +424,7 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.encode_choice(Choice::RANGE, Type::INT)?;
+    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
     ///
     /// choice.entry()?.encode(10i32)?;
     /// choice.entry()?.encode(0i32)?;

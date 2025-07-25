@@ -40,7 +40,6 @@ pub(crate) enum ErrorKind {
     Expected { expected: Type, actual: Type },
     ReservedSizeMismatch { expected: usize, actual: usize },
     ChildSizeMismatch { expected: u32, actual: u32 },
-    ArrayTypeMismatch { expected: Type, actual: Type },
 }
 
 #[cfg(test)]
@@ -97,12 +96,6 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "Expected array element size {expected}, but found {actual}"
-                )
-            }
-            ErrorKind::ArrayTypeMismatch { expected, actual } => {
-                write!(
-                    f,
-                    "Expected array element type {expected:?}, but found {actual:?}"
                 )
             }
         }

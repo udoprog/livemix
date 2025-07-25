@@ -20,9 +20,10 @@ where
     W: Writer,
     K: PodKind,
 {
+    #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
         // Reserve space for the header of the sequence which includes its size that will be determined later.
-        let header = writer.reserve_words(&[0, 0])?;
+        let header = writer.reserve([WORD_SIZE, Type::SEQUENCE.into_u32(), 0, 0])?;
 
         Ok(Self {
             writer,
@@ -41,12 +42,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.encode_sequence()?;
-    ///
+    /// let mut seq = pod.as_mut().encode_sequence()?;
     /// seq.control(1, 10)?.encode(1i32)?;
     /// seq.control(2, 20)?.encode(2i32)?;
     /// seq.control(3, 30)?.encode(3i32)?;
-    ///
     /// seq.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -64,15 +63,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.encode_sequence()?;
-    ///
+    /// let mut seq = pod.as_mut().encode_sequence()?;
     /// seq.control(1, 10)?.encode(1i32)?;
     /// seq.control(2, 20)?.encode(2i32)?;
     /// seq.control(3, 30)?.encode(3i32)?;
-    ///
     /// seq.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
+    #[inline]
     pub fn close(mut self) -> Result<(), Error> {
         let Some(size) = self
             .writer
@@ -88,6 +86,7 @@ where
             self.header,
             [size, Type::SEQUENCE.into_u32(), self.unit, self.pad],
         )?;
+
         Ok(())
     }
 }

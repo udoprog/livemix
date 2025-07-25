@@ -11,6 +11,7 @@ impl<'de, R> StructDecoder<R>
 where
     R: Reader<'de>,
 {
+    #[inline]
     pub(crate) fn new(reader: R, size: u32) -> Self {
         Self { reader, size }
     }
@@ -23,12 +24,10 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
+    /// let mut st = pod.as_mut().encode_struct()?;
     /// st.field()?.encode(1i32)?;
     /// st.field()?.encode(2i32)?;
     /// st.field()?.encode(3i32)?;
-    ///
     /// st.close()?;
     ///
     /// let mut st = pod.decode_struct()?;
@@ -40,7 +39,8 @@ where
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn is_empty(&self) -> bool {
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
         self.size == 0
     }
 
@@ -52,12 +52,10 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
+    /// let mut st = pod.as_mut().encode_struct()?;
     /// st.field()?.encode(1i32)?;
     /// st.field()?.encode(2i32)?;
     /// st.field()?.encode(3i32)?;
-    ///
     /// st.close()?;
     ///
     /// let mut st = pod.decode_struct()?;

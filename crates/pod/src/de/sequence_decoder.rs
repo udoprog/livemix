@@ -34,14 +34,48 @@ where
     }
 
     /// Get the unit of the sequence.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// let mut st = pod.as_mut().encode_sequence()?;
+    /// st.control(1, 2)?.encode(1i32)?;
+    /// st.control(1, 2)?.encode(2i32)?;
+    /// st.control(1, 2)?.encode(3i32)?;
+    /// st.close()?;
+    ///
+    /// let st = pod.decode_sequence()?;
+    /// assert_eq!(st.unit(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
-    pub fn unit(&self) -> u32 {
+    pub const fn unit(&self) -> u32 {
         self.unit
     }
 
     /// Get the pad of the sequence.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// let mut st = pod.as_mut().encode_sequence()?;
+    /// st.control(1, 2)?.encode(1i32)?;
+    /// st.control(1, 2)?.encode(2i32)?;
+    /// st.control(1, 2)?.encode(3i32)?;
+    /// st.close()?;
+    ///
+    /// let st = pod.decode_sequence()?;
+    /// assert_eq!(st.pad(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
-    pub fn pad(&self) -> u32 {
+    pub const fn pad(&self) -> u32 {
         self.pad
     }
 
@@ -53,25 +87,23 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    ///
+    /// let mut st = pod.as_mut().encode_sequence()?;
+    /// st.control(1, 2)?.encode(1i32)?;
+    /// st.control(1, 2)?.encode(2i32)?;
+    /// st.control(1, 2)?.encode(3i32)?;
     /// st.close()?;
     ///
-    /// let mut st = pod.decode_struct()?;
+    /// let mut st = pod.decode_sequence()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.control()?.value().decode::<i32>()?, 1i32);
+    /// assert_eq!(st.control()?.value().decode::<i32>()?, 2i32);
+    /// assert_eq!(st.control()?.value().decode::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.size == 0
     }
 
@@ -83,20 +115,18 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    ///
+    /// let mut st = pod.as_mut().encode_sequence()?;
+    /// st.control(1, 2)?.encode(1i32)?;
+    /// st.control(1, 2)?.encode(2i32)?;
+    /// st.control(1, 2)?.encode(3i32)?;
     /// st.close()?;
     ///
-    /// let mut st = pod.decode_struct()?;
+    /// let mut st = pod.decode_sequence()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.control()?.value().decode::<i32>()?, 1i32);
+    /// assert_eq!(st.control()?.value().decode::<i32>()?, 2i32);
+    /// assert_eq!(st.control()?.value().decode::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```

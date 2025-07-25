@@ -68,10 +68,8 @@ pub trait Decode<'de>: Sized + self::sealed::Sealed {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(10i32)?;
-///
-/// let value: i32 = pod.decode()?;
-/// assert_eq!(value, 10i32);
+/// pod.as_mut().encode(10i32)?;
+/// assert_eq!(pod.decode::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for bool {
@@ -92,8 +90,7 @@ impl<'de> Decode<'de> for bool {
 /// use pod::{Pod, Id};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(Id(142u32))?;
-///
+/// pod.as_mut().encode(Id(142u32))?;
 /// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -118,9 +115,8 @@ where
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(10i32)?;
-///
-/// assert_eq!(pod.decode::<i32>()?, 10i32);
+/// pod.as_mut().encode(10i32)?;
+/// assert_eq!(pod.as_ref().decode::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for i32 {
@@ -141,8 +137,7 @@ impl<'de> Decode<'de> for i32 {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(10i64)?;
-///
+/// pod.as_mut().encode(10i64)?;
 /// assert_eq!(pod.decode::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -163,8 +158,7 @@ impl<'de> Decode<'de> for i64 {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(42.42f32)?;
-///
+/// pod.as_mut().encode(42.42f32)?;
 /// assert_eq!(pod.decode::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -186,8 +180,7 @@ impl<'de> Decode<'de> for f32 {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(42.42f64)?;
-///
+/// pod.as_mut().encode(42.42f64)?;
 /// assert_eq!(pod.decode::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -208,8 +201,7 @@ impl<'de> Decode<'de> for f64 {
 /// use pod::{Pod, Rectangle};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(Rectangle::new(100, 200))?;
-///
+/// pod.as_mut().encode(Rectangle::new(100, 200))?;
 /// assert_eq!(pod.decode::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -231,8 +223,7 @@ impl<'de> Decode<'de> for Rectangle {
 /// use pod::{Pod, Fraction};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(Fraction::new(800, 600))?;
-///
+/// pod.as_mut().encode(Fraction::new(800, 600))?;
 /// assert_eq!(pod.decode::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -255,10 +246,8 @@ impl<'de> Decode<'de> for Fraction {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode_unsized(c"hello world")?;
-///
-/// let pod = pod.typed()?;
-/// assert_eq!(pod.decode::<CString>()?.as_c_str(), c"hello world");
+/// pod.as_mut().encode_unsized(c"hello world")?;
+/// assert_eq!(pod.as_ref().decode::<CString>()?.as_c_str(), c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
@@ -293,11 +282,11 @@ impl<'de> Visitor<'de, CStr> for CStrVisitor {
 ///
 /// let mut pod = Pod::array();
 ///
-/// pod.encode_unsized("hello world")?;
-/// pod.encode_unsized("this is right")?;
+/// pod.as_mut().encode_unsized("hello world")?;
+/// pod.as_mut().encode_unsized("this is right")?;
 ///
-/// assert_eq!(pod.as_typed_mut()?.decode::<String>()?, "hello world");
-/// assert_eq!(pod.as_typed_mut()?.decode::<String>()?, "this is right");
+/// assert_eq!(pod.as_mut().decode::<String>()?, "hello world");
+/// assert_eq!(pod.as_mut().decode::<String>()?, "this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
@@ -332,11 +321,11 @@ impl<'de> Visitor<'de, str> for StrVisitor {
 ///
 /// let mut pod = Pod::array();
 ///
-/// pod.encode(*b"hello world")?;
-/// pod.encode(*b"this is right")?;
+/// pod.as_mut().encode(*b"hello world")?;
+/// pod.as_mut().encode(*b"this is right")?;
 ///
-/// assert_eq!(pod.as_typed_mut()?.decode::<Vec<u8>>()?, b"hello world");
-/// assert_eq!(pod.as_typed_mut()?.decode::<Vec<u8>>()?, b"this is right");
+/// assert_eq!(pod.as_mut().decode::<Vec<u8>>()?, b"hello world");
+/// assert_eq!(pod.as_mut().decode::<Vec<u8>>()?, b"this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
@@ -370,8 +359,7 @@ impl<'de> Visitor<'de, [u8]> for BytesVisitor {
 /// use pod::{Bitmap, Pod, OwnedBitmap};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode_unsized(Bitmap::new(b"hello world"))?;
-///
+/// pod.as_mut().encode_unsized(Bitmap::new(b"hello world"))?;
 /// assert_eq!(pod.decode::<OwnedBitmap>()?.as_bytes(), b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -408,8 +396,7 @@ impl<'de> Visitor<'de, Bitmap> for BitmapVisitor {
 /// let value = 1u32;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(Pointer::new((&value as *const u32).addr()))?;
-///
+/// pod.as_mut().encode(Pointer::new((&value as *const u32).addr()))?;
 /// assert_eq!(pod.decode::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -434,8 +421,7 @@ impl<'de> Decode<'de> for Pointer {
 /// use pod::{Pod, Fd};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(Fd::new(4))?;
-///
+/// pod.as_mut().encode(Fd::new(4))?;
 /// assert_eq!(pod.decode::<Fd>()?, Fd::new(4));
 /// # Ok::<_, pod::Error>(())
 /// ```

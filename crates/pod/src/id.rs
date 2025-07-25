@@ -59,13 +59,13 @@ macro_rules! declare_id {
         ///
         /// let mut pod = Pod::array();
         ///
-        #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+        #[doc = concat!(" pod.as_mut().encode(", stringify!($ty), "::", stringify!($example), ")?;")]
         ///
         #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
         #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
         ///
         /// let mut pod = Pod::array();
-        #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+        #[doc = concat!(" pod.as_mut().encode(", stringify!($ty), "::", stringify!($example), ")?;")]
         ///
         #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
         #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
@@ -79,7 +79,7 @@ macro_rules! declare_id {
         #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
         ///
         /// let mut pod = Pod::array();
-        /// pod.encode(Id(u32::MAX / 2))?;
+        /// pod.as_mut().encode(Id(u32::MAX / 2))?;
         ///
         #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
         #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($default), ");")]
@@ -200,8 +200,7 @@ impl IntoId for u32 {
 /// use pod::{Pod, Id};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode(Id(142u32))?;
-///
+/// pod.as_mut().encode(Id(142u32))?;
 /// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```

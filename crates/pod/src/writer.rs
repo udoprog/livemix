@@ -26,12 +26,24 @@ pub trait Writer: self::sealed::Sealed {
     /// Reserve space for the given number of words.
     fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error>;
 
+    /// Reserve space for a single value while writing.
+    #[inline(always)]
+    fn reserve(&mut self, value: impl WordSized) -> Result<Self::Pos, Error> {
+        self.reserve_words(Align(value).as_words())
+    }
+
     /// Get the distance from the given position to the current writer position
     /// in bytes.
     fn distance_from(&self, pos: Self::Pos) -> Option<u32>;
 
     /// Write a slice of `u32` values to the writer.
     fn write_words(&mut self, words: &[u64]) -> Result<(), Error>;
+
+    /// Write a value to the writer.
+    #[inline(always)]
+    fn write(&mut self, value: impl WordSized) -> Result<(), Error> {
+        self.write_words(Align(value).as_words())
+    }
 
     /// Write a slice of `u32` values to the writer at the given previously
     /// reserved `pos`.
@@ -46,12 +58,6 @@ pub trait Writer: self::sealed::Sealed {
     #[inline(always)]
     fn write_at(&mut self, pos: Self::Pos, value: impl WordSized) -> Result<(), Error> {
         self.write_words_at(pos, Align(value).as_words())
-    }
-
-    /// Write a value to the writer.
-    #[inline(always)]
-    fn write(&mut self, value: impl WordSized) -> Result<(), Error> {
-        self.write_words(Align(value).as_words())
     }
 
     /// Write bytes to the writer.

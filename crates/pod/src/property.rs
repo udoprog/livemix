@@ -21,8 +21,7 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.encode_object(10, 20)?;
-    ///
+    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.close()?;
     ///
@@ -45,8 +44,7 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.encode_object(10, 20)?;
-    ///
+    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.close()?;
     ///
@@ -69,8 +67,7 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.encode_object(10, 20)?;
-    ///
+    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
     /// obj.property(1, 10)?.encode(1i32)?;
     /// obj.close()?;
     ///

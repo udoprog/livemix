@@ -8,7 +8,7 @@ use crate::TypedPod;
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = Pod::array();
-/// let mut seq = pod.encode_sequence()?;
+/// let mut seq = pod.as_mut().encode_sequence()?;
 ///
 /// seq.control(1, 10)?.encode(1i32)?;
 ///
@@ -43,10 +43,8 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.encode_sequence()?;
-    ///
+    /// let mut seq = pod.as_mut().encode_sequence()?;
     /// seq.control(1, 10)?.encode(1i32)?;
-    ///
     /// seq.close()?;
     ///
     /// let mut pod = pod.typed()?;
@@ -69,10 +67,8 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.encode_sequence()?;
-    ///
+    /// let mut seq = pod.as_mut().encode_sequence()?;
     /// seq.control(1, 10)?.encode(1i32)?;
-    ///
     /// seq.close()?;
     ///
     /// let mut pod = pod.typed()?;
@@ -95,10 +91,8 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.encode_sequence()?;
-    ///
+    /// let mut seq = pod.as_mut().encode_sequence()?;
     /// seq.control(1, 10)?.encode(1i32)?;
-    ///
     /// seq.close()?;
     ///
     /// let mut pod = pod.typed()?;

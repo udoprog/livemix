@@ -9,8 +9,8 @@ where
     W: Writer,
 {
     writer: W,
-    header: W::Pos,
     kind: K,
+    header: W::Pos,
 }
 
 impl<W, K> StructEncoder<W, K>
@@ -18,9 +18,11 @@ where
     W: Writer,
     K: PodKind,
 {
+    #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
         // Reserve space for the header of the struct which includes its size that will be determined later.
-        let header = writer.reserve_words(&[0])?;
+        let header = writer.reserve([0, Type::STRUCT.into_u32()])?;
+
         Ok(Self {
             writer,
             header,
@@ -36,12 +38,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
+    /// let mut st = pod.as_mut().encode_struct()?;
     /// st.field()?.encode(1i32)?;
     /// st.field()?.encode(2i32)?;
     /// st.field()?.encode(3i32)?;
-    ///
     /// st.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -58,15 +58,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
-    ///
+    /// let mut st = pod.as_mut().encode_struct()?;
     /// st.field()?.encode(1i32)?;
     /// st.field()?.encode(2i32)?;
     /// st.field()?.encode(3i32)?;
-    ///
     /// st.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
+    #[inline]
     pub fn close(mut self) -> Result<(), Error> {
         // Write the size of the struct at the header position.
         let Some(size) = self

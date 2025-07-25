@@ -35,13 +35,13 @@ where
 
     /// Get the type of the object.
     #[inline]
-    pub fn object_type(&self) -> u32 {
+    pub const fn object_type(&self) -> u32 {
         self.object_type
     }
 
     /// Get the id of the object.
     #[inline]
-    pub fn object_id(&self) -> u32 {
+    pub const fn object_id(&self) -> u32 {
         self.object_id
     }
 
@@ -50,28 +50,39 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
+    /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
+    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
+    /// obj.property(1, 10)?.encode(1i32)?;
+    /// obj.property(2, 20)?.encode(2i32)?;
+    /// obj.property(3, 30)?.encode(3i32)?;
+    /// obj.close()?;
     ///
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
+    /// let mut obj = pod.decode_object()?;
     ///
-    /// st.close()?;
+    /// assert!(!obj.is_empty());
     ///
-    /// let mut st = pod.decode_struct()?;
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.value().decode::<i32>()?, 1);
     ///
-    /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
-    /// assert!(st.is_empty());
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    ///
+    /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.size == 0
     }
 
@@ -80,24 +91,35 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
+    /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.encode_struct()?;
+    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
+    /// obj.property(1, 10)?.encode(1i32)?;
+    /// obj.property(2, 20)?.encode(2i32)?;
+    /// obj.property(3, 30)?.encode(3i32)?;
+    /// obj.close()?;
     ///
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
+    /// let mut obj = pod.decode_object()?;
     ///
-    /// st.close()?;
+    /// assert!(!obj.is_empty());
     ///
-    /// let mut st = pod.decode_struct()?;
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.value().decode::<i32>()?, 1);
     ///
-    /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
-    /// assert!(st.is_empty());
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    ///
+    /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]

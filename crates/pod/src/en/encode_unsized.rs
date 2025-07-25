@@ -41,8 +41,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode_unsized(&b"hello world"[..])?;
-///
+/// pod.as_mut().encode_unsized(&b"hello world"[..])?;
 /// let pod = pod.typed()?;
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
@@ -81,8 +80,7 @@ impl EncodeUnsized for [u8] {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode_unsized(c"hello world")?;
-///
+/// pod.as_mut().encode_unsized(c"hello world")?;
 /// let pod = pod.typed()?;
 /// assert_eq!(pod.decode_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
@@ -123,8 +121,7 @@ impl EncodeUnsized for CStr {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.encode_unsized("hello world")?;
-///
+/// pod.as_mut().encode_unsized("hello world")?;
 /// let pod = pod.typed()?;
 /// assert_eq!(pod.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
@@ -173,8 +170,7 @@ impl EncodeUnsized for str {
 /// use pod::{Bitmap, Pod};
 ///
 /// let mut pod = Pod::array();
-/// pod.encode_unsized(Bitmap::new(b"asdfasdf"))?;
-///
+/// pod.as_mut().encode_unsized(Bitmap::new(b"asdfasdf"))?;
 /// let pod = pod.typed()?;
 /// assert_eq!(pod.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
