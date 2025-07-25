@@ -34,8 +34,8 @@ pub use self::en::{Encode, EncodeUnsized};
 mod de;
 pub use self::de::{Decode, DecodeUnsized};
 
-mod array_buf;
-pub use self::array_buf::Array;
+mod array;
+pub use self::array::Array;
 
 mod writer;
 pub use self::writer::Writer;

@@ -149,6 +149,31 @@ impl<const N: usize> Array<N> {
         }
     }
 
+    /// Returns the size of the remaining buffer in bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Reader};
+    ///
+    /// let mut array = Array::from_array([1, 2, 3]);
+    /// assert_eq!(array.remaining(), 3);
+    /// assert_eq!(array.len(), 24);
+    ///
+    /// assert_eq!(array.read::<[u64; 1]>()?, [1]);
+    /// assert_eq!(array.remaining(), 2);
+    /// assert_eq!(array.len(), 16);
+    /// assert_eq!(array.as_slice(), &[2, 3]);
+    ///
+    /// assert_eq!(array.read::<u128>()?, 2u128 + (3u128 << 64));
+    /// assert_eq!(array.remaining(), 0);
+    /// assert_eq!(array.len(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn len(&self) -> usize {
+        self.remaining() * WORD_SIZE as usize
+    }
+
     /// Returns the number of words that can be read.
     ///
     /// # Examples
@@ -268,6 +293,27 @@ impl<const N: usize> Array<N> {
     pub fn as_slice(&self) -> &[u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.remaining()) }
+    }
+
+    /// Returns the bytes of the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Writer};
+    ///
+    /// let mut buf = Array::new();
+    /// assert_eq!(buf.as_bytes().len(), 0);
+    ///
+    /// buf.write(42u64)?;
+    /// let expected = 42u64.to_ne_bytes();
+    /// assert_eq!(buf.as_bytes(), &expected[..]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
+        unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.len()) }
     }
 }
 

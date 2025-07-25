@@ -206,6 +206,25 @@ impl<B> Pod<B, ChildPod> {
 }
 
 impl<B, K> Pod<B, K> {
+    /// Access the underlying buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode(10i32)?;
+    ///
+    /// let buf = pod.as_buf();
+    /// assert_eq!(buf.as_slice().len(), 2);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_buf(&self) -> &B {
+        &self.buf
+    }
+
     /// Coerce into the underlying buffer.
     ///
     /// # Examples
