@@ -419,3 +419,23 @@ fn test_format_choice() -> Result<(), Error> {
     assert_eq!(format!("{pod:?}"), "Choice[Range, Int](10, 0, 30)");
     Ok(())
 }
+
+#[test]
+fn test_format_buggy() -> Result<(), Error> {
+    let mut pod = Pod::array();
+    let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
+
+    choice.entry()?.encode(10i32)?;
+    choice.entry()?.encode(0i32)?;
+    choice.entry()?.encode(30i32)?;
+
+    choice.close()?;
+
+    let mut array = pod.into_buf();
+
+    array.as_slice_mut()[2] = u64::MAX; // Corrupt the pod.
+
+    let pod = Pod::new(array.as_slice());
+    assert_eq!(format!("{pod:?}"), "Choice{Size overflow}");
+    Ok(())
+}

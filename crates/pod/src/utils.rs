@@ -189,7 +189,9 @@ pub(crate) fn array_remaining(size: u32, child_size: u32, header_size: u32) -> R
             break 'out 0;
         }
 
-        let padded_child_size = child_size.next_multiple_of(WORD_SIZE);
+        let Some(padded_child_size) = child_size.checked_next_multiple_of(WORD_SIZE) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
 
         let Some(size) = size.checked_div(padded_child_size) else {
             break 'out 0;

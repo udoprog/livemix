@@ -475,65 +475,88 @@ where
     }
 
     fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        macro_rules! tri {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(e) => return write!(f, "{{{e}}}"),
+                }
+            };
+        }
+
+        macro_rules! decode {
+            ($ty:ty, $pat:pat => $expr:expr) => {
+                match self.decode::<$ty>() {
+                    Ok($pat) => $expr,
+                    Err(e) => write!(f, "{{{e}}}"),
+                }
+            };
+        }
+
+        macro_rules! decode_unsized {
+            ($ty:ty, $pat:pat => $expr:expr) => {{
+                let mut outer = Ok(());
+
+                let result = self.decode_unsized(FunctionVisitor(|$pat: &$ty| {
+                    outer = $expr;
+                }));
+
+                if let Err(e) = result {
+                    return write!(f, "{{{e}}}");
+                }
+
+                outer
+            }};
+        }
+
         match self.ty {
             Type::NONE => f.write_str("None"),
             Type::BOOL => {
-                let value = self.decode::<bool>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode!(bool, value => write!(f, "{value:?}"))
             }
             Type::ID => {
-                let Id(value) = self.decode::<Id<u32>>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode!(Id<u32>, value => write!(f, "{value:?}"))
             }
             Type::INT => {
-                let value = self.decode::<i32>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode!(i32, value => write!(f, "{value:?}"))
             }
             Type::LONG => {
-                let value = self.decode::<i64>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode!(i64, value => write!(f, "{value:?}"))
             }
             Type::FLOAT => {
-                let value = self.decode::<f32>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode!(f32, value => write!(f, "{value:?}"))
             }
             Type::DOUBLE => {
-                let value = self.decode::<f64>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode!(f64, value => write!(f, "{value:?}"))
             }
             Type::STRING => {
-                let value = self.decode_borrowed::<CStr>().map_err(|_| fmt::Error)?;
-                write!(f, "{value:?}")
+                decode_unsized!(CStr, value => write!(f, "{value:?}"))
             }
             Type::BYTES => {
-                let value = self.decode_borrowed::<[u8]>().map_err(|_| fmt::Error)?;
-                write!(f, "{:?}", BStr::new(value))
+                decode_unsized!([u8], value => write!(f, "{:?}", BStr::new(value)))
             }
             Type::RECTANGLE => {
-                let value = self.decode::<Rectangle>().map_err(|_| fmt::Error)?;
-                write!(
+                decode!(Rectangle, value => write!(
                     f,
                     "{{width: {:?}, height: {:?}}}",
                     value.width, value.height
-                )
+                ))
             }
             Type::FRACTION => {
-                let value = self.decode::<Fraction>().map_err(|_| fmt::Error)?;
-                write!(f, "{{num: {:?}, denom: {:?}}}", value.num, value.denom)
+                decode!(Fraction, value => write!(f, "{{num: {:?}, denom: {:?}}}", value.num, value.denom))
             }
             Type::BITMAP => {
-                let value = self
-                    .typed()
-                    .decode_borrowed::<Bitmap>()
-                    .map_err(|_| fmt::Error)?;
-                write!(f, "{:?}", BStr::new(value.as_bytes()))
+                decode_unsized!(Bitmap, value => write!(f, "{:?}", BStr::new(value.as_bytes())))
             }
             Type::ARRAY => {
-                let mut array = self.decode_array().map_err(|_| fmt::Error)?;
+                let mut array = tri!(self.decode_array());
                 write!(f, "[{:?}](", array.child_type())?;
 
                 while !array.is_empty() {
-                    array.item().map_err(|_| fmt::Error)?.debug_fmt(f)?;
+                    match array.item() {
+                        Ok(item) => item.debug_fmt(f)?,
+                        Err(e) => write!(f, "{{{e}}}")?,
+                    }
 
                     if !array.is_empty() {
                         write!(f, ", ")?;
@@ -544,14 +567,18 @@ where
                 Ok(())
             }
             Type::STRUCT => {
-                let mut st = self.decode_struct().map_err(|_| fmt::Error)?;
+                let mut st = tri!(self.decode_struct());
                 write!(f, "{{")?;
 
                 while !st.is_empty() {
-                    {
-                        let pod = st.field().map_err(|_| fmt::Error)?;
-                        write!(f, "{:?}: ", pod.ty())?;
-                        pod.debug_fmt(f)?;
+                    match st.field() {
+                        Ok(pod) => {
+                            write!(f, "{:?}: ", pod.ty())?;
+                            pod.debug_fmt(f)?;
+                        }
+                        Err(e) => {
+                            write!(f, "?: {{{e}}}")?;
+                        }
                     }
 
                     if !st.is_empty() {
@@ -563,19 +590,29 @@ where
                 Ok(())
             }
             Type::OBJECT => {
-                let mut st = self.decode_object().map_err(|_| fmt::Error)?;
+                let mut st = tri!(self.decode_object());
                 write!(f, "[{}, {}]{{", st.object_type(), st.object_id())?;
 
                 while !st.is_empty() {
-                    let prop = st.property().map_err(|_| fmt::Error)?;
+                    match st.property() {
+                        Ok(prop) => {
+                            if prop.flags() != 0 {
+                                write!(
+                                    f,
+                                    "{{key: {}, flags: 0b{:b}}}: ",
+                                    prop.key(),
+                                    prop.flags()
+                                )?;
+                            } else {
+                                write!(f, "{:?}: ", prop.key())?;
+                            }
 
-                    if prop.flags() != 0 {
-                        write!(f, "{{key: {}, flags: 0b{:b}}}: ", prop.key(), prop.flags())?;
-                    } else {
-                        write!(f, "{:?}: ", prop.key())?;
+                            prop.value().debug_fmt_with_type(f)?;
+                        }
+                        Err(e) => {
+                            write!(f, "?: {{{e}}}")?;
+                        }
                     }
-
-                    prop.value().debug_fmt_with_type(f)?;
 
                     if !st.is_empty() {
                         write!(f, ", ")?;
@@ -586,14 +623,19 @@ where
                 Ok(())
             }
             Type::SEQUENCE => {
-                let mut st = self.decode_sequence().map_err(|_| fmt::Error)?;
+                let mut st = tri!(self.decode_sequence());
                 write!(f, "[{}, {}]{{", st.unit(), st.pad())?;
 
                 while !st.is_empty() {
-                    let c = st.control().map_err(|_| fmt::Error)?;
-                    write!(f, "{{offset: {:?}, type: {:?}}}: ", c.offset(), c.ty())?;
-
-                    c.value().debug_fmt_with_type(f)?;
+                    match st.control() {
+                        Ok(c) => {
+                            write!(f, "{{offset: {:?}, type: {:?}}}: ", c.offset(), c.ty())?;
+                            c.value().debug_fmt_with_type(f)?;
+                        }
+                        Err(e) => {
+                            write!(f, "?: {{{e}}}")?;
+                        }
+                    }
 
                     if !st.is_empty() {
                         write!(f, ", ")?;
@@ -604,26 +646,26 @@ where
                 Ok(())
             }
             Type::POINTER => {
-                let p = self.decode::<Pointer>().map_err(|_| fmt::Error)?;
-
-                if p.ty() != 0 {
-                    write!(f, "{{pointer: {:?}, type: {:?}}}", p.pointer(), p.ty())
-                } else {
-                    write!(f, "{:?}", p.pointer())
-                }
+                decode!(Pointer, p => {
+                    if p.ty() != 0 {
+                        write!(f, "{{pointer: {:?}, type: {:?}}}", p.pointer(), p.ty())
+                    } else {
+                        write!(f, "{:?}", p.pointer())
+                    }
+                })
             }
             Type::FD => {
-                let fd = self.decode::<Fd>().map_err(|_| fmt::Error)?;
-                write!(f, "{:?}", fd.fd())
+                decode!(Fd, fd => write!(f, "{:?}", fd.fd()))
             }
             Type::CHOICE => {
-                let mut choice = self.decode_choice().map_err(|_| fmt::Error)?;
+                let mut choice = tri!(self.decode_choice());
                 write!(f, "[{:?}, {:?}](", choice.ty(), choice.child_type())?;
 
                 while !choice.is_empty() {
-                    let e = choice.entry().map_err(|_| fmt::Error)?;
-
-                    e.debug_fmt(f)?;
+                    match choice.entry() {
+                        Ok(e) => e.debug_fmt(f)?,
+                        Err(e) => write!(f, "{{{e}}}")?,
+                    }
 
                     if !choice.is_empty() {
                         write!(f, ", ")?;
@@ -634,8 +676,11 @@ where
                 Ok(())
             }
             ty => {
-                self.skip().map_err(|_| fmt::Error)?;
-                write!(f, "{ty:?}")
+                if let Err(e) = self.skip() {
+                    write!(f, "{e}")
+                } else {
+                    write!(f, "{{{ty:?}}}")
+                }
             }
         }
     }
@@ -667,5 +712,24 @@ where
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.typed().debug_fmt_with_type(f)
+    }
+}
+
+struct FunctionVisitor<F>(F);
+
+impl<'de, F, T> Visitor<'de, T> for FunctionVisitor<F>
+where
+    F: FnOnce(&T),
+    T: ?Sized,
+{
+    type Ok = ();
+
+    #[inline]
+    fn visit_ref(self, value: &T) -> Result<Self::Ok, Error>
+    where
+        Self: Sized,
+    {
+        (self.0)(value);
+        Ok(())
     }
 }

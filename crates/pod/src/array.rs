@@ -295,6 +295,33 @@ impl<const N: usize> Array<N> {
         unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.remaining()) }
     }
 
+    /// Returns a mutable slice of the remaining data to be read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Writer};
+    ///
+    /// let mut buf = Array::new();
+    /// assert_eq!(buf.as_slice().len(), 0);
+    ///
+    /// buf.write(42u64)?;
+    /// assert_eq!(buf.as_slice(), &[42]);
+    ///
+    /// buf.as_slice_mut()[0] = 43;
+    /// assert_eq!(buf.as_slice(), &[43]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn as_slice_mut(&mut self) -> &mut [u64] {
+        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.data.as_mut_ptr().add(self.read).cast(),
+                self.remaining(),
+            )
+        }
+    }
+
     /// Returns the bytes of the buffer.
     ///
     /// # Examples
