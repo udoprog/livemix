@@ -20,3 +20,11 @@ pub(crate) mod buf;
 pub use self::buf::Buf;
 
 pub mod types;
+
+mod events;
+
+pub mod poll;
+pub use self::poll::Poll;
+
+mod event_fd;
+pub use self::event_fd::EventFd;

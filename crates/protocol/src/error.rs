@@ -37,9 +37,12 @@ pub(crate) enum ErrorKind {
     #[cfg(feature = "std")]
     ConnectionFailed(io::Error),
     #[cfg(feature = "std")]
-    SendError(io::Error),
+    SetNonBlockingFailed(io::Error),
     #[cfg(feature = "std")]
-    RecvError(io::Error),
+    SendFailed(io::Error),
+    #[cfg(feature = "std")]
+    ReceiveFailed(io::Error),
+    RemoteClosed,
     NoSocket,
     SizeOverflow,
 }
@@ -52,9 +55,11 @@ impl error::Error for Error {
             #[cfg(feature = "std")]
             ErrorKind::ConnectionFailed(e) => Some(e),
             #[cfg(feature = "std")]
-            ErrorKind::SendError(e) => Some(e),
+            ErrorKind::SetNonBlockingFailed(e) => Some(e),
             #[cfg(feature = "std")]
-            ErrorKind::RecvError(e) => Some(e),
+            ErrorKind::SendFailed(e) => Some(e),
+            #[cfg(feature = "std")]
+            ErrorKind::ReceiveFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -75,9 +80,14 @@ impl fmt::Display for Error {
             #[cfg(feature = "std")]
             ErrorKind::ConnectionFailed(..) => write!(f, "Connection failed"),
             #[cfg(feature = "std")]
-            ErrorKind::SendError(..) => write!(f, "Send error"),
+            ErrorKind::SetNonBlockingFailed(..) => {
+                write!(f, "Setting the socket to non-blocking failed")
+            }
             #[cfg(feature = "std")]
-            ErrorKind::RecvError(..) => write!(f, "Receive error"),
+            ErrorKind::SendFailed(..) => write!(f, "Send failed"),
+            #[cfg(feature = "std")]
+            ErrorKind::ReceiveFailed(..) => write!(f, "Receive failed"),
+            ErrorKind::RemoteClosed => write!(f, "Remote server closed the connection"),
             ErrorKind::NoSocket => write!(f, "No socket to connect to found"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
         }

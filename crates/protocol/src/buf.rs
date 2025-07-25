@@ -62,14 +62,9 @@ impl Buf {
 
     /// Get the slice available for reading.
     #[inline]
-    pub(crate) fn take_bytes(&self) -> &[u8] {
+    pub(crate) fn as_bytes(&self) -> &[u8] {
         // SAFETY: The buffer is guaranteed to initialized due to invariants.
-        unsafe {
-            let value =
-                slice::from_raw_parts(self.data.as_ptr().add(self.read.get()), self.remaining());
-            self.set_read(value.len());
-            value
-        }
+        unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read.get()), self.remaining()) }
     }
 
     /// Get a slice available for writing.
@@ -194,8 +189,14 @@ impl Buf {
     ///
     /// Note that this is safe since we always ensure that the buffer is
     /// zero-initialized.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the specified number of bytes
+    /// `self.read..self.read + n` is a valid memory region in the buffer that
+    /// has previously been written to.
     #[inline]
-    unsafe fn set_read(&self, n: usize) {
+    pub(crate) unsafe fn set_read(&self, n: usize) {
         self.read.set(self.read.get() + n);
 
         if self.read.get() == self.write.get() {
@@ -215,6 +216,12 @@ impl Buf {
     ///
     /// Note that this is safe since we always ensure that the buffer is
     /// zero-initialized.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the specified number of bytes
+    /// `self.write..self.write + n` is a valid memory region in the buffer that
+    /// has previously been written to.
     #[inline]
     pub(crate) unsafe fn set_written(&self, n: usize) {
         self.write.set(self.write.get() + n);
