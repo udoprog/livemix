@@ -57,7 +57,8 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
-    /// array.encode(1i32)?;
+    /// array.push()?.encode(1i32)?;
+    ///
     /// array.close()?;
     ///
     /// let mut array = pod.decode_array()?;
@@ -101,9 +102,9 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
-    /// array.encode(1i32)?;
-    /// array.encode(2i32)?;
-    /// array.encode(3i32)?;
+    /// array.push()?.encode(1i32)?;
+    /// array.push()?.encode(2i32)?;
+    /// array.push()?.encode(3i32)?;
     ///
     /// array.close()?;
     ///
@@ -143,9 +144,9 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
-    /// array.encode(1i32)?;
-    /// array.encode(2i32)?;
-    /// array.encode(3i32)?;
+    /// array.push()?.encode(1i32)?;
+    /// array.push()?.encode(2i32)?;
+    /// array.push()?.encode(3i32)?;
     ///
     /// array.close()?;
     ///
@@ -192,9 +193,9 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
-    /// array.encode_unsized("foo")?;
-    /// array.encode_unsized("bar")?;
-    /// array.encode_unsized("baz")?;
+    /// array.push()?.encode_unsized("foo")?;
+    /// array.push()?.encode_unsized("bar")?;
+    /// array.push()?.encode_unsized("baz")?;
     ///
     /// array.close()?;
     ///
@@ -243,9 +244,9 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
-    /// array.encode_unsized("foo")?;
-    /// array.encode_unsized("bar")?;
-    /// array.encode_unsized("baz")?;
+    /// array.push()?.encode_unsized("foo")?;
+    /// array.push()?.encode_unsized("bar")?;
+    /// array.push()?.encode_unsized("baz")?;
     ///
     /// array.close()?;
     ///

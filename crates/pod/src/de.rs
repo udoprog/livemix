@@ -15,3 +15,6 @@ pub use self::object_decoder::ObjectDecoder;
 
 mod sequence_decoder;
 pub use self::sequence_decoder::SequenceDecoder;
+
+mod choice_decoder;
+pub use self::choice_decoder::ChoiceDecoder;

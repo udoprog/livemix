@@ -1,18 +1,88 @@
 use core::fmt;
 
-use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
-use crate::en::{ArrayEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
+use crate::de::{ArrayDecoder, ChoiceDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
+use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    Array, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor,
-    Writer,
+    Array, Choice, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod,
+    Visitor, Writer,
 };
+
+/// An unlimited pod.
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct Unlimited;
+
+/// A pod limited for a specific child type and size.
+#[derive(Clone, Copy, Debug)]
+pub struct ChildLimit {
+    size: u32,
+    ty: Type,
+}
+
+impl PodLimit for ChildLimit {
+    const ENVELOPE: bool = false;
+
+    #[inline]
+    fn check(&self, ty: Type, size: u32) -> Result<(), Error> {
+        if self.ty != ty {
+            return Err(Error::new(ErrorKind::Expected {
+                expected: self.ty,
+                actual: ty,
+            }));
+        }
+
+        if size > self.size {
+            return Err(Error::new(ErrorKind::ChildSizeMismatch {
+                expected: self.size,
+                actual: size,
+            }));
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn check_unsized(&self, _: Type) -> Result<(), Error> {
+        Err(Error::new(ErrorKind::ChildUnsizedMismatch {
+            expected: self.size,
+        }))
+    }
+}
+
+pub trait PodLimit: Clone {
+    const ENVELOPE: bool;
+
+    /// Check if the type [`Type`] of the given size is allowed.
+    fn check(&self, ty: Type, size: u32) -> Result<(), Error>;
+
+    /// Check a type of unknown size.
+    fn check_unsized(&self, ty: Type) -> Result<(), Error>;
+}
+
+impl PodLimit for Unlimited {
+    const ENVELOPE: bool = true;
+
+    #[inline]
+    fn check(&self, _: Type, _: u32) -> Result<(), Error> {
+        Ok(())
+    }
+
+    #[inline]
+    fn check_unsized(&self, _: Type) -> Result<(), Error> {
+        Ok(())
+    }
+}
 
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct Pod<B> {
+pub struct Pod<B, L = Unlimited>
+where
+    L: PodLimit,
+{
     buf: B,
+    limit: L,
 }
 
 impl<B> Clone for Pod<B>
@@ -23,6 +93,7 @@ where
     fn clone(&self) -> Self {
         Pod {
             buf: self.buf.clone(),
+            limit: self.limit.clone(),
         }
     }
 }
@@ -45,6 +116,7 @@ impl Pod<Array<256>> {
     pub const fn array() -> Self {
         Pod {
             buf: Array::with_size(),
+            limit: Unlimited,
         }
     }
 }
@@ -67,6 +139,7 @@ impl<const N: usize> Pod<Array<N>> {
     pub const fn with_size<const U: usize>(self) -> Pod<Array<U>> {
         Pod {
             buf: Array::with_size(),
+            limit: self.limit,
         }
     }
 }
@@ -84,7 +157,10 @@ impl<B> Pod<B> {
     /// ```
     #[inline]
     pub const fn new(buf: B) -> Self {
-        Pod { buf }
+        Pod {
+            buf,
+            limit: Unlimited,
+        }
     }
 
     /// Coerce into the underlying buffer.
@@ -107,9 +183,20 @@ impl<B> Pod<B> {
     }
 }
 
-impl<B> Pod<B>
+impl<B> Pod<B, ChildLimit> {
+    /// Construct a new pod with a child limit.
+    pub(crate) const fn new_child(buf: B, size: u32, ty: Type) -> Self {
+        Pod {
+            buf,
+            limit: ChildLimit { size, ty },
+        }
+    }
+}
+
+impl<B, I> Pod<B, I>
 where
     B: Writer,
+    I: PodLimit,
 {
     /// Encode a value into the pod.
     ///
@@ -126,7 +213,13 @@ where
     where
         T: Encode,
     {
-        value.encode(self.buf.borrow_mut())
+        self.limit.check(T::TYPE, value.size())?;
+
+        if I::ENVELOPE {
+            value.encode(self.buf.borrow_mut())
+        } else {
+            value.write_content(self.buf.borrow_mut())
+        }
     }
 
     /// Encode an unsized value into the pod.
@@ -144,7 +237,13 @@ where
     where
         T: ?Sized + EncodeUnsized,
     {
-        value.encode_unsized(self.buf.borrow_mut())
+        self.limit.check(T::TYPE, value.size())?;
+
+        if I::ENVELOPE {
+            value.encode_unsized(self.buf.borrow_mut())
+        } else {
+            value.write_content(self.buf.borrow_mut())
+        }
     }
 
     /// Encode a `None` value.
@@ -160,7 +259,12 @@ where
     /// ```
     #[inline]
     pub fn encode_none(&mut self) -> Result<(), Error> {
-        self.buf.write([0, Type::NONE.into_u32()])?;
+        self.limit.check(Type::NONE, 0)?;
+
+        if I::ENVELOPE {
+            self.buf.write([0, Type::NONE.into_u32()])?;
+        }
+
         Ok(())
     }
 
@@ -185,7 +289,7 @@ where
     ///
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
-    /// assert!(array.encode(42.42f32).is_err());
+    /// assert!(array.push()?.encode(42.42f32).is_err());
     /// # Ok::<_, pod::Error>(())
     /// ```
     ///
@@ -197,22 +301,17 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
-    /// array.encode(1i32)?;
-    /// array.encode(2i32)?;
-    /// array.encode(3i32)?;
+    /// array.push()?.encode(1i32)?;
+    /// array.push()?.encode(2i32)?;
+    /// array.push()?.encode(3i32)?;
     ///
     /// array.close()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
     pub fn encode_array(&mut self, child_type: Type) -> Result<ArrayEncoder<B::Mut<'_>>, Error> {
-        let Some(child_size) = child_type.size() else {
-            return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
-        };
-
-        let mut buf = self.buf.borrow_mut();
-        let pos = buf.reserve_words(&[0, 0])?;
-        Ok(ArrayEncoder::new(buf, child_size, child_type, pos))
+        self.limit.check_unsized(Type::ARRAY)?;
+        ArrayEncoder::to_writer(self.buf.borrow_mut(), child_type)
     }
 
     /// Encode an array with items of an unsized type.
@@ -244,10 +343,10 @@ where
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// // Note: strings are null-terminated, so the length is 4.
-    /// array.encode_unsized("foo")?;
+    /// array.push()?.encode_unsized("foo")?;
     ///
-    /// assert!(array.encode(1i32).is_err());
-    /// assert!(array.encode_unsized("barbaz").is_err());
+    /// assert!(array.push()?.encode(1i32).is_err());
+    /// assert!(array.push()?.encode_unsized("barbaz").is_err());
     /// # Ok::<_, pod::Error>(())
     /// ```
     ///
@@ -260,9 +359,9 @@ where
     /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
     /// // Note: strings are null-terminated, so the length is 4.
-    /// array.encode_unsized("foo")?;
-    /// array.encode_unsized("bar")?;
-    /// array.encode_unsized("baz")?;
+    /// array.push()?.encode_unsized("foo")?;
+    /// array.push()?.encode_unsized("bar")?;
+    /// array.push()?.encode_unsized("baz")?;
     ///
     /// array.close()?;
     ///
@@ -274,20 +373,10 @@ where
     pub fn encode_unsized_array(
         &mut self,
         child_type: Type,
-        len: usize,
+        len: u32,
     ) -> Result<ArrayEncoder<B::Mut<'_>>, Error> {
-        if let Some(child_size) = child_type.size() {
-            if child_size != len {
-                return Err(Error::new(ErrorKind::ArrayChildSizeMismatch {
-                    actual: len,
-                    expected: child_size,
-                }));
-            }
-        };
-
-        let mut buf = self.buf.borrow_mut();
-        let pos = buf.reserve_words(&[0, 0])?;
-        Ok(ArrayEncoder::new(buf, len, child_type, pos))
+        self.limit.check_unsized(Type::ARRAY)?;
+        ArrayEncoder::to_writer_unsized(self.buf.borrow_mut(), len, child_type)
     }
 
     /// Encode a struct.
@@ -309,6 +398,7 @@ where
     /// ```
     #[inline]
     pub fn encode_struct(&mut self) -> Result<StructEncoder<B::Mut<'_>>, Error> {
+        self.limit.check_unsized(Type::STRUCT)?;
         StructEncoder::to_writer(self.buf.borrow_mut())
     }
 
@@ -335,6 +425,7 @@ where
         object_type: u32,
         object_id: u32,
     ) -> Result<ObjectEncoder<B::Mut<'_>>, Error> {
+        self.limit.check_unsized(Type::OBJECT)?;
         ObjectEncoder::to_writer(self.buf.borrow_mut(), object_type, object_id)
     }
 
@@ -357,7 +448,33 @@ where
     /// ```
     #[inline]
     pub fn encode_sequence(&mut self) -> Result<SequenceEncoder<B::Mut<'_>>, Error> {
+        self.limit.check_unsized(Type::SEQUENCE)?;
         SequenceEncoder::to_writer(self.buf.borrow_mut())
+    }
+
+    /// Encode a choice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Choice, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// let mut choice = pod.encode_choice(Choice::RANGE, Type::INT)?;
+    ///
+    /// choice.entry()?.encode(1i32)?;
+    ///
+    /// choice.close()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_choice(
+        &mut self,
+        choice: Choice,
+        child_type: Type,
+    ) -> Result<ChoiceEncoder<B::Mut<'_>>, Error> {
+        self.limit.check_unsized(Type::SEQUENCE)?;
+        ChoiceEncoder::to_writer(self.buf.borrow_mut(), choice, child_type)
     }
 }
 
@@ -374,8 +491,10 @@ where
     /// let mut pod = Pod::array();
     ///
     /// let mut array = pod.encode_array(Type::INT)?;
-    /// array.encode(10i32)?;
-    /// array.encode(20i32)?;
+    ///
+    /// array.push()?.encode(10i32)?;
+    /// array.push()?.encode(20i32)?;
+    ///
     /// array.close()?;
     ///
     /// let pod = pod.typed()?;
@@ -497,9 +616,9 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
-    /// array.encode(1i32)?;
-    /// array.encode(2i32)?;
-    /// array.encode(3i32)?;
+    /// array.push()?.encode(1i32)?;
+    /// array.push()?.encode(2i32)?;
+    /// array.push()?.encode(3i32)?;
     ///
     /// array.close()?;
     ///
@@ -635,6 +754,38 @@ where
     #[inline]
     pub fn decode_sequence(self) -> Result<SequenceDecoder<B>, Error> {
         self.into_typed()?.decode_sequence()
+    }
+
+    /// Decode a choice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Choice, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// let mut choice = pod.encode_choice(Choice::RANGE, Type::INT)?;
+    ///
+    /// choice.entry()?.encode(10i32)?;
+    /// choice.entry()?.encode(0i32)?;
+    /// choice.entry()?.encode(30i32)?;
+    ///
+    /// choice.close()?;
+    ///
+    /// let mut choice = pod.decode_choice()?;
+    ///
+    /// assert!(!choice.is_empty());
+    ///
+    /// assert_eq!(choice.entry()?.decode::<i32>()?, 10);
+    /// assert_eq!(choice.entry()?.decode::<i32>()?, 0);
+    /// assert_eq!(choice.entry()?.decode::<i32>()?, 30);
+    ///
+    /// assert!(choice.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_choice(self) -> Result<ChoiceDecoder<B>, Error> {
+        self.into_typed()?.decode_choice()
     }
 
     /// Convert the [`Pod`] into a [`TypedPod`] taking ownership of the current

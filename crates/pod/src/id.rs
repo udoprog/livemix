@@ -34,7 +34,7 @@ macro_rules! declare_id {
             const TYPE: $crate::Type = $crate::Type::ID;
 
             #[inline]
-            fn size(&self) -> usize {
+            fn size(&self) -> u32 {
                 4
             }
 

@@ -73,6 +73,9 @@ unsafe impl WordSized for [u32; 2] {
 unsafe impl WordSized for [u32; 4] {
     const WORD_SIZE: usize = 2;
 }
+unsafe impl WordSized for [u32; 6] {
+    const WORD_SIZE: usize = 3;
+}
 unsafe impl<const N: usize> WordSized for [u64; N] {
     const WORD_SIZE: usize = N;
 }

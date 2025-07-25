@@ -70,3 +70,6 @@ pub use self::pointer::Pointer;
 
 mod fd;
 pub use self::fd::Fd;
+
+mod choice;
+pub use self::choice::Choice;

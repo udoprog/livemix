@@ -31,7 +31,7 @@ macro_rules! declare {
 
             /// Get the size of the type.
             #[inline]
-            pub(crate) fn size(&self) -> Option<usize> {
+            pub(crate) fn size(&self) -> Option<u32> {
                 match *self {
                     $(Self::$ident => $size,)*
                     _ => None,
@@ -96,5 +96,7 @@ declare! {
         pub const POINTER = 17;
         #[name = "Fd", size = Some(8)]
         pub const FD = 18;
+        #[name = "Choice", size = None]
+        pub const CHOICE = 19;
     }
 }

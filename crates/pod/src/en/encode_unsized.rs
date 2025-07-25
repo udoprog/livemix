@@ -24,7 +24,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 
     /// The size in bytes of the unsized value.
     #[doc(hidden)]
-    fn size(&self) -> usize;
+    fn size(&self) -> u32;
 
     #[doc(hidden)]
     fn encode_unsized(&self, writer: impl Writer) -> Result<(), Error>;
@@ -51,8 +51,8 @@ impl EncodeUnsized for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.len()
+    fn size(&self) -> u32 {
+        self.len() as u32
     }
 
     #[inline]
@@ -91,8 +91,8 @@ impl EncodeUnsized for CStr {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.to_bytes_with_nul().len()
+    fn size(&self) -> u32 {
+        self.to_bytes_with_nul().len() as u32
     }
 
     #[inline]
@@ -133,8 +133,8 @@ impl EncodeUnsized for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> usize {
-        str::len(self).wrapping_add(1)
+    fn size(&self) -> u32 {
+        str::len(self).wrapping_add(1) as u32
     }
 
     #[inline]
@@ -183,8 +183,8 @@ impl EncodeUnsized for Bitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
-    fn size(&self) -> usize {
-        Bitmap::as_bytes(self).len()
+    fn size(&self) -> u32 {
+        Bitmap::as_bytes(self).len() as u32
     }
 
     #[inline]

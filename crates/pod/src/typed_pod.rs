@@ -2,7 +2,7 @@ use core::ffi::CStr;
 use core::fmt;
 
 use crate::bstr::BStr;
-use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
+use crate::de::{ArrayDecoder, ChoiceDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
 use crate::error::ErrorKind;
 use crate::{
     Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pointer, Reader, Rectangle, Type,
@@ -106,8 +106,8 @@ where
     /// let mut pod = Pod::array();
     ///
     /// let mut array = pod.encode_array(Type::INT)?;
-    /// array.encode(10i32)?;
-    /// array.encode(20i32)?;
+    /// array.push()?.encode(10i32)?;
+    /// array.push()?.encode(20i32)?;
     /// array.close()?;
     ///
     /// let pod = pod.typed()?;
@@ -260,9 +260,9 @@ where
     /// let mut pod = Pod::array();
     /// let mut array = pod.encode_array(Type::INT)?;
     ///
-    /// array.encode(1i32)?;
-    /// array.encode(2i32)?;
-    /// array.encode(3i32)?;
+    /// array.push()?.encode(1i32)?;
+    /// array.push()?.encode(2i32)?;
+    /// array.push()?.encode(3i32)?;
     ///
     /// array.close()?;
     ///
@@ -427,10 +427,48 @@ where
         }
     }
 
+    /// Decode a choice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Choice, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// let mut choice = pod.encode_choice(Choice::RANGE, Type::INT)?;
+    ///
+    /// choice.entry()?.encode(10i32)?;
+    /// choice.entry()?.encode(0i32)?;
+    /// choice.entry()?.encode(30i32)?;
+    ///
+    /// choice.close()?;
+    ///
+    /// let mut choice = pod.decode_choice()?;
+    ///
+    /// assert!(!choice.is_empty());
+    ///
+    /// assert_eq!(choice.entry()?.decode::<i32>()?, 10);
+    /// assert_eq!(choice.entry()?.decode::<i32>()?, 0);
+    /// assert_eq!(choice.entry()?.decode::<i32>()?, 30);
+    ///
+    /// assert!(choice.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_choice(self) -> Result<ChoiceDecoder<B>, Error> {
+        match self.ty {
+            Type::CHOICE => ChoiceDecoder::from_reader(self.buf, self.size),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::CHOICE,
+                actual: self.ty,
+            })),
+        }
+    }
+
     pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let container = matches!(
             self.ty,
-            Type::ARRAY | Type::STRUCT | Type::OBJECT | Type::SEQUENCE
+            Type::ARRAY | Type::STRUCT | Type::OBJECT | Type::SEQUENCE | Type::CHOICE
         );
         write!(f, "{}", self.ty)?;
 
@@ -588,6 +626,23 @@ where
             Type::FD => {
                 let fd = self.decode::<Fd>().map_err(|_| fmt::Error)?;
                 write!(f, "{:?}", fd.fd())
+            }
+            Type::CHOICE => {
+                let mut choice = self.decode_choice().map_err(|_| fmt::Error)?;
+                write!(f, "[{:?}, {:?}](", choice.ty(), choice.child_type())?;
+
+                while !choice.is_empty() {
+                    let e = choice.entry().map_err(|_| fmt::Error)?;
+
+                    e.debug_fmt(f)?;
+
+                    if !choice.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                }
+
+                write!(f, ")")?;
+                Ok(())
             }
             ty => {
                 self.skip().map_err(|_| fmt::Error)?;

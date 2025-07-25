@@ -15,3 +15,6 @@ pub use self::object_encoder::ObjectEncoder;
 
 mod sequence_encoder;
 pub use self::sequence_encoder::SequenceEncoder;
+
+mod choice_encoder;
+pub use self::choice_encoder::ChoiceEncoder;
