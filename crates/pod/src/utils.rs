@@ -115,12 +115,12 @@ where
 }
 
 #[repr(align(8))]
-pub(crate) struct WordBytes([u8; 16]);
+pub(crate) struct WordBytes([u8; 8]);
 
 impl WordBytes {
     pub(crate) fn new() -> Self {
         // SAFETY: This just constructs an array of uninitialized values.
-        Self([0; 16])
+        Self([0; 8])
     }
 
     /// Write a `usize` value to the lower end of the region.
@@ -130,6 +130,16 @@ impl WordBytes {
         // writing.
         unsafe {
             self.0.as_mut_ptr().cast::<usize>().write(value);
+        }
+    }
+
+    /// Write a `u64` value to the region.
+    #[inline]
+    pub(crate) fn write_u64(&mut self, value: u64) {
+        // SAFETY: 8-byte alignment ensures that the pointer is valid for
+        // writing.
+        unsafe {
+            self.0.as_mut_ptr().cast::<u64>().write(value);
         }
     }
 
@@ -151,8 +161,14 @@ impl WordBytes {
     }
 
     #[inline]
-    pub(crate) fn as_slice(&self) -> &[u64] {
+    pub(crate) fn as_array(&self) -> &[u64; 1] {
         // SAFETY: Type is always initialized to something valid.
-        unsafe { slice::from_raw_parts(self.0.as_ptr().cast::<u64>(), 2) }
+        unsafe { &*self.0.as_ptr().cast::<[u64; 1]>() }
+    }
+
+    #[inline]
+    pub(crate) fn as_array_u32(&self) -> &[u32; 2] {
+        // SAFETY: Type is always initialized to something valid.
+        unsafe { &*self.0.as_ptr().cast::<[u32; 2]>() }
     }
 }

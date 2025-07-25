@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
 use crate::{Bitmap, DecodeUnsized, OwnedBitmap, Visitor};
-use crate::{Error, Fraction, Id, IntoId, Pointer, Reader, Rectangle, Type, utils::WordBytes};
+use crate::{Error, Fd, Fraction, Id, IntoId, Pointer, Reader, Rectangle, Type, utils::WordBytes};
 
 pub(crate) mod sealed {
     #[cfg(feature = "alloc")]
@@ -25,7 +25,7 @@ pub(crate) mod sealed {
     #[cfg(feature = "alloc")]
     use crate::OwnedBitmap;
     use crate::id::IntoId;
-    use crate::{DecodeUnsized, Fraction, Id, Pointer, Rectangle};
+    use crate::{DecodeUnsized, Fd, Fraction, Id, Pointer, Rectangle};
 
     pub trait Sealed {}
     impl Sealed for bool {}
@@ -45,6 +45,7 @@ pub(crate) mod sealed {
     #[cfg(feature = "alloc")]
     impl Sealed for OwnedBitmap {}
     impl Sealed for Pointer {}
+    impl Sealed for Fd {}
     impl<'de, E> Sealed for &E where E: ?Sized + DecodeUnsized<'de> {}
 }
 
@@ -422,5 +423,27 @@ impl<'de> Decode<'de> for Pointer {
         let mut bytes = WordBytes::new();
         bytes.write_half_words([p1, p2]);
         Ok(Pointer::new_with_type(bytes.read_usize(), ty))
+    }
+}
+
+/// [`Decode`] implementation for [`Fd`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, Fd};
+///
+/// let mut pod = Pod::array();
+/// pod.encode(Fd::new(4))?;
+///
+/// assert_eq!(pod.decode::<Fd>()?, Fd::new(4));
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for Fd {
+    const TYPE: Type = Type::FD;
+
+    #[inline]
+    fn read_content(mut reader: impl Reader<'de>, _: u32) -> Result<Self, Error> {
+        Ok(Self::new(reader.read::<u64>()?.cast_signed()))
     }
 }

@@ -1,10 +1,9 @@
-use crate::{
-    EncodeUnsized, Error, Fraction, Id, IntoId, Pointer, Rectangle, Type, Writer, utils::WordBytes,
-};
+use crate::utils::WordBytes;
+use crate::{EncodeUnsized, Error, Fd, Fraction, Id, IntoId, Pointer, Rectangle, Type, Writer};
 
 pub(crate) mod sealed {
     use crate::id::IntoId;
-    use crate::{EncodeUnsized, Fraction, Id, Pointer, Rectangle};
+    use crate::{EncodeUnsized, Fd, Fraction, Id, Pointer, Rectangle};
 
     pub trait Sealed {}
     impl Sealed for bool {}
@@ -17,6 +16,7 @@ pub(crate) mod sealed {
     impl Sealed for Fraction {}
     impl<const N: usize> Sealed for [u8; N] {}
     impl Sealed for Pointer {}
+    impl Sealed for Fd {}
     impl<E> Sealed for &E where E: ?Sized + EncodeUnsized {}
 }
 
@@ -365,7 +365,7 @@ impl Encode for Pointer {
         bytes.write_usize(self.pointer());
 
         writer.write([16, Type::POINTER.into_u32(), self.ty(), 0])?;
-        writer.write_words(bytes.as_slice())?;
+        writer.write_words(bytes.as_array())?;
         Ok(())
     }
 
@@ -375,7 +375,44 @@ impl Encode for Pointer {
         bytes.write_usize(self.pointer());
 
         writer.write([self.ty(), 0])?;
-        writer.write_words(bytes.as_slice())?;
+        writer.write_words(bytes.as_array())?;
+        Ok(())
+    }
+}
+
+/// [`Encode`] implementation for [`Fd`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, Fd};
+///
+/// let mut pod = Pod::array();
+/// pod.encode(Fd::new(4))?;
+///
+/// assert_eq!(pod.decode::<Fd>()?, Fd::new(4));
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for Fd {
+    const TYPE: Type = Type::FD;
+
+    #[inline]
+    fn size(&self) -> usize {
+        8
+    }
+
+    #[inline]
+    fn encode(&self, mut writer: impl Writer) -> Result<(), Error> {
+        let mut bytes = WordBytes::new();
+        bytes.write_u64(self.fd().cast_unsigned());
+        let &[a, b] = bytes.as_array_u32();
+        writer.write([8, Type::FD.into_u32(), a, b])?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+        writer.write(self.fd().cast_unsigned())?;
         Ok(())
     }
 }

@@ -7,11 +7,11 @@ use crate::visitor::Visitor;
 use crate::{Error, Type, WORD_SIZE};
 
 mod sealed {
-    use crate::{ArrayBuf, Reader};
+    use crate::{Array, Reader};
 
     pub trait Sealed {}
     impl Sealed for &[u64] {}
-    impl<const N: usize> Sealed for ArrayBuf<N> {}
+    impl<const N: usize> Sealed for Array<N> {}
     impl<'de, R> Sealed for &mut R where R: ?Sized + Reader<'de> {}
 }
 

@@ -5,7 +5,7 @@ use alloc::format;
 use crate::Reader;
 use crate::error::ErrorKind;
 use crate::utils::{Align, WordSized};
-use crate::{ArrayBuf, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
+use crate::{Array, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
 
 pub(crate) fn read<T, U>(value: T) -> U
 where
@@ -39,7 +39,7 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 
 #[test]
 fn test_encode_decode_u64() -> Result<(), Error> {
-    let mut buf = ArrayBuf::new();
+    let mut buf = Array::new();
     buf.write(0x1234567890abcdefu64)?;
 
     let Ok([a, b]) = buf.peek::<[u32; 2]>() else {
@@ -91,7 +91,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let mut buf = ArrayBuf::<3>::from_array([1, 2, 3]);
+    let mut buf = Array::<3>::from_array([1, 2, 3]);
     assert_eq!(buf.read::<u64>()?, 1);
     assert_eq!(buf.read::<u64>()?, 2);
     assert_eq!(

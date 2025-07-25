@@ -94,5 +94,7 @@ declare! {
         pub const SEQUENCE = 16;
         #[name = "Pointer", size = Some(16)]
         pub const POINTER = 17;
+        #[name = "Fd", size = Some(8)]
+        pub const FD = 18;
     }
 }

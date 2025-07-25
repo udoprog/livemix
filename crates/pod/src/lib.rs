@@ -34,7 +34,7 @@ mod de;
 pub use self::de::{Decode, DecodeUnsized};
 
 mod array_buf;
-pub use self::array_buf::ArrayBuf;
+pub use self::array_buf::Array;
 
 mod writer;
 pub use self::writer::Writer;
@@ -67,3 +67,6 @@ pub use self::control::Control;
 
 mod pointer;
 pub use self::pointer::Pointer;
+
+mod fd;
+pub use self::fd::Fd;

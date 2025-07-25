@@ -4,7 +4,7 @@ use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
 use crate::en::{ArrayEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    ArrayBuf, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor,
+    Array, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor,
     Writer,
 };
 
@@ -27,8 +27,8 @@ where
     }
 }
 
-impl Pod<ArrayBuf<1024>> {
-    /// Construct a new [`Pod`] with an 1024 byte array buffer.
+impl Pod<Array<256>> {
+    /// Construct a new [`Pod`] with a 256 word-sized array buffer.
     ///
     /// # Examples
     ///
@@ -44,12 +44,12 @@ impl Pod<ArrayBuf<1024>> {
     #[inline]
     pub const fn array() -> Self {
         Pod {
-            buf: ArrayBuf::with_size(),
+            buf: Array::with_size(),
         }
     }
 }
 
-impl<const N: usize> Pod<ArrayBuf<N>> {
+impl<const N: usize> Pod<Array<N>> {
     /// Modify the size of the array buffer used by the pod.
     ///
     /// # Examples
@@ -64,9 +64,9 @@ impl<const N: usize> Pod<ArrayBuf<N>> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn with_size<const U: usize>(self) -> Pod<ArrayBuf<U>> {
+    pub const fn with_size<const U: usize>(self) -> Pod<Array<U>> {
         Pod {
-            buf: ArrayBuf::with_size(),
+            buf: Array::with_size(),
         }
     }
 }
@@ -77,9 +77,9 @@ impl<B> Pod<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Pod};
+    /// use pod::{Array, Pod};
     ///
-    /// let mut buf = ArrayBuf::new();
+    /// let mut buf = Array::new();
     /// let mut pod = Pod::new(&mut buf);
     /// ```
     #[inline]

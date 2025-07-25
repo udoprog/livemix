@@ -5,7 +5,8 @@ use crate::bstr::BStr;
 use crate::de::{ArrayDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
 use crate::error::ErrorKind;
 use crate::{
-    Bitmap, Decode, DecodeUnsized, Error, Fraction, Id, Reader, Rectangle, Type, Visitor, WORD_SIZE,
+    Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pointer, Reader, Rectangle, Type,
+    Visitor, WORD_SIZE,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -574,6 +575,19 @@ where
 
                 write!(f, "}}")?;
                 Ok(())
+            }
+            Type::POINTER => {
+                let p = self.decode::<Pointer>().map_err(|_| fmt::Error)?;
+
+                if p.ty() != 0 {
+                    write!(f, "{{pointer: {:?}, type: {:?}}}", p.pointer(), p.ty())
+                } else {
+                    write!(f, "{:?}", p.pointer())
+                }
+            }
+            Type::FD => {
+                let fd = self.decode::<Fd>().map_err(|_| fmt::Error)?;
+                write!(f, "{:?}", fd.fd())
             }
             ty => {
                 self.skip().map_err(|_| fmt::Error)?;
