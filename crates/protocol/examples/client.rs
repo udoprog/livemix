@@ -1,4 +1,5 @@
-use protocol::poll::{Interest, Polled, Token};
+use pod::Array;
+use protocol::poll::{Interest, PollEvent, Polled, Token};
 use protocol::{Buf, Connection, EventFd, Poll};
 
 use anyhow::Result;
@@ -32,8 +33,7 @@ fn main() -> Result<()> {
         loop {
             // Simulate an event after some time.
             std::thread::sleep(std::time::Duration::from_secs(1));
-            ev2.write(value).unwrap();
-            value += 1;
+            ev2.write(1).unwrap();
         }
     });
 

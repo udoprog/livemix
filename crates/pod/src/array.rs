@@ -1,11 +1,12 @@
 use core::fmt;
-use core::mem::MaybeUninit;
+use core::mem::{self, ManuallyDrop, MaybeUninit};
+use core::ptr;
 use core::slice;
 
 use crate::error::ErrorKind;
 use crate::{Error, Reader, Visitor, WORD_SIZE, Writer};
 
-const DEFAULT_SIZE: usize = 1024;
+const DEFAULT_SIZE: usize = 128;
 
 /// A fixed-size buffer with a flexible read and write position.
 ///
@@ -17,7 +18,7 @@ const DEFAULT_SIZE: usize = 1024;
 /// ```
 /// use pod::{Array, Reader, Writer};
 ///
-/// let mut buf = Array::<16>::from_slice(&[1, 2, 3, 4]);
+/// let mut buf = Array::<u64, 16>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.remaining(), 4);
 /// buf.write(5u64)?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
@@ -29,13 +30,13 @@ const DEFAULT_SIZE: usize = 1024;
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[repr(C, align(8))]
-pub struct Array<const N: usize = DEFAULT_SIZE> {
-    data: [MaybeUninit<u64>; N],
+pub struct Array<T = u64, const N: usize = DEFAULT_SIZE> {
+    data: [MaybeUninit<T>; N],
     read: usize,
     write: usize,
 }
 
-impl Array {
+impl<T, const N: usize> Array<T, N> {
     /// Construct a new array buffer with a default size.
     ///
     /// # Examples
@@ -43,7 +44,7 @@ impl Array {
     /// ```
     /// use pod::Array;
     ///
-    /// let buf = Array::new();
+    /// let buf = Array::<u64>::new();
     /// ```
     #[inline]
     pub const fn new() -> Self {
@@ -56,33 +57,14 @@ impl Array {
     }
 }
 
-impl Default for Array {
+impl<T> Default for Array<T> {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<const N: usize> Array<N> {
-    /// Construct a new array buffer with a default size.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::Array;
-    ///
-    /// let buf = Array::<16>::with_size();
-    /// ```
-    #[inline]
-    pub const fn with_size() -> Self {
-        // SAFETY: The buffer is a sequence of uninitialized elements.
-        Self {
-            data: unsafe { MaybeUninit::uninit().assume_init() },
-            read: 0,
-            write: 0,
-        }
-    }
-
+impl<T, const N: usize> Array<T, N> {
     /// Construct from an initialized array.
     ///
     /// # Examples
@@ -90,16 +72,18 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::Array;
     ///
-    /// let buf = Array::from_array([1, 2, 3]);
+    /// let buf = Array::<u64, 3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.remaining(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
-    pub const fn from_array(words: [u64; N]) -> Self {
+    pub const fn from_array(words: [T; N]) -> Self {
+        let words = ManuallyDrop::new(words);
+
         // SAFETY: The array is a sequence of initialized elements.
         unsafe {
             Self {
-                data: (&words as *const [u64; N])
-                    .cast::<[MaybeUninit<u64>; N]>()
+                data: (&words as *const ManuallyDrop<[T; N]>)
+                    .cast::<[MaybeUninit<T>; N]>()
                     .read(),
                 read: 0,
                 write: N,
@@ -116,7 +100,7 @@ impl<const N: usize> Array<N> {
     /// ```should_panic
     /// use pod::Array;
     ///
-    /// Array::<16>::from_slice(&[0; 32]);
+    /// Array::<u64, 16>::from_slice(&[0; 32]);
     /// ```
     ///
     /// # Examples
@@ -124,16 +108,19 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::Array;
     ///
-    /// let buf = Array::<16>::from_slice(&[1, 2, 3]);
+    /// let buf = Array::<u64, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.remaining(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
-    pub const fn from_slice(words: &[u64]) -> Self {
+    pub const fn from_slice(words: &[T]) -> Self
+    where
+        T: Copy,
+    {
         assert!(words.len() <= N, "Array size exceeds buffer size");
 
         // SAFETY: The array is a sequence of initialized elements.
         unsafe {
-            let mut dest: [MaybeUninit<u64>; N] = MaybeUninit::uninit().assume_init();
+            let mut dest: [MaybeUninit<T>; N] = MaybeUninit::uninit().assume_init();
             let mut write = 0;
 
             while write < words.len() {
@@ -203,7 +190,7 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::{Array, Reader};
     ///
-    /// let mut array = Array::<16>::from_slice(&[1, 2, 3]);
+    /// let mut array = Array::<u64, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(array.remaining(), 3);
     /// assert_eq!(array.remaining_mut(), 13);
     ///
@@ -229,7 +216,7 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::{Array, Reader, Writer};
     ///
-    /// let mut buf = Array::from_array([1, 2, 3]);
+    /// let mut buf = Array::<u64, 3>::from_array([1, 2, 3]);
     ///
     /// assert_eq!(buf.remaining(), 3);
     ///
@@ -245,6 +232,14 @@ impl<const N: usize> Array<N> {
     /// # Ok::<_, pod::Error>(())
     #[inline]
     pub fn clear(&mut self) {
+        if mem::needs_drop::<T>() {
+            // SAFETY: We are only dropping the elements that are currently
+            // initialized.
+            unsafe {
+                ptr::drop_in_place(self.as_slice_mut());
+            }
+        }
+
         self.read = 0;
         self.write = 0;
     }
@@ -259,7 +254,7 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::{Array, Reader, Writer};
     ///
-    /// let mut buf = Array::new();
+    /// let mut buf = Array::<u64>::new();
     /// buf.write(42u64)?;
     ///
     /// assert_eq!(buf.as_slice(), &[42]);
@@ -282,7 +277,7 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::{Array, Writer};
     ///
-    /// let mut buf = Array::new();
+    /// let mut buf = Array::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -290,7 +285,7 @@ impl<const N: usize> Array<N> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[u64] {
+    pub fn as_slice(&self) -> &[T] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.remaining()) }
     }
@@ -302,7 +297,7 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::{Array, Writer};
     ///
-    /// let mut buf = Array::new();
+    /// let mut buf = Array::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -329,7 +324,7 @@ impl<const N: usize> Array<N> {
     /// ```
     /// use pod::{Array, Writer};
     ///
-    /// let mut buf = Array::new();
+    /// let mut buf = Array::<u64>::new();
     /// assert_eq!(buf.as_bytes().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -358,7 +353,10 @@ impl<const N: usize> Array<N> {
 ///
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<const N: usize> fmt::Debug for Array<N> {
+impl<T, const N: usize> fmt::Debug for Array<T, N>
+where
+    T: fmt::Debug,
+{
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_slice().fmt(f)
@@ -378,9 +376,12 @@ impl<const N: usize> fmt::Debug for Array<N> {
 /// assert_ne!(buf1, buf2);
 /// assert_eq!(buf1, buf1);
 /// ```
-impl<const A: usize, const B: usize> PartialEq<Array<B>> for Array<A> {
+impl<T, const A: usize, const B: usize> PartialEq<Array<T, B>> for Array<T, A>
+where
+    T: PartialEq,
+{
     #[inline]
-    fn eq(&self, other: &Array<B>) -> bool {
+    fn eq(&self, other: &Array<T, B>) -> bool {
         self.as_slice() == other.as_slice()
     }
 }
@@ -399,9 +400,12 @@ impl<const A: usize, const B: usize> PartialEq<Array<B>> for Array<A> {
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<const N: usize> PartialEq<[u64]> for Array<N> {
+impl<T, const N: usize> PartialEq<[T]> for Array<T, N>
+where
+    T: PartialEq,
+{
     #[inline]
-    fn eq(&self, other: &[u64]) -> bool {
+    fn eq(&self, other: &[T]) -> bool {
         self.as_slice() == other
     }
 }
@@ -420,9 +424,12 @@ impl<const N: usize> PartialEq<[u64]> for Array<N> {
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<const N: usize> PartialEq<[u64; N]> for Array<N> {
+impl<T, const N: usize> PartialEq<[T; N]> for Array<T, N>
+where
+    T: PartialEq,
+{
     #[inline]
-    fn eq(&self, other: &[u64; N]) -> bool {
+    fn eq(&self, other: &[T; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -441,9 +448,12 @@ impl<const N: usize> PartialEq<[u64; N]> for Array<N> {
 /// assert_eq!(slice1, slice1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<const N: usize> PartialEq<&[u64; N]> for Array<N> {
+impl<T, const N: usize> PartialEq<&[T; N]> for Array<T, N>
+where
+    T: PartialEq,
+{
     #[inline]
-    fn eq(&self, other: &&[u64; N]) -> bool {
+    fn eq(&self, other: &&[T; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -462,14 +472,23 @@ impl<const N: usize> PartialEq<&[u64; N]> for Array<N> {
 /// assert_eq!(array1, array1);
 /// assert_eq!(slice2, slice2);
 /// ```
-impl<const N: usize> PartialEq<&[u64]> for Array<N> {
+impl<T, const N: usize> PartialEq<&[T]> for Array<T, N>
+where
+    T: PartialEq,
+{
     #[inline]
-    fn eq(&self, other: &&[u64]) -> bool {
+    fn eq(&self, other: &&[T]) -> bool {
         self.as_slice() == *other
     }
 }
 
-impl<const N: usize> Eq for Array<N> {}
+impl<T, const N: usize> Eq for Array<T, N> where T: Eq {}
+
+impl<T, const N: usize> Drop for Array<T, N> {
+    fn drop(&mut self) {
+        self.clear();
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Pos {
@@ -477,9 +496,9 @@ pub struct Pos {
     len: usize,
 }
 
-impl<const N: usize> Writer for Array<N> {
+impl<T, const N: usize> Writer<T> for Array<T, N> {
     type Mut<'this>
-        = &'this mut Array<N>
+        = &'this mut Array<T, N>
     where
         Self: 'this;
 
@@ -593,13 +612,16 @@ impl<const N: usize> Writer for Array<N> {
     }
 }
 
-impl<'de, const N: usize> Reader<'de> for Array<N> {
+impl<'de, T, const N: usize> Reader<'de, T> for Array<T, N>
+where
+    T: 'static,
+{
     type Mut<'this>
-        = &'this mut Array<N>
+        = &'this mut Array<T, N>
     where
         Self: 'this;
 
-    type Clone<'this> = &'this [u64];
+    type Clone<'this> = &'this [T];
 
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
@@ -650,7 +672,7 @@ impl<'de, const N: usize> Reader<'de> for Array<N> {
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error> {
         if self.remaining() < out.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
@@ -660,7 +682,7 @@ impl<'de, const N: usize> Reader<'de> for Array<N> {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .cast::<MaybeUninit<u64>>()
+                .cast::<MaybeUninit<T>>()
                 .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
         }
 
@@ -668,7 +690,7 @@ impl<'de, const N: usize> Reader<'de> for Array<N> {
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<T>]) -> Result<(), Error> {
         let read = self.read.wrapping_add(out.len());
 
         if read > self.write || read < self.read {
@@ -680,7 +702,7 @@ impl<'de, const N: usize> Reader<'de> for Array<N> {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .cast::<MaybeUninit<u64>>()
+                .cast::<MaybeUninit<T>>()
                 .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
         }
 

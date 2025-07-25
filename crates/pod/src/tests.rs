@@ -9,8 +9,7 @@ use crate::{Choice, Reader};
 
 pub(crate) fn read<T, U>(value: T) -> U
 where
-    T: WordSized,
-    U: WordSized,
+    T: WordSized<U>,
 {
     // SAFETY: The value must be word-aligned and packed.
     unsafe { Align(value).as_ptr().cast::<U>().read() }
@@ -26,7 +25,7 @@ fn sandbox() -> Result<(), Error> {
 }
 
 #[inline]
-fn encode_none() -> Result<Pod<impl Reader<'static>>, Error> {
+fn encode_none() -> Result<Pod<impl Reader<'static, u64>>, Error> {
     let mut pod = Pod::array();
     pod.as_mut().encode_none()?;
     Ok(pod)
@@ -39,7 +38,7 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 
 #[test]
 fn test_encode_decode_u64() -> Result<(), Error> {
-    let mut buf = Array::new();
+    let mut buf = Array::<u64>::new();
     buf.write(0x1234567890abcdefu64)?;
 
     let Ok([a, b]) = buf.peek::<[u32; 2]>() else {
@@ -62,7 +61,7 @@ fn test_encode_decode_u64() -> Result<(), Error> {
 
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
-    let mut pod = Pod::array().with_size::<1>();
+    let mut pod = Pod::new(Array::<_, 1>::new());
     assert!(pod.as_mut().encode_none().is_ok());
 
     assert_eq!(
@@ -91,7 +90,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let mut buf = Array::<3>::from_array([1, 2, 3]);
+    let mut buf = Array::<u64, 3>::from_array([1, 2, 3]);
     assert_eq!(buf.read::<u64>()?, 1);
     assert_eq!(buf.read::<u64>()?, 2);
     assert_eq!(

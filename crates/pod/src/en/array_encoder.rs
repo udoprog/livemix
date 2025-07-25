@@ -36,7 +36,7 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 #[must_use = "Array encoders must be closed to ensure all elements are encoded"]
 pub struct ArrayEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
 {
     writer: W,
     kind: K,
@@ -47,7 +47,7 @@ where
 
 impl<W, K> ArrayEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
     K: PodKind,
 {
     #[inline]

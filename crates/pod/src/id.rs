@@ -39,12 +39,12 @@ macro_rules! declare_id {
             }
 
             #[inline]
-            fn encode(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+            fn encode(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
                 $crate::Id(*self).encode(writer)
             }
 
             #[inline]
-            fn write_content(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+            fn write_content(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
                 $crate::Id(*self).write_content(writer)
             }
         }
@@ -89,7 +89,7 @@ macro_rules! declare_id {
             const TYPE: $crate::Type = $crate::Type::ID;
 
             #[inline]
-            fn read_content(reader: impl $crate::Reader<'de>, len: u32) -> Result<Self, $crate::Error> {
+            fn read_content(reader: impl $crate::Reader<'de, u64>, len: u32) -> Result<Self, $crate::Error> {
                 let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, len)?;
                 Ok(id)
             }

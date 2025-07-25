@@ -6,7 +6,7 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
 pub struct SequenceEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
 {
     writer: W,
     kind: K,
@@ -17,7 +17,7 @@ where
 
 impl<W, K> SequenceEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
     K: PodKind,
 {
     #[inline]

@@ -6,7 +6,7 @@ use crate::{Choice, Error, Pod, Type, WORD_SIZE, Writer};
 #[must_use = "Choice encoders must be closed to ensure all elements are initialized"]
 pub struct ChoiceEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
 {
     writer: W,
     kind: K,
@@ -21,7 +21,7 @@ where
 
 impl<W, K> ChoiceEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
     K: PodKind,
 {
     #[inline]

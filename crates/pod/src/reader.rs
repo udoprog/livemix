@@ -9,21 +9,21 @@ use crate::{Error, Type, WORD_SIZE};
 mod sealed {
     use crate::{Array, Reader};
 
-    pub trait Sealed {}
-    impl Sealed for &[u64] {}
-    impl<const N: usize> Sealed for Array<N> {}
-    impl<'de, R> Sealed for &mut R where R: ?Sized + Reader<'de> {}
+    pub trait Sealed<T> {}
+    impl<T> Sealed<T> for &[T] {}
+    impl<T, const N: usize> Sealed<T> for Array<T, N> {}
+    impl<'de, R, T> Sealed<T> for &mut R where R: ?Sized + Reader<'de, T> {}
 }
 
 /// A type that u32 words can be read from.
-pub trait Reader<'de>: self::sealed::Sealed {
+pub trait Reader<'de, T>: self::sealed::Sealed<T> {
     /// The mutable borrow of a reader.
-    type Mut<'this>: Reader<'de>
+    type Mut<'this>: Reader<'de, T>
     where
         Self: 'this;
 
     /// A clone of the reader.
-    type Clone<'this>: Reader<'this>
+    type Clone<'this>: Reader<'this, T>
     where
         Self: 'this;
 
@@ -40,10 +40,10 @@ pub trait Reader<'de>: self::sealed::Sealed {
     fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error>;
 
     /// Peek into the provided buffer without consuming the reader.
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
 
     /// Peek words into the provided buffer.
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error>;
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
 
     /// Read the given number of bytes from the input.
     fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
@@ -52,11 +52,11 @@ pub trait Reader<'de>: self::sealed::Sealed {
 
     /// Read an array of words.
     #[inline]
-    fn peek<T>(&mut self) -> Result<T, Error>
+    fn peek<U>(&mut self) -> Result<U, Error>
     where
-        T: WordSized,
+        U: WordSized<T>,
     {
-        let mut out = UninitAlign::<T>::uninit();
+        let mut out = UninitAlign::<U>::uninit();
         self.peek_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init() })
@@ -64,27 +64,30 @@ pub trait Reader<'de>: self::sealed::Sealed {
 
     /// Read an array of words.
     #[inline]
-    fn read<T>(&mut self) -> Result<T, Error>
+    fn read<U>(&mut self) -> Result<U, Error>
     where
-        T: WordSized,
+        U: WordSized<T>,
     {
-        let mut out = UninitAlign::<T>::uninit();
+        let mut out = UninitAlign::<U>::uninit();
         self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init() })
     }
 
     #[inline]
-    fn header(&mut self) -> Result<(u32, Type), Error> {
+    fn header(&mut self) -> Result<(u32, Type), Error>
+    where
+        [u32; 2]: WordSized<T>,
+    {
         let [size, ty] = self.read::<[u32; 2]>()?;
         let ty = Type::new(ty);
         Ok((size, ty))
     }
 }
 
-impl<'de, R> Reader<'de> for &mut R
+impl<'de, R, T> Reader<'de, T> for &mut R
 where
-    R: ?Sized + Reader<'de>,
+    R: ?Sized + Reader<'de, T>,
 {
     type Mut<'this>
         = R::Mut<'this>
@@ -117,12 +120,12 @@ where
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error> {
         (**self).peek_words_uninit(out)
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<T>]) -> Result<(), Error> {
         (**self).read_words_uninit(out)
     }
 
@@ -135,14 +138,17 @@ where
     }
 }
 
-impl<'de> Reader<'de> for &'de [u64] {
+impl<'de, T> Reader<'de, T> for &'de [T]
+where
+    T: 'de,
+{
     type Mut<'this>
-        = &'this mut &'de [u64]
+        = &'this mut &'de [T]
     where
         Self: 'this;
 
     type Clone<'this>
-        = &'this [u64]
+        = &'this [T]
     where
         Self: 'this;
 
@@ -189,7 +195,7 @@ impl<'de> Reader<'de> for &'de [u64] {
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error> {
         if out.len() > self.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
@@ -197,7 +203,7 @@ impl<'de> Reader<'de> for &'de [u64] {
         // SAFETY: The start pointer is valid since it hasn't reached the end yet.
         unsafe {
             self.as_ptr()
-                .cast::<MaybeUninit<u64>>()
+                .cast::<MaybeUninit<T>>()
                 .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
         }
 
@@ -205,7 +211,7 @@ impl<'de> Reader<'de> for &'de [u64] {
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u64>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<T>]) -> Result<(), Error> {
         if out.len() > self.len() {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         }
@@ -213,7 +219,7 @@ impl<'de> Reader<'de> for &'de [u64] {
         // SAFETY: The start pointer is valid since it hasn't reached the end yet.
         unsafe {
             self.as_ptr()
-                .cast::<MaybeUninit<u64>>()
+                .cast::<MaybeUninit<T>>()
                 .copy_to_nonoverlapping(out.as_mut_ptr(), out.len());
         }
 

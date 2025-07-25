@@ -15,7 +15,7 @@ pub struct ChoiceDecoder<R> {
 
 impl<'de, R> ChoiceDecoder<R>
 where
-    R: Reader<'de>,
+    R: Reader<'de, u64>,
 {
     #[inline]
     pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {

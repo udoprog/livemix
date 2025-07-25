@@ -9,7 +9,7 @@ pub struct StructDecoder<R> {
 
 impl<'de, R> StructDecoder<R>
 where
-    R: Reader<'de>,
+    R: Reader<'de, u64>,
 {
     #[inline]
     pub(crate) fn new(reader: R, size: u32) -> Self {

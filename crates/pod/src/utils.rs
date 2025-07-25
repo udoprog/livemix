@@ -6,53 +6,47 @@ use crate::{Error, WORD_SIZE};
 
 /// Helper to align a value to a word, making necessary write conversions safe.
 #[repr(align(8))]
-pub(crate) struct Align<T>(pub T)
-where
-    T: WordSized;
+pub(crate) struct Align<T>(pub T);
 
-impl<T> Align<T>
-where
-    T: WordSized,
-{
+impl<T> Align<T> {
     /// Coerce a value into a slice of words.
     #[inline]
-    pub(crate) fn as_words(&self) -> &[u64] {
+    pub(crate) fn as_words<U>(&self) -> &[U]
+    where
+        T: WordSized<U>,
+    {
         // SAFETY: The value must be word-aligned and packed.
-        unsafe { slice::from_raw_parts(self.as_ptr(), Self::WORD_SIZE) }
+        unsafe { slice::from_raw_parts(self.as_ptr(), T::WORD_SIZE) }
     }
 
     /// Get a pointer to the word representation of the value.
     #[inline]
-    pub(crate) fn as_ptr(&self) -> *const u64 {
-        &self.0 as *const T as *const u64
+    pub(crate) fn as_ptr<U>(&self) -> *const U
+    where
+        T: WordSized<U>,
+    {
+        &self.0 as *const T as *const U
     }
 }
 
 impl<T> Clone for Align<T>
 where
-    T: WordSized,
+    T: Copy,
 {
     #[inline]
     fn clone(&self) -> Self {
-        *self
+        Self(self.0)
     }
 }
 
-impl<T> Copy for Align<T> where T: WordSized {}
+impl<T> Copy for Align<T> where T: Copy {}
 
-impl<T> Align<T> where T: WordSized {}
+impl<T> Align<T> where T: WordSized<u64> {}
 
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
 #[repr(C, align(8))]
 pub(crate) struct UninitAlign<T>(MaybeUninit<T>);
-
-unsafe impl<T> WordSized for Align<T>
-where
-    T: WordSized,
-{
-    const WORD_SIZE: usize = T::WORD_SIZE;
-}
 
 /// Trait implemented for types which are word-sized and can inhabit all bit
 /// patterns.
@@ -61,60 +55,68 @@ where
 ///
 /// Must only be implemented for types which are word-aligned and packed. That
 /// is, some multiple of `WORD_SIZE` and can inhabit all bit-patterns.
-pub unsafe trait WordSized: Copy {
+pub unsafe trait WordSized<T>: Copy {
     /// The size of the word in the alignment.
     #[doc(hidden)]
     const WORD_SIZE: usize;
 }
 
-unsafe impl WordSized for u64 {
+unsafe impl<T> WordSized<T> for T
+where
+    T: Copy,
+{
     const WORD_SIZE: usize = 1;
 }
-unsafe impl WordSized for [u32; 2] {
+unsafe impl<T, const N: usize> WordSized<T> for [T; N]
+where
+    T: WordSized<T>,
+{
+    const WORD_SIZE: usize = T::WORD_SIZE * N;
+}
+unsafe impl WordSized<u64> for [u32; 2] {
     const WORD_SIZE: usize = 1;
 }
-unsafe impl WordSized for [u32; 4] {
+unsafe impl WordSized<u64> for [u32; 4] {
     const WORD_SIZE: usize = 2;
 }
-unsafe impl WordSized for [u32; 6] {
+unsafe impl WordSized<u64> for [u32; 6] {
     const WORD_SIZE: usize = 3;
 }
-unsafe impl<const N: usize> WordSized for [u64; N] {
-    const WORD_SIZE: usize = N;
-}
-unsafe impl WordSized for u128 {
+unsafe impl WordSized<u64> for u128 {
     const WORD_SIZE: usize = 2;
 }
 
-impl<T> UninitAlign<T>
-where
-    T: WordSized,
-{
+impl<T> UninitAlign<T> {
     /// Get a mutable slice of the aligned value.
     #[inline]
-    pub(crate) fn as_mut_slice(&mut self) -> &mut [MaybeUninit<u64>] {
+    pub(crate) fn as_mut_slice<U>(&mut self) -> &mut [MaybeUninit<U>]
+    where
+        T: WordSized<U>,
+    {
         unsafe {
             slice::from_raw_parts_mut(
-                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<u64>>(),
+                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<U>>(),
                 T::WORD_SIZE,
             )
         }
     }
 }
 
-impl<T> UninitAlign<T>
-where
-    T: WordSized,
-{
+impl<T> UninitAlign<T> {
+    /// Construct a new uninitialized value.
     #[inline]
     pub(crate) const fn uninit() -> Self {
         // SAFETY: This just constructs an array of uninitialized values.
         Self(MaybeUninit::uninit())
     }
 
-    /// Read the aligned value.
+    /// Assume that the value is initialized and return it.
+    ///
+    /// # Safety
+    ///
+    /// The value must have been initialized before calling this method.
     #[inline]
-    pub(crate) unsafe fn assume_init(&self) -> T {
+    pub(crate) unsafe fn assume_init(self) -> T {
         // Assume that the value is initialized.
         unsafe { self.0.assume_init() }
     }

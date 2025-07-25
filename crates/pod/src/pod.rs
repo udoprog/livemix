@@ -31,11 +31,11 @@ mod sealed {
 pub trait PodKind: Copy + self::sealed::Sealed {
     const ENVELOPE: bool;
 
-    fn encode<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn encode<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: Encode;
 
-    fn encode_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn encode_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized;
 
@@ -46,7 +46,7 @@ impl PodKind for ChildPod {
     const ENVELOPE: bool = false;
 
     #[inline]
-    fn encode<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn encode<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: Encode,
     {
@@ -55,7 +55,7 @@ impl PodKind for ChildPod {
     }
 
     #[inline]
-    fn encode_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn encode_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
@@ -87,7 +87,7 @@ impl PodKind for EnvelopePod {
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn encode<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn encode<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: Encode,
     {
@@ -95,7 +95,7 @@ impl PodKind for EnvelopePod {
     }
 
     #[inline]
-    fn encode_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn encode_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
@@ -130,8 +130,8 @@ where
     }
 }
 
-impl Pod<Array<256>> {
-    /// Construct a new [`Pod`] with a 256 word-sized array buffer.
+impl Pod<Array<u64>> {
+    /// Construct a new [`Pod`] with a 128 word-sized array buffer.
     ///
     /// # Examples
     ///
@@ -145,33 +145,7 @@ impl Pod<Array<256>> {
     /// ```
     #[inline]
     pub const fn array() -> Self {
-        Pod {
-            buf: Array::with_size(),
-            kind: EnvelopePod,
-        }
-    }
-}
-
-impl<const N: usize> Pod<Array<N>> {
-    /// Modify the size of the array buffer used by the pod.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array().with_size::<16>();
-    /// pod.as_mut().encode(10i32)?;
-    ///
-    /// assert_eq!(pod.decode::<i32>()?, 10i32);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub const fn with_size<const U: usize>(self) -> Pod<Array<U>> {
-        Pod {
-            buf: Array::with_size(),
-            kind: self.kind,
-        }
+        Self::new(Array::new())
     }
 }
 
@@ -183,8 +157,10 @@ impl<B> Pod<B> {
     /// ```
     /// use pod::{Array, Pod};
     ///
-    /// let mut buf = Array::new();
-    /// let mut pod = Pod::new(&mut buf);
+    /// let mut buf = Array::<u64>::new();
+    /// _ = Pod::new(&mut buf);
+    ///
+    /// _ = Pod::new(Array::<u64, 16>::new());
     /// ```
     #[inline]
     pub const fn new(buf: B) -> Self {
@@ -247,7 +223,7 @@ impl<B, K> Pod<B, K> {
 
 impl<B, K> Pod<B, K>
 where
-    B: Writer,
+    B: Writer<u64>,
     K: PodKind,
 {
     /// Encode a value into the pod.
@@ -511,7 +487,7 @@ where
 
 impl<'de, B> Pod<B>
 where
-    B: Reader<'de>,
+    B: Reader<'de, u64>,
 {
     /// Skip a value in the pod.
     ///
@@ -931,7 +907,7 @@ where
 
 impl<'de, B> fmt::Debug for Pod<B>
 where
-    B: Reader<'de>,
+    B: Reader<'de, u64>,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

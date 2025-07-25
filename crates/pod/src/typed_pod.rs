@@ -74,7 +74,7 @@ impl<B> TypedPod<B> {
 
 impl<'de, B> TypedPod<B>
 where
-    B: Reader<'de>,
+    B: Reader<'de, u64>,
 {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
@@ -707,7 +707,7 @@ where
 
 impl<'de, B> fmt::Debug for TypedPod<B>
 where
-    B: Reader<'de>,
+    B: Reader<'de, u64>,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

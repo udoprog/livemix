@@ -6,7 +6,7 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
 pub struct StructEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
 {
     writer: W,
     kind: K,
@@ -15,7 +15,7 @@ where
 
 impl<W, K> StructEncoder<W, K>
 where
-    W: Writer,
+    W: Writer<u64>,
     K: PodKind,
 {
     #[inline]

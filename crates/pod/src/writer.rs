@@ -5,15 +5,15 @@ mod sealed {
     use crate::Array;
     use crate::Writer;
 
-    pub trait Sealed {}
-    impl<const N: usize> Sealed for Array<N> {}
-    impl<W> Sealed for &mut W where W: ?Sized + Writer {}
+    pub trait Sealed<T> {}
+    impl<T, const N: usize> Sealed<T> for Array<T, N> {}
+    impl<W, T> Sealed<T> for &mut W where W: ?Sized + Writer<T> {}
 }
 
 /// A type that can have PODs written to it.
-pub trait Writer: self::sealed::Sealed {
+pub trait Writer<T>: self::sealed::Sealed<T> {
     /// The mutable borrow of a writer.
-    type Mut<'this>: Writer
+    type Mut<'this>: Writer<T>
     where
         Self: 'this;
 
@@ -28,7 +28,7 @@ pub trait Writer: self::sealed::Sealed {
 
     /// Reserve space for a single value while writing.
     #[inline(always)]
-    fn reserve(&mut self, value: impl WordSized) -> Result<Self::Pos, Error> {
+    fn reserve(&mut self, value: impl WordSized<u64>) -> Result<Self::Pos, Error> {
         self.reserve_words(Align(value).as_words())
     }
 
@@ -41,7 +41,7 @@ pub trait Writer: self::sealed::Sealed {
 
     /// Write a value to the writer.
     #[inline(always)]
-    fn write(&mut self, value: impl WordSized) -> Result<(), Error> {
+    fn write(&mut self, value: impl WordSized<u64>) -> Result<(), Error> {
         self.write_words(Align(value).as_words())
     }
 
@@ -56,7 +56,7 @@ pub trait Writer: self::sealed::Sealed {
 
     /// Write a value to the specified position in the writer.
     #[inline(always)]
-    fn write_at(&mut self, pos: Self::Pos, value: impl WordSized) -> Result<(), Error> {
+    fn write_at(&mut self, pos: Self::Pos, value: impl WordSized<u64>) -> Result<(), Error> {
         self.write_words_at(pos, Align(value).as_words())
     }
 
@@ -64,9 +64,9 @@ pub trait Writer: self::sealed::Sealed {
     fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>;
 }
 
-impl<W> Writer for &mut W
+impl<W, T> Writer<T> for &mut W
 where
-    W: ?Sized + Writer,
+    W: ?Sized + Writer<T>,
 {
     type Mut<'this>
         = W::Mut<'this>
