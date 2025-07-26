@@ -68,9 +68,9 @@ impl<T> Align<T> {
 
     /// Get the size of the region in word.
     #[inline]
-    pub fn size(&self) -> usize
+    pub fn size<U>(&self) -> usize
     where
-        T: AlignableWith<u64>,
+        T: AlignableWith<U>,
     {
         T::WORD_SIZE
     }
@@ -93,12 +93,12 @@ impl<T> Align<T> where T: AlignableWith<u64> {}
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
 #[repr(C, align(8))]
-pub(crate) struct UninitAlign<T>(MaybeUninit<T>);
+pub struct UninitAlign<T>(MaybeUninit<T>);
 
 impl<T> UninitAlign<T> {
     /// Get a mutable slice of the aligned value.
     #[inline]
-    pub(crate) fn as_mut_slice<U>(&mut self) -> &mut [MaybeUninit<U>]
+    pub fn as_mut_slice<U>(&mut self) -> &mut [MaybeUninit<U>]
     where
         T: AlignableWith<U>,
     {
@@ -109,12 +109,30 @@ impl<T> UninitAlign<T> {
             )
         }
     }
+
+    /// Get a pointer to the word representation of the value.
+    #[inline]
+    pub fn as_mut_ptr<U>(&mut self) -> *mut MaybeUninit<U>
+    where
+        T: AlignableWith<U>,
+    {
+        &mut self.0 as *mut MaybeUninit<T> as *mut MaybeUninit<U>
+    }
+
+    /// Get the size of the region in word.
+    #[inline]
+    pub fn size<U>(&self) -> usize
+    where
+        T: AlignableWith<U>,
+    {
+        T::WORD_SIZE
+    }
 }
 
 impl<T> UninitAlign<T> {
     /// Construct a new uninitialized value.
     #[inline]
-    pub(crate) const fn uninit() -> Self {
+    pub const fn uninit() -> Self {
         // SAFETY: This just constructs an array of uninitialized values.
         Self(MaybeUninit::uninit())
     }
@@ -125,7 +143,7 @@ impl<T> UninitAlign<T> {
     ///
     /// The value must have been initialized before calling this method.
     #[inline]
-    pub(crate) unsafe fn assume_init(self) -> T {
+    pub unsafe fn assume_init(self) -> T {
         // Assume that the value is initialized.
         unsafe { self.0.assume_init() }
     }
@@ -212,11 +230,4 @@ pub(crate) fn array_remaining(size: u32, child_size: u32, header_size: u32) -> R
     };
 
     Ok(remaining)
-}
-
-mod sealed {
-    pub trait Sealed {}
-    impl Sealed for u32 {}
-    impl Sealed for u64 {}
-    impl Sealed for u128 {}
 }

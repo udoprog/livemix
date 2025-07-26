@@ -1,5 +1,4 @@
-use pod::Array;
-use protocol::poll::{Interest, PollEvent, Polled, Token};
+use protocol::poll::{Interest, Polled, Token};
 use protocol::{Buf, Connection, EventFd, Poll};
 
 use anyhow::Result;
@@ -28,8 +27,6 @@ fn main() -> Result<()> {
     let ev2 = ev.clone();
 
     std::thread::spawn(move || {
-        let mut value = 1;
-
         loop {
             // Simulate an event after some time.
             std::thread::sleep(std::time::Duration::from_secs(1));

@@ -3,11 +3,10 @@
 use core::fmt;
 
 use pod::Pod;
-
-use crate::buf::WordAligned;
+use pod::utils::AlignableWith;
 
 // SAFETY: The header is both word-aligned and word-sized.
-unsafe impl WordAligned for Header {}
+unsafe impl AlignableWith<u64> for Header {}
 
 #[repr(C, align(8))]
 #[derive(Clone, Copy)]
