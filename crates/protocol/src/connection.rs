@@ -39,6 +39,7 @@ pub struct Connection {
 
 impl Connection {
     /// Open a connection to a local pipewire server.
+    #[tracing::instrument]
     pub fn open() -> Result<Self, Error> {
         let socket = 'socket: {
             for environ in ENVIRONS.iter().copied() {
@@ -50,7 +51,10 @@ impl Connection {
                 path.push(SOCKET);
 
                 match UnixStream::connect(&path) {
-                    Ok(socket) => break 'socket socket,
+                    Ok(socket) => {
+                        tracing::trace!("Connected to {}", path.display());
+                        break 'socket socket;
+                    }
                     Err(err) if err.kind() == io::ErrorKind::NotFound => {
                         continue;
                     }
