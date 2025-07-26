@@ -301,11 +301,13 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// assert!(pod.as_mut().encode_array(Type::STRING).is_err());
+    /// assert!(pod.as_mut().encode_array(Type::STRING, |_| Ok(())).is_err());
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
-    /// assert!(array.push()?.encode(42.42f32).is_err());
+    /// let mut array = pod.as_mut().encode_array(Type::INT, |array| {
+    ///     assert!(array.push()?.encode(42.42f32).is_err());
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     ///
@@ -315,16 +317,24 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
-    /// array.push()?.encode(1i32)?;
-    /// array.push()?.encode(2i32)?;
-    /// array.push()?.encode(3i32)?;
-    /// array.close()?;
+    /// let mut array = pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     array.push()?.encode(2i32)?;
+    ///     array.push()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_array(self, child_type: Type) -> Result<ArrayEncoder<B, K>, Error> {
-        ArrayEncoder::to_writer(self.buf, self.kind, child_type)
+    pub fn encode_array(
+        self,
+        child_type: Type,
+        f: impl FnOnce(&mut ArrayEncoder<B, K>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let mut encoder = ArrayEncoder::to_writer(self.buf, self.kind, child_type)?;
+        f(&mut encoder)?;
+        encoder.close()?;
+        Ok(())
     }
 
     /// Encode an array with items of an unsized type.
@@ -350,16 +360,19 @@ where
     ///
     ///
     /// let mut pod = Pod::array();
-    /// assert!(pod.encode_unsized_array(Type::INT, 5).is_err());
+    /// assert!(pod.encode_unsized_array(Type::INT, 5, |_| Ok(())).is_err());
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
     ///
-    /// // Note: strings are null-terminated, so the length is 4.
-    /// array.push()?.encode_unsized("foo")?;
+    /// pod.encode_unsized_array(Type::STRING, 4, |array| {
+    ///     // Note: strings are null-terminated, so the length is 4.
+    ///     array.push()?.encode_unsized("foo")?;
     ///
-    /// assert!(array.push()?.encode(1i32).is_err());
-    /// assert!(array.push()?.encode_unsized("barbaz").is_err());
+    ///     assert!(array.push()?.encode(1i32).is_err());
+    ///     assert!(array.push()?.encode_unsized("barbaz").is_err());
+    ///     Ok(())
+    /// })?;
+    ///
     /// # Ok::<_, pod::Error>(())
     /// ```
     ///
@@ -369,12 +382,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.as_mut().encode_unsized_array(Type::STRING, 4)?;
-    /// // Note: strings are null-terminated, so the length is 4.
-    /// array.push()?.encode_unsized("foo")?;
-    /// array.push()?.encode_unsized("bar")?;
-    /// array.push()?.encode_unsized("baz")?;
-    /// array.close()?;
+    ///
+    /// pod.as_mut().encode_unsized_array(Type::STRING, 4, |array| {
+    ///     // Note: strings are null-terminated, so the length is 4.
+    ///     array.push()?.encode_unsized("foo")?;
+    ///     array.push()?.encode_unsized("bar")?;
+    ///     array.push()?.encode_unsized("baz")?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let buf = pod.into_buf();
     /// assert_eq!(buf.as_slice().len(), 5);
@@ -385,8 +400,13 @@ where
         self,
         child_type: Type,
         child_size: u32,
-    ) -> Result<ArrayEncoder<B, K>, Error> {
-        ArrayEncoder::to_writer_unsized(self.buf, self.kind, child_size, child_type)
+        f: impl FnOnce(&mut ArrayEncoder<B, K>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let mut array =
+            ArrayEncoder::to_writer_unsized(self.buf, self.kind, child_size, child_type)?;
+        f(&mut array)?;
+        array.close()?;
+        Ok(())
     }
 
     /// Encode a struct.
@@ -397,16 +417,23 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_struct()?;
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_struct(|st| {
+    ///     st.field()?.encode(1i32)?;
+    ///     st.field()?.encode(2i32)?;
+    ///     st.field()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_struct(self) -> Result<StructEncoder<B, K>, Error> {
-        StructEncoder::to_writer(self.buf, self.kind)
+    pub fn encode_struct(
+        self,
+        f: impl FnOnce(&mut StructEncoder<B, K>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let mut encoder = StructEncoder::to_writer(self.buf, self.kind)?;
+        f(&mut encoder)?;
+        encoder.close()?;
+        Ok(())
     }
 
     /// Encode an object.
@@ -417,11 +444,12 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 0)?.encode(1i32)?;
-    /// obj.property(2, 0)?.encode(2i32)?;
-    /// obj.property(3, 0)?.encode(3i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 0)?.encode(1i32)?;
+    ///     obj.property(2, 0)?.encode(2i32)?;
+    ///     obj.property(3, 0)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -429,8 +457,12 @@ where
         self,
         object_type: u32,
         object_id: u32,
-    ) -> Result<ObjectEncoder<B, K>, Error> {
-        ObjectEncoder::to_writer(self.buf, self.kind, object_type, object_id)
+        f: impl FnOnce(&mut ObjectEncoder<B, K>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let mut encoder = ObjectEncoder::to_writer(self.buf, self.kind, object_type, object_id)?;
+        f(&mut encoder)?;
+        encoder.close()?;
+        Ok(())
     }
 
     /// Encode a sequence.
@@ -441,16 +473,23 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 0)?.encode(1i32)?;
-    /// seq.control(2, 0)?.encode(2i32)?;
-    /// seq.control(3, 0)?.encode(3i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 0)?.encode(1i32)?;
+    ///     seq.control(2, 0)?.encode(2i32)?;
+    ///     seq.control(3, 0)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_sequence(self) -> Result<SequenceEncoder<B, K>, Error> {
-        SequenceEncoder::to_writer(self.buf, self.kind)
+    pub fn encode_sequence(
+        self,
+        f: impl FnOnce(&mut SequenceEncoder<B, K>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let mut encoder = SequenceEncoder::to_writer(self.buf, self.kind)?;
+        f(&mut encoder)?;
+        encoder.close()?;
+        Ok(())
     }
 
     /// Encode a choice.
@@ -461,11 +500,10 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
-    ///
-    /// choice.entry()?.encode(1i32)?;
-    ///
-    /// choice.close()?;
+    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -473,8 +511,12 @@ where
         self,
         choice: Choice,
         child_type: Type,
-    ) -> Result<ChoiceEncoder<B, K>, Error> {
-        ChoiceEncoder::to_writer(self.buf, self.kind, choice, child_type)
+        f: impl FnOnce(&mut ChoiceEncoder<B, K>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        let mut encoder = ChoiceEncoder::to_writer(self.buf, self.kind, choice, child_type)?;
+        f(&mut encoder)?;
+        encoder.close()?;
+        Ok(())
     }
 
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
@@ -497,12 +539,13 @@ where
     /// use pod::{Pod, Type};
     /// let mut pod = Pod::array();
     ///
-    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
-    /// array.push()?.encode(10i32)?;
-    /// array.push()?.encode(20i32)?;
-    /// array.close()?;
+    /// let mut array = pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(10i32)?;
+    ///     array.push()?.encode(20i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let pod = pod.typed()?;
+    /// let pod = pod.as_ref();
     /// let mut array = pod.decode_array()?;
     /// assert!(!array.is_empty());
     /// array.item()?.skip()?;
@@ -545,7 +588,7 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = pod.typed()?;
+    /// let pod = pod.as_ref();
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -568,7 +611,7 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = pod.typed()?;
+    /// let pod = pod.as_ref();
     /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -618,11 +661,13 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
-    /// array.push()?.encode(1i32)?;
-    /// array.push()?.encode(2i32)?;
-    /// array.push()?.encode(3i32)?;
-    /// array.close()?;
+    ///
+    /// pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     array.push()?.encode(2i32)?;
+    ///     array.push()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut array = pod.decode_array()?;
     ///
@@ -644,7 +689,7 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_array(Type::INT)?;
+    /// pod.as_mut().encode_array(Type::INT, |_| Ok(()))?;
     ///
     /// let mut array = pod.decode_array()?;
     ///
@@ -665,14 +710,14 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_struct()?;
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_struct(|st| {
+    ///     st.field()?.encode(1i32)?;
+    ///     st.field()?.encode(2i32)?;
+    ///     st.field()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut st = pod.decode_struct()?;
-    ///
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
     /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
@@ -687,7 +732,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_struct()?;
+    /// pod.as_mut().encode_struct(|_| Ok(()))?;
     ///
     /// let st = pod.decode_struct()?;
     /// assert!(st.is_empty());
@@ -706,14 +751,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 10)?.encode(1i32)?;
-    /// obj.property(2, 20)?.encode(2i32)?;
-    /// obj.property(3, 30)?.encode(3i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.encode(1i32)?;
+    ///     obj.property(2, 20)?.encode(2i32)?;
+    ///     obj.property(3, 30)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut obj = pod.decode_object()?;
-    ///
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
@@ -741,7 +786,7 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20)?;
+    /// pod.as_mut().encode_object(10, 20, |_| Ok(()))?;
     ///
     /// let obj = pod.decode_object()?;
     /// assert!(obj.is_empty());
@@ -760,14 +805,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 10)?.encode(1i32)?;
-    /// seq.control(2, 20)?.encode(2i32)?;
-    /// seq.control(3, 30)?.encode(3i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     seq.control(2, 20)?.encode(2i32)?;
+    ///     seq.control(3, 30)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut seq = pod.decode_sequence()?;
-    ///
     /// assert!(!seq.is_empty());
     ///
     /// let c = seq.control()?;
@@ -795,7 +840,7 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence()?;
+    /// pod.as_mut().encode_sequence(|_| Ok(()))?;
     ///
     /// let seq = pod.decode_sequence()?;
     /// assert!(seq.is_empty());
@@ -814,22 +859,18 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
-    ///
-    /// choice.entry()?.encode(10i32)?;
-    /// choice.entry()?.encode(0i32)?;
-    /// choice.entry()?.encode(30i32)?;
-    ///
-    /// choice.close()?;
+    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(10i32)?;
+    ///     choice.entry()?.encode(0i32)?;
+    ///     choice.entry()?.encode(30i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut choice = pod.decode_choice()?;
-    ///
     /// assert!(!choice.is_empty());
-    ///
     /// assert_eq!(choice.entry()?.decode::<i32>()?, 10);
     /// assert_eq!(choice.entry()?.decode::<i32>()?, 0);
     /// assert_eq!(choice.entry()?.decode::<i32>()?, 30);
-    ///
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -840,10 +881,9 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
+    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |_| Ok(()))?;
     ///
     /// let mut choice = pod.decode_choice()?;
-    ///
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -872,21 +912,6 @@ where
     #[inline]
     pub fn into_typed(self) -> Result<TypedPod<B>, Error> {
         TypedPod::from_reader(self.buf)
-    }
-
-    /// Convert the [`Pod`] into a [`TypedPod`] borrowing from but without
-    /// modifying the current buffer.
-    ///
-    /// A typed pod knows about the size and type of the data it contains,
-    /// allowing it to be inspected through the relevant [`TypedPod::size`] and
-    /// [`TypedPod::ty`] APIs.
-    ///
-    /// # Errors
-    ///
-    /// This errors if the pod does not wrap a buffer containing a valid pod.
-    #[inline]
-    pub fn typed(&self) -> Result<TypedPod<B::Clone<'_>>, Error> {
-        TypedPod::from_reader(self.buf.clone_reader())
     }
 
     /// Convert the [`Pod`] into a [`TypedPod`] mutably borrowing the current

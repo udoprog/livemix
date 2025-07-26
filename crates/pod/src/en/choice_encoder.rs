@@ -3,7 +3,6 @@ use crate::pod::{ChildPod, PodKind};
 use crate::{Choice, Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for a choice.
-#[must_use = "Choice encoders must be closed to ensure all elements are initialized"]
 pub struct ChoiceEncoder<W, K>
 where
     W: Writer<u64>,
@@ -65,11 +64,10 @@ where
     /// use pod::{Pod, Type, Choice};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.encode_choice(Choice::NONE, Type::INT)?;
-    ///
-    /// choice.entry()?.encode(1i32)?;
-    ///
-    /// choice.close()?;
+    /// pod.encode_choice(Choice::NONE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -81,21 +79,8 @@ where
         ))
     }
 
-    /// Close the sequence encoder.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Choice, Pod, Type};
-    ///
-    /// let mut pod = Pod::array();
-    /// let mut choice = pod.encode_choice(Choice::NONE, Type::INT)?;
-    /// choice.entry()?.encode(1i32)?;
-    /// choice.close()?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
     #[inline]
-    pub fn close(mut self) -> Result<(), Error> {
+    pub(crate) fn close(mut self) -> Result<(), Error> {
         let Some(size) = self
             .writer
             .distance_from(self.header)

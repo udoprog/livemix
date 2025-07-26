@@ -21,12 +21,12 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 10)?.encode(1i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut obj = pod.decode_object()?;
-    ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// # Ok::<_, pod::Error>(())
@@ -44,12 +44,12 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 10)?.encode(1i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut obj = pod.decode_object()?;
-    ///
     /// let p = obj.property()?;
     /// assert_eq!(p.flags(), 10);
     /// # Ok::<_, pod::Error>(())
@@ -67,12 +67,12 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 10)?.encode(1i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut obj = pod.decode_object()?;
-    ///
     /// let p = obj.property()?;
     /// assert_eq!(p.value().decode::<i32>()?, 1);
     /// # Ok::<_, pod::Error>(())

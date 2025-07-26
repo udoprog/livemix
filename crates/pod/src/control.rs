@@ -8,15 +8,13 @@ use crate::TypedPod;
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = Pod::array();
-/// let mut seq = pod.as_mut().encode_sequence()?;
+/// pod.as_mut().encode_sequence(|seq| {
+///     seq.control(1, 10)?.encode(1i32)?;
+///     Ok(())
+/// })?;
 ///
-/// seq.control(1, 10)?.encode(1i32)?;
-///
-/// seq.close()?;
-///
-/// let mut pod = pod.typed()?;
-/// let mut seq = pod.decode_sequence()?;
-///
+/// let mut seq = pod.as_ref().decode_sequence()?;
+/// assert!(!seq.is_empty());
 /// let c = seq.control()?;
 /// assert_eq!(c.offset(), 1);
 /// assert_eq!(c.ty(), 10);
@@ -43,13 +41,12 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 10)?.encode(1i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let mut pod = pod.typed()?;
-    /// let mut seq = pod.decode_sequence()?;
-    ///
+    /// let mut seq = pod.as_ref().decode_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 1);
     /// # Ok::<_, pod::Error>(())
@@ -67,13 +64,12 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 10)?.encode(1i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let mut pod = pod.typed()?;
-    /// let mut seq = pod.decode_sequence()?;
-    ///
+    /// let mut seq = pod.as_ref().decode_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.ty(), 10);
     /// # Ok::<_, pod::Error>(())
@@ -91,13 +87,12 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 10)?.encode(1i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let mut pod = pod.typed()?;
-    /// let mut seq = pod.decode_sequence()?;
-    ///
+    /// let mut seq = pod.as_ref().decode_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.value().decode::<i32>()?, 1);
     /// # Ok::<_, pod::Error>(())

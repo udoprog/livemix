@@ -92,9 +92,8 @@ impl Connection {
     /// Send core hello.
     pub fn hello(&mut self) -> Result<Polled, Error> {
         let mut pod = Pod::array();
-        let mut st = pod.as_mut().encode_struct()?;
-        st.field()?.encode(VERSION)?;
-        st.close()?;
+        pod.as_mut()
+            .encode_struct(|st| st.field()?.encode(VERSION))?;
 
         let buf = pod.as_buf();
 

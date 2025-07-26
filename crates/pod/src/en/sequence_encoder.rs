@@ -42,11 +42,12 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 10)?.encode(1i32)?;
-    /// seq.control(2, 20)?.encode(2i32)?;
-    /// seq.control(3, 30)?.encode(3i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     seq.control(2, 20)?.encode(2i32)?;
+    ///     seq.control(3, 30)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -55,23 +56,8 @@ where
         Ok(Pod::new(self.writer.borrow_mut()))
     }
 
-    /// Close the sequence encoder.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Pod, Type};
-    ///
-    /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_sequence()?;
-    /// seq.control(1, 10)?.encode(1i32)?;
-    /// seq.control(2, 20)?.encode(2i32)?;
-    /// seq.control(3, 30)?.encode(3i32)?;
-    /// seq.close()?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
     #[inline]
-    pub fn close(mut self) -> Result<(), Error> {
+    pub(crate) fn close(mut self) -> Result<(), Error> {
         let Some(size) = self
             .writer
             .distance_from(self.header)

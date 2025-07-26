@@ -42,7 +42,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode_unsized(&b"hello world"[..])?;
-/// let pod = pod.typed()?;
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -81,7 +81,7 @@ impl EncodeUnsized for [u8] {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode_unsized(c"hello world")?;
-/// let pod = pod.typed()?;
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -122,7 +122,7 @@ impl EncodeUnsized for CStr {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode_unsized("hello world")?;
-/// let pod = pod.typed()?;
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -171,7 +171,7 @@ impl EncodeUnsized for str {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode_unsized(Bitmap::new(b"asdfasdf"))?;
-/// let pod = pod.typed()?;
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```

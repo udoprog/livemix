@@ -304,7 +304,7 @@ impl Encode for Fraction {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode(*b"hello world")?;
-/// let pod = pod.typed()?;
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -415,7 +415,7 @@ impl Encode for Fd {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode(&b"hello world"[..])?;
-/// let pod = pod.typed()?;
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```

@@ -41,14 +41,15 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_sequence()?;
-    /// st.control(1, 2)?.encode(1i32)?;
-    /// st.control(1, 2)?.encode(2i32)?;
-    /// st.control(1, 2)?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 2)?.encode(1i32)?;
+    ///     seq.control(1, 2)?.encode(2i32)?;
+    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let st = pod.decode_sequence()?;
-    /// assert_eq!(st.unit(), 0);
+    /// let seq = pod.decode_sequence()?;
+    /// assert_eq!(seq.unit(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -64,14 +65,15 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_sequence()?;
-    /// st.control(1, 2)?.encode(1i32)?;
-    /// st.control(1, 2)?.encode(2i32)?;
-    /// st.control(1, 2)?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 2)?.encode(1i32)?;
+    ///     seq.control(1, 2)?.encode(2i32)?;
+    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let st = pod.decode_sequence()?;
-    /// assert_eq!(st.pad(), 0);
+    /// let seq = pod.decode_sequence()?;
+    /// assert_eq!(seq.pad(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -87,19 +89,19 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_sequence()?;
-    /// st.control(1, 2)?.encode(1i32)?;
-    /// st.control(1, 2)?.encode(2i32)?;
-    /// st.control(1, 2)?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 2)?.encode(1i32)?;
+    ///     seq.control(1, 2)?.encode(2i32)?;
+    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let mut st = pod.decode_sequence()?;
-    ///
-    /// assert!(!st.is_empty());
-    /// assert_eq!(st.control()?.value().decode::<i32>()?, 1i32);
-    /// assert_eq!(st.control()?.value().decode::<i32>()?, 2i32);
-    /// assert_eq!(st.control()?.value().decode::<i32>()?, 3i32);
-    /// assert!(st.is_empty());
+    /// let mut seq = pod.decode_sequence()?;
+    /// assert!(!seq.is_empty());
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -115,19 +117,19 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_sequence()?;
-    /// st.control(1, 2)?.encode(1i32)?;
-    /// st.control(1, 2)?.encode(2i32)?;
-    /// st.control(1, 2)?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 2)?.encode(1i32)?;
+    ///     seq.control(1, 2)?.encode(2i32)?;
+    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
-    /// let mut st = pod.decode_sequence()?;
-    ///
-    /// assert!(!st.is_empty());
-    /// assert_eq!(st.control()?.value().decode::<i32>()?, 1i32);
-    /// assert_eq!(st.control()?.value().decode::<i32>()?, 2i32);
-    /// assert_eq!(st.control()?.value().decode::<i32>()?, 3i32);
-    /// assert!(st.is_empty());
+    /// let mut seq = pod.decode_sequence()?;
+    /// assert!(!seq.is_empty());
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]

@@ -42,16 +42,14 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
-    ///
-    /// choice.entry()?.encode(10i32)?;
-    /// choice.entry()?.encode(0i32)?;
-    /// choice.entry()?.encode(30i32)?;
-    ///
-    /// choice.close()?;
+    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(10i32)?;
+    ///     choice.entry()?.encode(0i32)?;
+    ///     choice.entry()?.encode(30i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut choice = pod.decode_choice()?;
-    ///
     /// assert_eq!(choice.ty(), Choice::RANGE);
     ///
     /// let mut count = 0;
@@ -91,12 +89,12 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
-    /// array.push()?.encode(1i32)?;
-    /// array.close()?;
+    /// pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut array = pod.decode_array()?;
-    ///
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -114,11 +112,9 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut array = pod.as_mut().encode_array(Type::INT)?;
-    /// array.close()?;
+    /// pod.as_mut().encode_array(Type::INT, |_| Ok(()))?;
     ///
     /// let mut array = pod.decode_array()?;
-    ///
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -135,16 +131,14 @@ where
     /// use pod::{Choice, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
-    ///
-    /// choice.entry()?.encode(10i32)?;
-    /// choice.entry()?.encode(0i32)?;
-    /// choice.entry()?.encode(30i32)?;
-    ///
-    /// choice.close()?;
+    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(10i32)?;
+    ///     choice.entry()?.encode(0i32)?;
+    ///     choice.entry()?.encode(30i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut choice = pod.decode_choice()?;
-    ///
     /// assert_eq!(choice.ty(), Choice::RANGE);
     ///
     /// let mut count = 0;

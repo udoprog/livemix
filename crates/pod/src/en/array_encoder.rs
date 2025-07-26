@@ -10,11 +10,13 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = Pod::array();
-/// let mut array = pod.as_mut().encode_array(Type::INT)?;
-/// array.push()?.encode(1i32)?;
-/// array.push()?.encode(2i32)?;
-/// array.push()?.encode(3i32)?;
-/// array.close()?;
+///
+/// pod.as_mut().encode_array(Type::INT, |array| {
+///     array.push()?.encode(1i32)?;
+///     array.push()?.encode(2i32)?;
+///     array.push()?.encode(3i32)?;
+///     Ok(())
+/// })?;
 /// # Ok::<_, pod::Error>(())
 /// ```
 ///
@@ -24,16 +26,15 @@ use crate::{Error, Pod, Type, WORD_SIZE, Writer};
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = Pod::array();
-/// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
 ///
-/// array.push()?.encode_unsized("foo")?;
-/// array.push()?.encode_unsized("bar")?;
-/// array.push()?.encode_unsized("baz")?;
-///
-/// array.close()?;
+/// pod.encode_unsized_array(Type::STRING, 4, |array| {
+///     array.push()?.encode_unsized("foo")?;
+///     array.push()?.encode_unsized("baz")?;
+///     array.push()?.encode_unsized("bar")?;
+///     Ok(())
+/// })?;
 /// # Ok::<_, pod::Error>(())
 /// ```
-#[must_use = "Array encoders must be closed to ensure all elements are encoded"]
 pub struct ArrayEncoder<W, K>
 where
     W: Writer<u64>,
@@ -112,9 +113,10 @@ where
     /// use pod::{Pod, Type, Choice};
     ///
     /// let mut pod = Pod::array();
-    /// let mut seq = pod.as_mut().encode_array(Type::INT)?;
-    /// seq.push()?.encode(1i32)?;
-    /// seq.close()?;
+    /// pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -126,25 +128,8 @@ where
         ))
     }
 
-    /// Close the array encoder, ensuring all elements have been encoded.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Pod, Type};
-    ///
-    /// let mut pod = Pod::array();
-    /// let mut array = pod.encode_unsized_array(Type::STRING, 4)?;
-    ///
-    /// array.push()?.encode_unsized("foo")?;
-    /// array.push()?.encode_unsized("bar")?;
-    /// array.push()?.encode_unsized("baz")?;
-    ///
-    /// array.close()?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
     #[inline]
-    pub fn close(mut self) -> Result<(), Error> {
+    pub(crate) fn close(mut self) -> Result<(), Error> {
         let Some(size) = self
             .writer
             .distance_from(self.header)

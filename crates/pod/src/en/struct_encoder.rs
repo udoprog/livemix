@@ -38,11 +38,12 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_struct()?;
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_struct(|st| {
+    ///     st.field()?.encode(1i32)?;
+    ///     st.field()?.encode(2i32)?;
+    ///     st.field()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -50,23 +51,8 @@ where
         Ok(Pod::new(self.writer.borrow_mut()))
     }
 
-    /// Close the struct encoder.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Pod, Type};
-    ///
-    /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_struct()?;
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    /// st.close()?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
     #[inline]
-    pub fn close(mut self) -> Result<(), Error> {
+    pub(crate) fn close(mut self) -> Result<(), Error> {
         // Write the size of the struct at the header position.
         let Some(size) = self
             .writer

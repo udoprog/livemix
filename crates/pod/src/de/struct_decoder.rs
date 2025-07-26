@@ -24,14 +24,14 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_struct()?;
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_struct(|st| {
+    ///     st.field()?.encode(1i32)?;
+    ///     st.field()?.encode(2i32)?;
+    ///     st.field()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut st = pod.decode_struct()?;
-    ///
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
     /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
@@ -52,11 +52,12 @@ where
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// let mut st = pod.as_mut().encode_struct()?;
-    /// st.field()?.encode(1i32)?;
-    /// st.field()?.encode(2i32)?;
-    /// st.field()?.encode(3i32)?;
-    /// st.close()?;
+    /// pod.as_mut().encode_struct(|st| {
+    ///     st.field()?.encode(1i32)?;
+    ///     st.field()?.encode(2i32)?;
+    ///     st.field()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut st = pod.decode_struct()?;
     ///

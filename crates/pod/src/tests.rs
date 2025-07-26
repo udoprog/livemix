@@ -252,13 +252,14 @@ fn test_bitmap() -> Result<(), Error> {
 #[test]
 fn test_array() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut array = pod.as_mut().encode_unsized_array(Type::STRING, 4)?;
 
-    array.push()?.encode_unsized("foo")?;
-    array.push()?.encode_unsized("bar")?;
-    array.push()?.encode_unsized("baz")?;
-
-    array.close()?;
+    pod.as_mut()
+        .encode_unsized_array(Type::STRING, 4, |array| {
+            array.push()?.encode_unsized("foo")?;
+            array.push()?.encode_unsized("bar")?;
+            array.push()?.encode_unsized("baz")?;
+            Ok(())
+        })?;
 
     let mut array = pod.as_ref().decode_array()?;
 
@@ -277,17 +278,17 @@ fn test_array() -> Result<(), Error> {
 #[test]
 fn test_decode_complex_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut st = pod.as_mut().encode_struct()?;
-    st.field()?.encode(1i32)?;
-    st.field()?.encode(2i32)?;
+    pod.as_mut().encode_struct(|st| {
+        st.field()?.encode(1i32)?;
+        st.field()?.encode(2i32)?;
 
-    let mut inner = st.field()?.encode_struct()?;
-    inner.field()?.encode(c"hello world")?;
-    inner.field()?.encode(Rectangle::new(800, 600))?;
-    inner.field()?.encode(c"goodbye world")?;
-    inner.close()?;
-
-    st.close()?;
+        st.field()?.encode_struct(|inner| {
+            inner.field()?.encode(c"hello world")?;
+            inner.field()?.encode(Rectangle::new(800, 600))?;
+            inner.field()?.encode(c"goodbye world")?;
+            Ok(())
+        })
+    })?;
 
     let mut st = pod.decode_struct()?;
     assert!(!st.is_empty());
@@ -314,13 +315,13 @@ fn test_decode_complex_struct() -> Result<(), Error> {
 #[test]
 fn test_decode_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut st = pod.as_mut().encode_struct()?;
-    st.field()?.encode(1i32)?;
-    st.field()?.encode(2i32)?;
-    st.field()?.encode(3i32)?;
-    st.close()?;
+    pod.as_mut().encode_struct(|st| {
+        st.field()?.encode(1i32)?;
+        st.field()?.encode(2i32)?;
+        st.field()?.encode(3i32)?;
+        Ok(())
+    })?;
 
-    let pod = pod.typed()?;
     let mut st = pod.decode_struct()?;
 
     assert!(!st.is_empty());
@@ -334,17 +335,17 @@ fn test_decode_struct() -> Result<(), Error> {
 #[test]
 fn test_format_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut st = pod.as_mut().encode_struct()?;
-    st.field()?.encode(1i32)?;
-    st.field()?.encode(2i32)?;
+    pod.as_mut().encode_struct(|st| {
+        st.field()?.encode(1i32)?;
+        st.field()?.encode(2i32)?;
 
-    let mut inner = st.field()?.encode_struct()?;
-    inner.field()?.encode(*b"hello world")?;
-    inner.field()?.encode(Rectangle::new(800, 600))?;
-    inner.field()?.encode(*b"goodbye world")?;
-    inner.close()?;
-
-    st.close()?;
+        st.field()?.encode_struct(|inner| {
+            inner.field()?.encode(*b"hello world")?;
+            inner.field()?.encode(Rectangle::new(800, 600))?;
+            inner.field()?.encode(*b"goodbye world")?;
+            Ok(())
+        })
+    })?;
 
     assert_eq!(
         format!("{pod:?}"),
@@ -356,18 +357,18 @@ fn test_format_struct() -> Result<(), Error> {
 #[test]
 fn test_format_object() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut obj = pod.as_mut().encode_object(10, 20)?;
 
-    obj.property(1, 0b100)?.encode(1i32)?;
-    obj.property(2, 0b010)?.encode(2i32)?;
+    pod.as_mut().encode_object(10, 20, |obj| {
+        obj.property(1, 0b100)?.encode(1i32)?;
+        obj.property(2, 0b010)?.encode(2i32)?;
 
-    let mut inner = obj.property(3, 0b001)?.encode_struct()?;
-    inner.field()?.encode(*b"hello world")?;
-    inner.field()?.encode(Rectangle::new(800, 600))?;
-    inner.field()?.encode(*b"goodbye world")?;
-    inner.close()?;
-
-    obj.close()?;
+        obj.property(3, 0b001)?.encode_struct(|st| {
+            st.field()?.encode(*b"hello world")?;
+            st.field()?.encode(Rectangle::new(800, 600))?;
+            st.field()?.encode(*b"goodbye world")?;
+            Ok(())
+        })
+    })?;
 
     assert_eq!(
         format!("{pod:?}"),
@@ -379,11 +380,13 @@ fn test_format_object() -> Result<(), Error> {
 #[test]
 fn test_format_array() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut array = pod.as_mut().encode_array(Type::INT)?;
-    array.push()?.encode(1i32)?;
-    array.push()?.encode(2i32)?;
-    array.push()?.encode(3i32)?;
-    array.close()?;
+
+    pod.as_mut().encode_array(Type::INT, |array| {
+        array.push()?.encode(1i32)?;
+        array.push()?.encode(2i32)?;
+        array.push()?.encode(3i32)?;
+        Ok(())
+    })?;
 
     assert_eq!(format!("{pod:?}"), "Array[Int](1, 2, 3)");
     Ok(())
@@ -392,29 +395,29 @@ fn test_format_array() -> Result<(), Error> {
 #[test]
 fn test_format_l1_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut st = pod.as_mut().encode_struct()?;
-    st.field()?.encode(*b"a")?;
-    st.field()?.encode(*b"b")?;
-    st.close()?;
+    pod.as_mut().encode_struct(|st| {
+        st.field()?.encode(*b"a")?;
+        st.field()?.encode(*b"b")?;
+        Ok(())
+    })?;
 
-    let mut st = pod.decode_struct()?;
+    let mut st = pod.as_ref().decode_struct()?;
     assert_eq!(format!("{:?}", st.field()?), "Bytes(b\"a\")");
     assert_eq!(format!("{:?}", st.field()?), "Bytes(b\"b\")");
-
-    // assert_eq!(format!("{pod:?}"), "Struct(Int: 1, Int: 2, Int: 3)");
+    assert_eq!(format!("{pod:?}"), "Struct{Bytes: b\"a\", Bytes: b\"b\"}");
     Ok(())
 }
 
 #[test]
 fn test_format_choice() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
-
-    choice.entry()?.encode(10i32)?;
-    choice.entry()?.encode(0i32)?;
-    choice.entry()?.encode(30i32)?;
-
-    choice.close()?;
+    pod.as_mut()
+        .encode_choice(Choice::RANGE, Type::INT, |choice| {
+            choice.entry()?.encode(10i32)?;
+            choice.entry()?.encode(0i32)?;
+            choice.entry()?.encode(30i32)?;
+            Ok(())
+        })?;
 
     assert_eq!(format!("{pod:?}"), "Choice[Range, Int](10, 0, 30)");
     Ok(())
@@ -423,13 +426,13 @@ fn test_format_choice() -> Result<(), Error> {
 #[test]
 fn test_format_buggy() -> Result<(), Error> {
     let mut pod = Pod::array();
-    let mut choice = pod.as_mut().encode_choice(Choice::RANGE, Type::INT)?;
-
-    choice.entry()?.encode(10i32)?;
-    choice.entry()?.encode(0i32)?;
-    choice.entry()?.encode(30i32)?;
-
-    choice.close()?;
+    pod.as_mut()
+        .encode_choice(Choice::RANGE, Type::INT, |choice| {
+            choice.entry()?.encode(10i32)?;
+            choice.entry()?.encode(30i32)?;
+            choice.entry()?.encode(0i32)?;
+            Ok(())
+        })?;
 
     let mut array = pod.into_buf();
 

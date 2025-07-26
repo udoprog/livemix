@@ -53,14 +53,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 10)?.encode(1i32)?;
-    /// obj.property(2, 20)?.encode(2i32)?;
-    /// obj.property(3, 30)?.encode(3i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.encode(1i32)?;
+    ///     obj.property(2, 20)?.encode(2i32)?;
+    ///     obj.property(3, 30)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut obj = pod.decode_object()?;
-    ///
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
@@ -94,14 +94,14 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// let mut obj = pod.as_mut().encode_object(10, 20)?;
-    /// obj.property(1, 10)?.encode(1i32)?;
-    /// obj.property(2, 20)?.encode(2i32)?;
-    /// obj.property(3, 30)?.encode(3i32)?;
-    /// obj.close()?;
+    /// pod.as_mut().encode_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.encode(1i32)?;
+    ///     obj.property(2, 20)?.encode(2i32)?;
+    ///     obj.property(3, 30)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
     ///
     /// let mut obj = pod.decode_object()?;
-    ///
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
