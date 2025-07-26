@@ -30,6 +30,18 @@ const DEFAULT_SIZE: usize = 128;
 /// assert_eq!(buf.remaining(), 2);
 /// # Ok::<_, pod::Error>(())
 /// ```
+///
+/// Trying to read data from the array in a manner which is *not* correctly
+/// aligned will errors:
+///
+/// ```compile_fail
+/// use pod::{Array, Reader};
+///
+/// let mut buf = Array::<u64, 16>::from_slice(&[1, 2, 3, 4]);
+/// // This must fail because it's not possible to read half of a word out of the array.
+/// buf.read::<u32>()?;
+/// # Ok::<_, pod::Error>(())
+/// ```
 #[repr(C, align(8))]
 pub struct Array<T = u64, const N: usize = DEFAULT_SIZE> {
     data: [MaybeUninit<T>; N],
@@ -408,12 +420,12 @@ where
 /// assert_ne!(buf1, buf2);
 /// assert_eq!(buf1, buf1);
 /// ```
-impl<T, const A: usize, const B: usize> PartialEq<Array<T, B>> for Array<T, A>
+impl<T, U, const A: usize, const B: usize> PartialEq<Array<U, B>> for Array<T, A>
 where
-    T: PartialEq,
+    T: PartialEq<U>,
 {
     #[inline]
-    fn eq(&self, other: &Array<T, B>) -> bool {
+    fn eq(&self, other: &Array<U, B>) -> bool {
         self.as_slice() == other.as_slice()
     }
 }
@@ -432,12 +444,12 @@ where
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, const N: usize> PartialEq<[T]> for Array<T, N>
+impl<T, U, const N: usize> PartialEq<[U]> for Array<T, N>
 where
-    T: PartialEq,
+    T: PartialEq<U>,
 {
     #[inline]
-    fn eq(&self, other: &[T]) -> bool {
+    fn eq(&self, other: &[U]) -> bool {
         self.as_slice() == other
     }
 }
@@ -456,12 +468,12 @@ where
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, const N: usize> PartialEq<[T; N]> for Array<T, N>
+impl<T, U, const N: usize> PartialEq<[U; N]> for Array<T, N>
 where
-    T: PartialEq,
+    T: PartialEq<U>,
 {
     #[inline]
-    fn eq(&self, other: &[T; N]) -> bool {
+    fn eq(&self, other: &[U; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -480,12 +492,12 @@ where
 /// assert_eq!(slice1, slice1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, const N: usize> PartialEq<&[T; N]> for Array<T, N>
+impl<T, U, const N: usize> PartialEq<&[U; N]> for Array<T, N>
 where
-    T: PartialEq,
+    T: PartialEq<U>,
 {
     #[inline]
-    fn eq(&self, other: &&[T; N]) -> bool {
+    fn eq(&self, other: &&[U; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -504,12 +516,12 @@ where
 /// assert_eq!(array1, array1);
 /// assert_eq!(slice2, slice2);
 /// ```
-impl<T, const N: usize> PartialEq<&[T]> for Array<T, N>
+impl<T, U, const N: usize> PartialEq<&[U]> for Array<T, N>
 where
-    T: PartialEq,
+    T: PartialEq<U>,
 {
     #[inline]
-    fn eq(&self, other: &&[T]) -> bool {
+    fn eq(&self, other: &&[U]) -> bool {
         self.as_slice() == *other
     }
 }

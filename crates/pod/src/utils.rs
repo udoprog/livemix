@@ -1,19 +1,57 @@
+//! Utilities for working with aligned types and buffers.
+
+use core::mem;
 use core::mem::MaybeUninit;
 use core::slice;
 
 use crate::error::ErrorKind;
 use crate::{Error, WORD_SIZE};
 
+/// Trait implemented for types which are word-sized and can inhabit all bit
+/// patterns.
+///
+/// # Safety
+///
+/// Must only be implemented for types which are word-aligned and packed. That
+/// is, some multiple of `WORD_SIZE` and can inhabit all bit-patterns.
+pub unsafe trait AlignableWith<T>
+where
+    Self: Sized,
+    T: Sized,
+{
+    /// The size of the word in the alignment.
+    #[doc(hidden)]
+    const WORD_SIZE: usize = mem::size_of::<Self>() / mem::size_of::<T>();
+}
+
+unsafe impl<T> AlignableWith<T> for T where T: BytesInhabited {}
+unsafe impl<T, const N: usize> AlignableWith<T> for [T; N] where T: AlignableWith<T> {}
+unsafe impl AlignableWith<u64> for [u32; 2] {}
+unsafe impl AlignableWith<u64> for [u32; 4] {}
+unsafe impl AlignableWith<u64> for [u32; 6] {}
+unsafe impl AlignableWith<u64> for u128 {}
+
+/// Indicates a type which has all bit patterns inhabited.
+pub unsafe trait BytesInhabited
+where
+    Self: Copy,
+{
+}
+unsafe impl BytesInhabited for u32 {}
+unsafe impl BytesInhabited for u64 {}
+unsafe impl BytesInhabited for u128 {}
+unsafe impl<T, const N: usize> BytesInhabited for [T; N] where T: BytesInhabited {}
+
 /// Helper to align a value to a word, making necessary write conversions safe.
 #[repr(align(8))]
-pub(crate) struct Align<T>(pub T);
+pub struct Align<T>(pub T);
 
 impl<T> Align<T> {
     /// Coerce a value into a slice of words.
     #[inline]
-    pub(crate) fn as_words<U>(&self) -> &[U]
+    pub fn as_words<U>(&self) -> &[U]
     where
-        T: WordSized<U>,
+        T: AlignableWith<U>,
     {
         // SAFETY: The value must be word-aligned and packed.
         unsafe { slice::from_raw_parts(self.as_ptr(), T::WORD_SIZE) }
@@ -21,11 +59,20 @@ impl<T> Align<T> {
 
     /// Get a pointer to the word representation of the value.
     #[inline]
-    pub(crate) fn as_ptr<U>(&self) -> *const U
+    pub fn as_ptr<U>(&self) -> *const U
     where
-        T: WordSized<U>,
+        T: AlignableWith<U>,
     {
         &self.0 as *const T as *const U
+    }
+
+    /// Get the size of the region in word.
+    #[inline]
+    pub fn size(&self) -> usize
+    where
+        T: AlignableWith<u64>,
+    {
+        T::WORD_SIZE
     }
 }
 
@@ -41,57 +88,19 @@ where
 
 impl<T> Copy for Align<T> where T: Copy {}
 
-impl<T> Align<T> where T: WordSized<u64> {}
+impl<T> Align<T> where T: AlignableWith<u64> {}
 
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
 #[repr(C, align(8))]
 pub(crate) struct UninitAlign<T>(MaybeUninit<T>);
 
-/// Trait implemented for types which are word-sized and can inhabit all bit
-/// patterns.
-///
-/// # Safety
-///
-/// Must only be implemented for types which are word-aligned and packed. That
-/// is, some multiple of `WORD_SIZE` and can inhabit all bit-patterns.
-pub unsafe trait WordSized<T>: Copy {
-    /// The size of the word in the alignment.
-    #[doc(hidden)]
-    const WORD_SIZE: usize;
-}
-
-unsafe impl<T> WordSized<T> for T
-where
-    T: Copy,
-{
-    const WORD_SIZE: usize = 1;
-}
-unsafe impl<T, const N: usize> WordSized<T> for [T; N]
-where
-    T: WordSized<T>,
-{
-    const WORD_SIZE: usize = T::WORD_SIZE * N;
-}
-unsafe impl WordSized<u64> for [u32; 2] {
-    const WORD_SIZE: usize = 1;
-}
-unsafe impl WordSized<u64> for [u32; 4] {
-    const WORD_SIZE: usize = 2;
-}
-unsafe impl WordSized<u64> for [u32; 6] {
-    const WORD_SIZE: usize = 3;
-}
-unsafe impl WordSized<u64> for u128 {
-    const WORD_SIZE: usize = 2;
-}
-
 impl<T> UninitAlign<T> {
     /// Get a mutable slice of the aligned value.
     #[inline]
     pub(crate) fn as_mut_slice<U>(&mut self) -> &mut [MaybeUninit<U>]
     where
-        T: WordSized<U>,
+        T: AlignableWith<U>,
     {
         unsafe {
             slice::from_raw_parts_mut(
@@ -211,10 +220,3 @@ mod sealed {
     impl Sealed for u64 {}
     impl Sealed for u128 {}
 }
-
-/// Indicates a type which has all bit patterns inhabited.
-pub unsafe trait BytesInhabited: Copy + self::sealed::Sealed {}
-
-unsafe impl BytesInhabited for u32 {}
-unsafe impl BytesInhabited for u64 {}
-unsafe impl BytesInhabited for u128 {}

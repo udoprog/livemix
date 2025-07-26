@@ -23,7 +23,7 @@ pub use self::typed_pod::TypedPod;
 pub(crate) mod ty;
 pub use self::ty::Type;
 
-pub(crate) mod utils;
+pub mod utils;
 
 pub mod id;
 pub use self::id::{Id, IntoId};

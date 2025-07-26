@@ -1,5 +1,5 @@
 use crate::Error;
-use crate::utils::{Align, BytesInhabited, WordSized};
+use crate::utils::{Align, AlignableWith, BytesInhabited};
 
 mod sealed {
     use crate::Array;
@@ -37,7 +37,7 @@ where
 
     /// Reserve space for a single value while writing.
     #[inline(always)]
-    fn reserve(&mut self, value: impl WordSized<T>) -> Result<Self::Pos, Error> {
+    fn reserve(&mut self, value: impl AlignableWith<T>) -> Result<Self::Pos, Error> {
         self.reserve_words(Align(value).as_words())
     }
 
@@ -50,7 +50,7 @@ where
 
     /// Write a value to the writer.
     #[inline(always)]
-    fn write(&mut self, value: impl WordSized<T>) -> Result<(), Error> {
+    fn write(&mut self, value: impl AlignableWith<T>) -> Result<(), Error> {
         self.write_words(Align(value).as_words())
     }
 
@@ -65,7 +65,7 @@ where
 
     /// Write a value to the specified position in the writer.
     #[inline(always)]
-    fn write_at(&mut self, pos: Self::Pos, value: impl WordSized<T>) -> Result<(), Error> {
+    fn write_at(&mut self, pos: Self::Pos, value: impl AlignableWith<T>) -> Result<(), Error> {
         self.write_words_at(pos, Align(value).as_words())
     }
 

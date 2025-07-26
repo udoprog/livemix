@@ -2,7 +2,7 @@ use core::mem::{self, MaybeUninit};
 use core::slice;
 
 use crate::error::ErrorKind;
-use crate::utils::{BytesInhabited, UninitAlign, WordSized};
+use crate::utils::{AlignableWith, BytesInhabited, UninitAlign};
 use crate::visitor::Visitor;
 use crate::{Error, Type};
 
@@ -64,7 +64,7 @@ where
     #[inline]
     fn peek<U>(&mut self) -> Result<U, Error>
     where
-        U: WordSized<T>,
+        U: AlignableWith<T>,
     {
         let mut out = UninitAlign::<U>::uninit();
         self.peek_words_uninit(out.as_mut_slice())?;
@@ -76,7 +76,7 @@ where
     #[inline]
     fn read<U>(&mut self) -> Result<U, Error>
     where
-        U: WordSized<T>,
+        U: AlignableWith<T>,
     {
         let mut out = UninitAlign::<U>::uninit();
         self.read_words_uninit(out.as_mut_slice())?;
@@ -87,7 +87,7 @@ where
     #[inline]
     fn header(&mut self) -> Result<(u32, Type), Error>
     where
-        [u32; 2]: WordSized<T>,
+        [u32; 2]: AlignableWith<T>,
     {
         let [size, ty] = self.read::<[u32; 2]>()?;
         let ty = Type::new(ty);

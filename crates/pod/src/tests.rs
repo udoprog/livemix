@@ -4,13 +4,13 @@ use alloc::format;
 use alloc::string::String;
 
 use crate::error::ErrorKind;
-use crate::utils::{Align, WordSized};
+use crate::utils::{Align, AlignableWith};
 use crate::{Array, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
 use crate::{Choice, Reader};
 
 pub(crate) fn read<T, U>(value: T) -> U
 where
-    T: WordSized<U>,
+    T: AlignableWith<U>,
 {
     // SAFETY: The value must be word-aligned and packed.
     unsafe { Align(value).as_ptr().cast::<U>().read() }
