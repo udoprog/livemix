@@ -45,6 +45,9 @@ pub(crate) enum ErrorKind {
     RemoteClosed,
     NoSocket,
     SizeOverflow,
+    HeaderSizeOverflow {
+        size: u32,
+    },
 }
 
 impl error::Error for Error {
@@ -90,6 +93,7 @@ impl fmt::Display for Error {
             ErrorKind::RemoteClosed => write!(f, "Remote server closed the connection"),
             ErrorKind::NoSocket => write!(f, "No socket to connect to found"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
+            ErrorKind::HeaderSizeOverflow { size } => write!(f, "Header size {size} overflow"),
         }
     }
 }

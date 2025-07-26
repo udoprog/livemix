@@ -102,8 +102,11 @@ impl Connection {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        // SAFETY: No other borrows are live right now.
-        self.send.write(Header::new(0, 1, size, self.seq, 0));
+        let Some(header) = Header::new(0, 1, size, self.seq, 0) else {
+            return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
+        };
+
+        self.send.write(header);
         self.send.extend_from_words(buf.as_slice());
         self.seq = self.seq.wrapping_add(1);
         Ok(self.interest.set(Interest::WRITE))
@@ -136,6 +139,8 @@ impl Connection {
                         "Socket write returned more bytes than available in the buffer"
                     );
 
+                    // SAFETY: We trust the returned value `n` as the number of
+                    // bytes read constained by the number of bytes available.
                     unsafe {
                         self.send.set_read(n);
                     }

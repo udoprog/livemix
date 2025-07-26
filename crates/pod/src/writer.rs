@@ -36,7 +36,7 @@ where
     fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error>;
 
     /// Reserve space for a single value while writing.
-    #[inline(always)]
+    #[inline]
     fn reserve(&mut self, value: impl AlignableWith<T>) -> Result<Self::Pos, Error> {
         self.reserve_words(Align(value).as_words())
     }
@@ -49,7 +49,7 @@ where
     fn write_words(&mut self, words: &[T]) -> Result<(), Error>;
 
     /// Write a value to the writer.
-    #[inline(always)]
+    #[inline]
     fn write(&mut self, value: impl AlignableWith<T>) -> Result<(), Error> {
         self.write_words(Align(value).as_words())
     }
@@ -64,7 +64,7 @@ where
     fn write_words_at(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error>;
 
     /// Write a value to the specified position in the writer.
-    #[inline(always)]
+    #[inline]
     fn write_at(&mut self, pos: Self::Pos, value: impl AlignableWith<T>) -> Result<(), Error> {
         self.write_words_at(pos, Align(value).as_words())
     }

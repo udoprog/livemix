@@ -3,10 +3,10 @@
 use core::fmt;
 
 use pod::Pod;
-use pod::utils::AlignableWith;
+use pod::utils::BytesInhabited;
 
 // SAFETY: The header is both word-aligned and word-sized.
-unsafe impl AlignableWith<u64> for Header {}
+unsafe impl BytesInhabited for Header {}
 
 #[repr(C, align(8))]
 #[derive(Clone, Copy)]
@@ -20,15 +20,19 @@ pub struct Header {
 impl Header {
     /// Construct a new header.
     #[inline]
-    pub(crate) fn new(id: u32, op_code: u8, size: u32, seq: u32, n_fds: u32) -> Self {
+    pub(crate) fn new(id: u32, op_code: u8, size: u32, seq: u32, n_fds: u32) -> Option<Self> {
+        if size > 0xffffff {
+            return None;
+        }
+
         let size_with_opcode = ((op_code as u32) << 24) | (size & 0xffffff);
 
-        Self {
+        Some(Self {
             id,
             size_with_opcode,
             seq,
             n_fds,
-        }
+        })
     }
 
     /// Get the id of the message.

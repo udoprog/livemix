@@ -1,5 +1,4 @@
 use core::alloc::Layout;
-use core::cell::Cell;
 use core::mem;
 use core::ptr;
 use core::slice;
@@ -20,8 +19,8 @@ where
 {
     data: ptr::NonNull<A>,
     cap: usize,
-    read: Cell<usize>,
-    write: Cell<usize>,
+    read: usize,
+    write: usize,
 }
 
 impl<A> Buf<A>
@@ -36,27 +35,27 @@ where
         Buf {
             data: ptr::NonNull::<A>::dangling().cast(),
             cap: 0,
-            read: Cell::new(0),
-            write: Cell::new(0),
+            read: 0,
+            write: 0,
         }
     }
 
     /// Get the remaining readable capacity of the buffer
     #[inline]
     pub(crate) fn remaining(&self) -> usize {
-        self.write.get() - self.read.get()
+        self.write - self.read
     }
 
     /// Get the remaining mutable capacity of the buffer
     #[inline]
     pub(crate) fn remaining_mut(&self) -> usize {
-        self.cap - self.write.get()
+        self.cap - self.write
     }
 
     /// Test if the buffer is empty.
     #[inline]
     pub(crate) fn is_empty(&self) -> bool {
-        self.read.get() == self.write.get()
+        self.read == self.write
     }
 
     /// Get the slice available for reading.
@@ -65,7 +64,7 @@ where
         // SAFETY: The buffer is guaranteed to initialized due to invariants.
         unsafe {
             slice::from_raw_parts(
-                self.data.as_ptr().cast::<u8>().add(self.read.get()),
+                self.data.as_ptr().cast::<u8>().add(self.read),
                 self.remaining(),
             )
         }
@@ -82,11 +81,11 @@ where
     /// responsibility to ensure that writes (if any) in the future are aligned.
     #[inline]
     pub(crate) unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
-        self.reserve(self.write.get() + ALLOC);
+        self.reserve(self.write + ALLOC);
 
         unsafe {
             slice::from_raw_parts_mut(
-                self.data.as_ptr().cast::<u8>().add(self.write.get()),
+                self.data.as_ptr().cast::<u8>().add(self.write),
                 self.remaining_mut(),
             )
         }
@@ -96,19 +95,19 @@ where
     #[inline]
     pub(crate) fn extend_from_words(&mut self, words: &[A]) {
         debug_assert!(
-            self.write.get() % Self::WORD_SIZE == 0,
+            self.write % Self::WORD_SIZE == 0,
             "Write position in buffer is not aligned for T"
         );
 
         let n = words.len() * Self::WORD_SIZE;
-        self.reserve(self.write.get() + n);
+        self.reserve(self.write + n);
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             self.data
                 .as_ptr()
                 .cast::<u8>()
-                .add(self.write.get())
+                .add(self.write)
                 .cast::<A>()
                 .copy_from_nonoverlapping(words.as_ptr(), words.len());
 
@@ -125,18 +124,18 @@ where
         let value = Align(value);
 
         debug_assert!(
-            self.write.get() % mem::size_of::<T>() == 0,
+            self.write % mem::size_of::<T>() == 0,
             "Write position in buffer is not aligned for T"
         );
 
-        self.reserve(self.write.get() + mem::size_of::<T>());
+        self.reserve(self.write + mem::size_of::<T>());
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             self.data
                 .as_ptr()
                 .cast::<u8>()
-                .add(self.write.get())
+                .add(self.write)
                 .cast::<A>()
                 .copy_from_nonoverlapping(value.as_ptr::<A>(), value.size::<A>());
 
@@ -146,7 +145,7 @@ where
 
     /// Read `T` out of the buffer.
     #[inline]
-    pub(crate) fn read<T>(&self) -> Option<T>
+    pub(crate) fn read<T>(&mut self) -> Option<T>
     where
         T: AlignableWith<A>,
     {
@@ -161,7 +160,7 @@ where
             self.data
                 .as_ptr()
                 .cast::<u8>()
-                .add(self.read.get())
+                .add(self.read)
                 .cast::<A>()
                 .copy_to_nonoverlapping(value.as_mut_ptr::<A>().cast::<A>(), value.size::<A>());
 
@@ -172,7 +171,7 @@ where
 
     /// Read a slice of words from the buffer.
     #[inline]
-    pub(crate) fn read_words(&self, size: usize) -> Option<&[A]> {
+    pub(crate) fn read_words(&mut self, size: usize) -> Option<&[A]> {
         if size > self.remaining() {
             return None;
         }
@@ -182,11 +181,7 @@ where
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             let value = slice::from_raw_parts(
-                self.data
-                    .as_ptr()
-                    .cast::<u8>()
-                    .add(self.read.get())
-                    .cast::<A>(),
+                self.data.as_ptr().cast::<u8>().add(self.read).cast::<A>(),
                 n,
             );
             self.set_read(size);
@@ -205,19 +200,19 @@ where
     /// `self.read..self.read + n` is a valid memory region in the buffer that
     /// has previously been written to.
     #[inline]
-    pub(crate) unsafe fn set_read(&self, n: usize) {
-        self.read.set(self.read.get() + n);
+    pub(crate) unsafe fn set_read(&mut self, n: usize) {
+        self.read = self.read + n;
 
-        if self.read.get() == self.write.get() {
-            self.read.set(0);
-            self.write.set(0);
+        if self.read == self.write {
+            self.read = 0;
+            self.write = 0;
         }
 
         debug_assert!(
-            self.read.get() <= self.write.get(),
+            self.read <= self.write,
             "Read position {} in buffer is greater than write {}",
-            self.read.get(),
-            self.write.get()
+            self.read,
+            self.write
         );
     }
 
@@ -232,13 +227,13 @@ where
     /// `self.write..self.write + n` is a valid memory region in the buffer that
     /// has previously been written to.
     #[inline]
-    pub(crate) unsafe fn set_written(&self, n: usize) {
-        self.write.set(self.write.get() + n);
+    pub(crate) unsafe fn set_written(&mut self, n: usize) {
+        self.write = self.write + n;
 
         debug_assert!(
-            self.write.get() <= self.cap,
+            self.write <= self.cap,
             "Write position {} in buffer is greater than capacity {}",
-            self.write.get(),
+            self.write,
             self.cap
         );
     }
@@ -290,7 +285,7 @@ where
 
 impl Buf {
     /// Read a frame from the current buffer.
-    pub fn frame(&self, header: Header) -> Option<Frame<'_>> {
+    pub fn frame(&mut self, header: Header) -> Option<Frame<'_>> {
         let size = header.size() as usize;
 
         if size > self.remaining() {
@@ -321,8 +316,8 @@ where
 
             self.data = ptr::NonNull::<A>::dangling().cast();
             self.cap = 0;
-            self.read.set(0);
-            self.write.set(0);
+            self.read = 0;
+            self.write = 0;
         }
     }
 }
