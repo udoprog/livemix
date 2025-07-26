@@ -19,14 +19,14 @@ const DEFAULT_SIZE: usize = 128;
 /// ```
 /// use pod::{Array, Reader, Writer};
 ///
-/// let mut buf = Array::<u64, 16>::from_slice(&[1, 2, 3, 4]);
+/// let mut buf = Array::<u32, 16>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.remaining(), 4);
-/// buf.write(5u64)?;
+/// buf.write(5u32)?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
 /// assert_eq!(buf.remaining(), 5);
-/// assert_eq!(buf.read::<[u64; 1]>()?, [1]);
+/// assert_eq!(buf.read::<[u32; 1]>()?, [1]);
 /// assert_eq!(buf.as_slice(), &[2, 3, 4, 5]);
-/// assert_eq!(buf.read::<u128>()?, 2u128 + (3u128 << 64));
+/// assert_eq!(buf.read::<u64>()?, 2u64 + (3u64 << 32));
 /// assert_eq!(buf.remaining(), 2);
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -175,16 +175,16 @@ impl<T, const N: usize> Array<T, N> {
     /// ```
     /// use pod::{Array, Reader};
     ///
-    /// let mut array = Array::from_array([1, 2, 3]);
+    /// let mut array = Array::from_array([1u32, 2, 3]);
     /// assert_eq!(array.remaining(), 3);
-    /// assert_eq!(array.len(), 24);
+    /// assert_eq!(array.len(), 12);
     ///
-    /// assert_eq!(array.read::<[u64; 1]>()?, [1]);
+    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
     /// assert_eq!(array.remaining(), 2);
-    /// assert_eq!(array.len(), 16);
+    /// assert_eq!(array.len(), 8);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read::<u128>()?, 2u128 + (3u128 << 64));
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
     /// assert_eq!(array.remaining(), 0);
     /// assert_eq!(array.len(), 0);
     /// # Ok::<_, pod::Error>(())
@@ -200,14 +200,15 @@ impl<T, const N: usize> Array<T, N> {
     /// ```
     /// use pod::{Array, Reader};
     ///
-    /// let mut array = Array::from_array([1, 2, 3]);
+    /// let mut array = Array::from_array([1u32, 2, 3]);
     /// assert_eq!(array.remaining(), 3);
     ///
-    /// assert_eq!(array.read::<[u64; 1]>()?, [1]);
+    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
     /// assert_eq!(array.remaining(), 2);
+    /// assert_eq!(array.len(), 8);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read::<u128>()?, 2u128 + (3u128 << 64));
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
     /// assert_eq!(array.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -222,15 +223,15 @@ impl<T, const N: usize> Array<T, N> {
     /// ```
     /// use pod::{Array, Reader};
     ///
-    /// let mut array = Array::<u64, 16>::from_slice(&[1, 2, 3]);
+    /// let mut array = Array::<u32, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(array.remaining(), 3);
     /// assert_eq!(array.remaining_mut(), 13);
     ///
-    /// assert_eq!(array.read::<[u64; 1]>()?, [1]);
+    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
     /// assert_eq!(array.remaining(), 2);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
-    /// assert_eq!(array.read::<u128>()?, 2u128 + (3u128 << 64));
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
     /// assert_eq!(array.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -390,7 +391,7 @@ impl<T, const N: usize> Array<T, N> {
 /// ```
 /// use pod::{Array, Reader};
 ///
-/// let mut buf = Array::from_array([1, 2, 3]);
+/// let mut buf = Array::from_array([1u64, 2, 3]);
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
 /// buf.read::<u64>()?;
 /// assert_eq!(format!("{buf:?}"), "[2, 3]");

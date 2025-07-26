@@ -9,27 +9,28 @@ use crate::{Error, WORD_SIZE};
 
 /// Trait implemented for types which are word-sized and can inhabit all bit
 /// patterns.
-///
-/// # Safety
-///
-/// Must only be implemented for types which are word-aligned and packed. That
-/// is, some multiple of `WORD_SIZE` and can inhabit all bit-patterns.
-pub unsafe trait AlignableWith<T>
+pub trait AlignableWith<T>
 where
     Self: Sized,
     T: Sized,
 {
     /// The size of the word in the alignment.
     #[doc(hidden)]
-    const WORD_SIZE: usize = mem::size_of::<Self>() / mem::size_of::<T>();
+    const WORD_SIZE: usize = {
+        assert!(mem::size_of::<Self>() >= mem::size_of::<T>());
+        assert!(mem::size_of::<Self>() % mem::size_of::<T>() == 0);
+        // Helper types to deal with alignment assumes that alignment is less than or equal to 8.
+        assert!(mem::align_of::<Self>() <= 8);
+        mem::size_of::<Self>() / mem::size_of::<T>()
+    };
 }
 
-unsafe impl<T> AlignableWith<T> for T where T: BytesInhabited {}
-unsafe impl<T, const N: usize> AlignableWith<T> for [T; N] where T: AlignableWith<T> {}
-unsafe impl AlignableWith<u64> for [u32; 2] {}
-unsafe impl AlignableWith<u64> for [u32; 4] {}
-unsafe impl AlignableWith<u64> for [u32; 6] {}
-unsafe impl AlignableWith<u64> for u128 {}
+impl<T, U> AlignableWith<U> for T
+where
+    T: BytesInhabited,
+    U: BytesInhabited,
+{
+}
 
 /// Indicates a type which has all bit patterns inhabited.
 pub unsafe trait BytesInhabited
@@ -37,9 +38,10 @@ where
     Self: Copy,
 {
 }
+unsafe impl BytesInhabited for i32 {}
 unsafe impl BytesInhabited for u32 {}
+unsafe impl BytesInhabited for i64 {}
 unsafe impl BytesInhabited for u64 {}
-unsafe impl BytesInhabited for u128 {}
 unsafe impl<T, const N: usize> BytesInhabited for [T; N] where T: BytesInhabited {}
 
 /// Helper to align a value to a word, making necessary write conversions safe.
