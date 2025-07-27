@@ -1,6 +1,6 @@
 use crate::error::ErrorKind;
 use crate::pod::{ChildPod, PodKind};
-use crate::{Choice, Error, Pod, Type, WORD_SIZE, Writer};
+use crate::{ChoiceType, Error, Pod, Type, WORD_SIZE, Writer};
 
 /// An encoder for a choice.
 pub struct ChoiceEncoder<W, K>
@@ -11,7 +11,7 @@ where
     kind: K,
     header: W::Pos,
     #[allow(unused)]
-    choice: Choice,
+    choice: ChoiceType,
     #[allow(unused)]
     flags: u32,
     child_size: u32,
@@ -27,7 +27,7 @@ where
     pub(crate) fn to_writer(
         mut writer: W,
         kind: K,
-        choice: Choice,
+        choice: ChoiceType,
         child_type: Type,
     ) -> Result<Self, Error> {
         let Some(child_size) = child_type.size() else {
@@ -61,10 +61,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type, Choice};
+    /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode_choice(Choice::NONE, Type::INT, |choice| {
+    /// pod.encode_choice(ChoiceType::NONE, Type::INT, |choice| {
     ///     choice.entry()?.encode(1i32)?;
     ///     Ok(())
     /// })?;

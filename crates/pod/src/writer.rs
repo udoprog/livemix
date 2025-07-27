@@ -2,11 +2,11 @@ use crate::Error;
 use crate::utils::{Align, AlignableWith, BytesInhabited};
 
 mod sealed {
-    use crate::Array;
+    use crate::Buf;
     use crate::Writer;
 
     pub trait Sealed<T> {}
-    impl<T, const N: usize> Sealed<T> for Array<T, N> {}
+    impl<T, const N: usize> Sealed<T> for Buf<T, N> {}
     impl<W, T> Sealed<T> for &mut W
     where
         W: ?Sized + Writer<T>,

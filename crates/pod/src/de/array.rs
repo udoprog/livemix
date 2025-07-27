@@ -2,35 +2,100 @@ use core::fmt;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{Choice, Error, Reader, Type, TypedPod, WORD_SIZE};
+use crate::{Error, Reader, Type, TypedPod, WORD_SIZE};
 
-/// A decoder for a choice.
-pub struct ChoiceDecoder<R> {
+/// A decoder for an array.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, Type};
+///
+/// let mut pod = Pod::array();
+///
+/// pod.as_mut().encode_array(Type::INT, |array| {
+///     array.push()?.encode(1i32)?;
+///     array.push()?.encode(2i32)?;
+///     array.push()?.encode(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut array = pod.decode_array()?;
+///
+/// assert!(!array.is_empty());
+/// assert_eq!(array.len(), 3);
+///
+/// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
+/// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
+/// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
+///
+/// assert!(array.is_empty());
+/// assert_eq!(array.len(), 0);
+/// # Ok::<_, pod::Error>(())
+/// ```
+///
+/// Decoding unsized items:
+///
+/// ```
+/// use pod::{Pod, Type};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode_unsized_array(Type::STRING, 4, |array| {
+///     array.push()?.encode_unsized("foo")?;
+///     array.push()?.encode_unsized("bar")?;
+///     array.push()?.encode_unsized("baz")?;
+///     Ok(())
+/// })?;
+///
+/// let mut array = pod.as_ref().decode_array()?;
+/// assert!(!array.is_empty());
+/// assert_eq!(array.len(), 3);
+/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "foo");
+/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "bar");
+/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "baz");
+/// assert!(array.is_empty());
+/// assert_eq!(array.len(), 0);
+/// # Ok::<_, pod::Error>(())
+/// ```
+///
+/// Decoding borrowed values:
+///
+/// ```
+/// use pod::{Pod, Type};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode_unsized_array(Type::STRING, 4, |array| {
+///     array.push()?.encode_unsized("foo")?;
+///     array.push()?.encode_unsized("bar")?;
+///     array.push()?.encode_unsized("baz")?;
+///     Ok(())
+/// })?;
+///
+/// let mut array = pod.as_ref().decode_array()?;
+/// assert!(!array.is_empty());
+/// assert_eq!(array.len(), 3);
+/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "foo");
+/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "bar");
+/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "baz");
+/// assert!(array.is_empty());
+/// assert_eq!(array.len(), 0);
+/// # Ok::<_, pod::Error>(())
+/// ```
+pub struct Array<R> {
     reader: R,
-    ty: Choice,
-    flags: u32,
     child_size: u32,
     child_type: Type,
     remaining: u32,
 }
 
-impl<'de, R> ChoiceDecoder<R>
+impl<'de, R> Array<R>
 where
     R: Reader<'de, u64>,
 {
     #[inline]
-    pub fn new(
-        reader: R,
-        ty: Choice,
-        flags: u32,
-        child_size: u32,
-        child_type: Type,
-        remaining: u32,
-    ) -> Self {
+    fn new(reader: R, child_size: u32, child_type: Type, remaining: u32) -> Self {
         Self {
             reader,
-            ty,
-            flags,
             child_size,
             child_type,
             remaining,
@@ -39,66 +104,21 @@ where
 
     #[inline]
     pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
-        let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
-        let ty = Choice::from_u32(ty);
-        let child_type = Type::new(child_type);
-        let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
+        let (child_size, child_type) = reader.header()?;
+        let remaining = array_remaining(size, child_size, WORD_SIZE)?;
 
         Ok(Self {
             reader,
-            ty,
-            flags,
             child_size,
             child_type,
             remaining,
         })
     }
 
-    /// Return the type of the choice.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Choice, Pod, Type};
-    ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.encode(10i32)?;
-    ///     choice.entry()?.encode(0i32)?;
-    ///     choice.entry()?.encode(30i32)?;
-    ///     Ok(())
-    /// })?;
-    ///
-    /// let mut choice = pod.decode_choice()?;
-    /// assert_eq!(choice.ty(), Choice::RANGE);
-    ///
-    /// let mut count = 0;
-    ///
-    /// while !choice.is_empty() {
-    ///     let pod = choice.entry()?;
-    ///     assert_eq!(pod.ty(), Type::INT);
-    ///     assert_eq!(pod.size(), 4);
-    ///     count += 1;
-    /// }
-    ///
-    /// assert_eq!(count, 3);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub const fn ty(&self) -> Choice {
-        self.ty
-    }
-
     /// Return the type of the child element.
     #[inline]
-    pub const fn child_type(&self) -> Type {
+    pub fn child_type(&self) -> Type {
         self.child_type
-    }
-
-    /// Return the size of the child element.
-    #[inline]
-    pub const fn child_size(&self) -> u32 {
-        self.child_size
     }
 
     /// Get the number of elements left to decode from the array.
@@ -109,18 +129,20 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
+    ///
     /// pod.as_mut().encode_array(Type::INT, |array| {
     ///     array.push()?.encode(1i32)?;
     ///     Ok(())
     /// })?;
     ///
     /// let mut array = pod.decode_array()?;
+    ///
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn len(&self) -> u32 {
+    pub fn len(&self) -> u32 {
         self.remaining
     }
 
@@ -139,7 +161,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.remaining == 0
     }
 
@@ -148,23 +170,22 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Choice, Pod, Type};
+    /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.encode(10i32)?;
-    ///     choice.entry()?.encode(0i32)?;
-    ///     choice.entry()?.encode(30i32)?;
+    /// pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     array.push()?.encode(2i32)?;
+    ///     array.push()?.encode(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.decode_choice()?;
-    /// assert_eq!(choice.ty(), Choice::RANGE);
+    /// let mut array = pod.decode_array()?;
     ///
     /// let mut count = 0;
     ///
-    /// while !choice.is_empty() {
-    ///     let pod = choice.entry()?;
+    /// while !array.is_empty() {
+    ///     let pod = array.item()?;
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -174,7 +195,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn entry(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
+    pub fn item(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
@@ -186,14 +207,12 @@ where
         Ok(pod)
     }
 
-    /// Convert the [`ChoiceDecoder`] into a one borrowing from but without
+    /// Convert the [`ArrayDecoder`] into a one borrowing from but without
     /// modifying the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> ChoiceDecoder<R::Clone<'_>> {
-        ChoiceDecoder::new(
+    pub fn as_ref(&self) -> Array<R::Clone<'_>> {
+        Array::new(
             self.reader.clone_reader(),
-            self.ty,
-            self.flags,
             self.child_size,
             self.child_type,
             self.remaining,
@@ -201,12 +220,12 @@ where
     }
 }
 
-impl<'de, R> fmt::Debug for ChoiceDecoder<R>
+impl<'de, R> fmt::Debug for Array<R>
 where
     R: Reader<'de, u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Entries<'a, R>(&'a ChoiceDecoder<R>);
+        struct Entries<'a, R>(&'a Array<R>);
 
         impl<'de, R> fmt::Debug for Entries<'_, R>
         where
@@ -219,7 +238,7 @@ where
                 let mut f = f.debug_list();
 
                 while !this.is_empty() {
-                    match this.entry() {
+                    match this.item() {
                         Ok(e) => {
                             f.entry(&e);
                         }
@@ -233,8 +252,7 @@ where
             }
         }
 
-        let mut f = f.debug_struct("Choice");
-        f.field("type", &self.ty());
+        let mut f = f.debug_struct("Array");
         f.field("child_type", &self.child_type());
         f.field("entries", &Entries(self));
         f.finish()

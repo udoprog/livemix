@@ -2,7 +2,7 @@ use core::ffi::CStr;
 use core::fmt;
 
 use crate::bstr::BStr;
-use crate::de::{ArrayDecoder, ChoiceDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
+use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
     Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pod, Pointer, Reader, Rectangle, Type,
@@ -279,9 +279,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(self) -> Result<ArrayDecoder<B>, Error> {
+    pub fn decode_array(self) -> Result<Array<B>, Error> {
         match self.ty {
-            Type::ARRAY => ArrayDecoder::from_reader(self.buf, self.size),
+            Type::ARRAY => Array::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::ARRAY,
                 actual: self.ty,
@@ -313,9 +313,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_struct(self) -> Result<StructDecoder<B>, Error> {
+    pub fn decode_struct(self) -> Result<Struct<B>, Error> {
         match self.ty {
-            Type::STRUCT => Ok(StructDecoder::new(self.buf, self.size)),
+            Type::STRUCT => Ok(Struct::new(self.buf, self.size)),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRUCT,
                 actual: self.ty,
@@ -360,9 +360,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_object(self) -> Result<ObjectDecoder<B>, Error> {
+    pub fn decode_object(self) -> Result<Object<B>, Error> {
         match self.ty {
-            Type::OBJECT => ObjectDecoder::from_reader(self.buf, self.size),
+            Type::OBJECT => Object::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::OBJECT,
                 actual: self.ty,
@@ -407,9 +407,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_sequence(self) -> Result<SequenceDecoder<B>, Error> {
+    pub fn decode_sequence(self) -> Result<Sequence<B>, Error> {
         match self.ty {
-            Type::SEQUENCE => SequenceDecoder::from_reader(self.buf, self.size),
+            Type::SEQUENCE => Sequence::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::SEQUENCE,
                 actual: self.ty,
@@ -422,10 +422,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Choice, Pod, Type};
+    /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    /// pod.as_mut().encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.entry()?.encode(10i32)?;
     ///     choice.entry()?.encode(0i32)?;
     ///     choice.entry()?.encode(30i32)?;
@@ -441,9 +441,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_choice(self) -> Result<ChoiceDecoder<B>, Error> {
+    pub fn decode_choice(self) -> Result<Choice<B>, Error> {
         match self.ty {
-            Type::CHOICE => ChoiceDecoder::from_reader(self.buf, self.size),
+            Type::CHOICE => Choice::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::CHOICE,
                 actual: self.ty,

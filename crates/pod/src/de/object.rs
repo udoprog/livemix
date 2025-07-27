@@ -4,14 +4,14 @@ use crate::error::ErrorKind;
 use crate::{Error, Property, Reader, TypedPod, WORD_SIZE};
 
 /// A decoder for a struct.
-pub struct ObjectDecoder<R> {
+pub struct Object<R> {
     reader: R,
     size: u32,
     object_type: u32,
     object_id: u32,
 }
 
-impl<'de, R> ObjectDecoder<R>
+impl<'de, R> Object<R>
 where
     R: Reader<'de, u64>,
 {
@@ -165,8 +165,8 @@ where
     /// Convert the [`ObjectDecoder`] into a one borrowing from but without
     /// modifying the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> ObjectDecoder<R::Clone<'_>> {
-        ObjectDecoder::new(
+    pub fn as_ref(&self) -> Object<R::Clone<'_>> {
+        Object::new(
             self.reader.clone_reader(),
             self.size,
             self.object_type,
@@ -175,12 +175,12 @@ where
     }
 }
 
-impl<'de, R> fmt::Debug for ObjectDecoder<R>
+impl<'de, R> fmt::Debug for Object<R>
 where
     R: Reader<'de, u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Properties<'a, R>(&'a ObjectDecoder<R>);
+        struct Properties<'a, R>(&'a Object<R>);
 
         impl<'de, R> fmt::Debug for Properties<'_, R>
         where

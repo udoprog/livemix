@@ -5,8 +5,8 @@ use alloc::string::String;
 
 use crate::error::ErrorKind;
 use crate::utils::{Align, AlignableWith};
-use crate::{Array, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
-use crate::{Choice, Reader};
+use crate::{Bitmap, Buf, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
+use crate::{ChoiceType, Reader};
 
 pub(crate) fn read<T, U>(value: T) -> U
 where
@@ -39,7 +39,7 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 
 #[test]
 fn test_encode_decode_u64() -> Result<(), Error> {
-    let mut buf = Array::<u64>::new();
+    let mut buf = Buf::<u64>::new();
     buf.write(0x1234567890abcdefu64)?;
 
     let Ok([a, b]) = buf.peek::<[u32; 2]>() else {
@@ -62,7 +62,7 @@ fn test_encode_decode_u64() -> Result<(), Error> {
 
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
-    let mut pod = Pod::new(Array::<_, 1>::new());
+    let mut pod = Pod::new(Buf::<_, 1>::new());
     assert!(pod.as_mut().encode_none().is_ok());
 
     assert_eq!(
@@ -91,7 +91,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let mut buf = Array::<u64, 3>::from_array([1, 2, 3]);
+    let mut buf = Buf::<u64, 3>::from_array([1, 2, 3]);
     assert_eq!(buf.read::<u64>()?, 1);
     assert_eq!(buf.read::<u64>()?, 2);
     assert_eq!(
@@ -433,7 +433,7 @@ fn test_format_l1_struct() -> Result<(), Error> {
 fn test_format_choice() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut()
-        .encode_choice(Choice::RANGE, Type::INT, |choice| {
+        .encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
             choice.entry()?.encode(10i32)?;
             choice.entry()?.encode(0i32)?;
             choice.entry()?.encode(30i32)?;
@@ -451,7 +451,7 @@ fn test_format_choice() -> Result<(), Error> {
 fn test_format_buggy() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut()
-        .encode_choice(Choice::RANGE, Type::INT, |choice| {
+        .encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
             choice.entry()?.encode(10i32)?;
             choice.entry()?.encode(30i32)?;
             choice.entry()?.encode(0i32)?;
@@ -469,7 +469,7 @@ fn test_format_buggy() -> Result<(), Error> {
 
 #[test]
 fn test_array_drop() -> Result<(), Error> {
-    let mut array = Array::<String>::new();
+    let mut array = Buf::<String>::new();
     array.push(String::from("foo"))?;
     array.push(String::from("bar"))?;
     array.push(String::from("baz"))?;

@@ -13,15 +13,12 @@ use std::path::PathBuf;
 use pod::Pod;
 use pod::Reader;
 
-use crate::Error;
-use crate::buf::Buf;
 use crate::consts;
-use crate::consts::Direction;
 use crate::error::ErrorKind;
 use crate::op;
-use crate::poll::ChangeInterest;
-use crate::poll::Interest;
+use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
+use crate::{DynamicBuf, Error};
 
 const ENVIRONS: &[&str] = &["PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR", "USERPROFILE"];
 const SOCKET: &str = "pipewire-0";
@@ -41,7 +38,7 @@ pub struct Connection {
     socket: UnixStream,
     message_sequence: u32,
     sync_sequence: u32,
-    outgoing: Buf,
+    outgoing: DynamicBuf,
     interest: Interest,
     modified: ChangeInterest,
 }
@@ -78,7 +75,7 @@ impl Connection {
             socket,
             message_sequence: 0,
             sync_sequence: 1,
-            outgoing: Buf::new(),
+            outgoing: DynamicBuf::new(),
             interest: Interest::READ,
             modified: ChangeInterest::Unchanged,
         })
@@ -326,7 +323,7 @@ impl Connection {
     }
 
     /// Receive data from the server.
-    pub fn recv(&mut self, recv: &mut Buf) -> Result<(), Error> {
+    pub fn recv(&mut self, recv: &mut DynamicBuf) -> Result<(), Error> {
         loop {
             // SAFETY: This is the only point which writes to the buffer, all
             // subsequent reads are aligned which only depends on the read cursor.
@@ -362,7 +359,11 @@ impl Connection {
     }
 
     /// Receive file descriptors from the server.
-    pub fn recv_with_fds(&mut self, recv: &mut Buf, fds: &mut [RawFd]) -> Result<usize, Error> {
+    pub fn recv_with_fds(
+        &mut self,
+        recv: &mut DynamicBuf,
+        fds: &mut [RawFd],
+    ) -> Result<usize, Error> {
         const {
             assert!(mem::align_of::<MaybeUninit<[u64; 16]>>() >= mem::align_of::<libc::cmsghdr>());
         }

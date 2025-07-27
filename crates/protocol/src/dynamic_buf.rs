@@ -12,7 +12,7 @@ use crate::types::Header;
 pub(crate) const ALLOC: usize = 1024;
 
 /// A buffer which can be used in combination with a channel.
-pub struct Buf<A = u64>
+pub struct DynamicBuf<A = u64>
 where
     A: Copy,
 {
@@ -22,7 +22,7 @@ where
     write: usize,
 }
 
-impl<A> Buf<A>
+impl<A> DynamicBuf<A>
 where
     A: Copy,
 {
@@ -31,7 +31,7 @@ where
     /// Construct a new empty buffer.
     #[inline]
     pub fn new() -> Self {
-        Buf {
+        DynamicBuf {
             data: ptr::NonNull::<A>::dangling().cast(),
             cap: 0,
             read: 0,
@@ -282,7 +282,7 @@ where
     }
 }
 
-impl Buf {
+impl DynamicBuf {
     /// Read a frame from the current buffer.
     pub fn frame(&mut self, header: &Header) -> Option<Pod<&[u64]>> {
         let size = header.size() as usize;
@@ -291,7 +291,7 @@ impl Buf {
     }
 }
 
-impl<A> Drop for Buf<A>
+impl<A> Drop for DynamicBuf<A>
 where
     A: Copy,
 {

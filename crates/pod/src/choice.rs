@@ -3,9 +3,9 @@ use core::fmt;
 /// The type of a choice.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct Choice(u32);
+pub struct ChoiceType(u32);
 
-impl Choice {
+impl ChoiceType {
     /// Only `child1` is an valid option.
     pub const NONE: Self = Self(0);
     /// In a range, `child1` is a default value, options are between `child2`
@@ -22,7 +22,7 @@ impl Choice {
     pub const FLAGS: Self = Self(4);
 }
 
-impl Choice {
+impl ChoiceType {
     /// Convert the choice into a `u32`.
     #[inline]
     pub(crate) fn into_u32(self) -> u32 {
@@ -32,11 +32,11 @@ impl Choice {
     /// Convert a `u32` into a choice.
     #[inline]
     pub(crate) fn from_u32(value: u32) -> Self {
-        Choice(value)
+        ChoiceType(value)
     }
 }
 
-impl fmt::Debug for Choice {
+impl fmt::Debug for ChoiceType {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {

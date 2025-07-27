@@ -4,14 +4,14 @@ use crate::error::ErrorKind;
 use crate::{Control, Error, Reader, TypedPod, WORD_SIZE};
 
 /// A decoder for a sequence.
-pub struct SequenceDecoder<R> {
+pub struct Sequence<R> {
     reader: R,
     size: u32,
     unit: u32,
     pad: u32,
 }
 
-impl<'de, R> SequenceDecoder<R>
+impl<'de, R> Sequence<R>
 where
     R: Reader<'de, u64>,
 {
@@ -175,17 +175,17 @@ where
     /// Convert the [`SequenceDecoder`] into a one borrowing from but without
     /// modifying the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> SequenceDecoder<R::Clone<'_>> {
-        SequenceDecoder::new(self.reader.clone_reader(), self.size, self.unit, self.pad)
+    pub fn as_ref(&self) -> Sequence<R::Clone<'_>> {
+        Sequence::new(self.reader.clone_reader(), self.size, self.unit, self.pad)
     }
 }
 
-impl<'de, R> fmt::Debug for SequenceDecoder<R>
+impl<'de, R> fmt::Debug for Sequence<R>
 where
     R: Reader<'de, u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Controls<'a, R>(&'a SequenceDecoder<R>);
+        struct Controls<'a, R>(&'a Sequence<R>);
 
         impl<'de, R> fmt::Debug for Controls<'_, R>
         where

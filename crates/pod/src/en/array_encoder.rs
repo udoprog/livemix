@@ -89,7 +89,7 @@ where
             }
         };
 
-        let pos = writer.reserve([
+        let header = writer.reserve([
             WORD_SIZE,
             Type::ARRAY.into_u32(),
             child_size,
@@ -99,7 +99,7 @@ where
         Ok(Self {
             writer,
             kind,
-            header: pos,
+            header,
             child_size,
             child_type,
         })
@@ -110,7 +110,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type, Choice};
+    /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_array(Type::INT, |array| {

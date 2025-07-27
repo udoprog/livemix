@@ -4,12 +4,12 @@ use crate::error::ErrorKind;
 use crate::{Error, Reader, TypedPod};
 
 /// A decoder for a struct.
-pub struct StructDecoder<R> {
+pub struct Struct<R> {
     reader: R,
     size: u32,
 }
 
-impl<'de, R> StructDecoder<R>
+impl<'de, R> Struct<R>
 where
     R: Reader<'de, u64>,
 {
@@ -99,17 +99,17 @@ where
     /// Convert the [`StructDecoder`] into a one borrowing from but without
     /// modifying the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> StructDecoder<R::Clone<'_>> {
-        StructDecoder::new(self.reader.clone_reader(), self.size)
+    pub fn as_ref(&self) -> Struct<R::Clone<'_>> {
+        Struct::new(self.reader.clone_reader(), self.size)
     }
 }
 
-impl<'de, R> fmt::Debug for StructDecoder<R>
+impl<'de, R> fmt::Debug for Struct<R>
 where
     R: Reader<'de, u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Fields<'a, R>(&'a StructDecoder<R>);
+        struct Fields<'a, R>(&'a Struct<R>);
 
         impl<'de, R> fmt::Debug for Fields<'_, R>
         where

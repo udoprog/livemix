@@ -4,17 +4,17 @@ pub use self::decode_unsized::DecodeUnsized;
 pub(crate) mod decode;
 pub use self::decode::Decode;
 
-mod array_decoder;
-pub use self::array_decoder::ArrayDecoder;
+mod array;
+pub use self::array::Array;
 
-mod struct_decoder;
-pub use self::struct_decoder::StructDecoder;
+mod struct_;
+pub use self::struct_::Struct;
 
-mod object_decoder;
-pub use self::object_decoder::ObjectDecoder;
+mod object;
+pub use self::object::Object;
 
-mod sequence_decoder;
-pub use self::sequence_decoder::SequenceDecoder;
+mod sequence;
+pub use self::sequence::Sequence;
 
-mod choice_decoder;
-pub use self::choice_decoder::ChoiceDecoder;
+mod choice;
+pub use self::choice::Choice;

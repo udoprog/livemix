@@ -7,7 +7,6 @@ use std::os::fd::OwnedFd;
 use std::sync::Arc;
 
 use anyhow::bail;
-use pod::Array;
 use pod::Fd;
 use pod::Id;
 use pod::Int;
@@ -19,7 +18,7 @@ use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{ChangeInterest, Interest, PollEvent, Token};
 use protocol::types::Header;
-use protocol::{Buf, Connection, EventFd, Poll};
+use protocol::{Connection, DynamicBuf, EventFd, Poll};
 
 use anyhow::{Context, Result};
 
@@ -116,7 +115,7 @@ struct ConnectionState {
 }
 
 impl ConnectionState {
-    fn run(&mut self, c: &mut Connection, recv: &mut Buf) -> Result<()> {
+    fn run(&mut self, c: &mut Connection, recv: &mut DynamicBuf) -> Result<()> {
         'next: loop {
             while let Some(op) = self.ops.pop_front() {
                 match op {
@@ -696,12 +695,12 @@ fn main() -> Result<()> {
 
     c.set_nonblocking(true)?;
 
-    let mut recv = Buf::new();
+    let mut recv = DynamicBuf::new();
 
     poll.add(&c, CONNECTION, c.interest())?;
     poll.add(&ev, EVENT, Interest::READ)?;
 
-    let mut events = Array::<PollEvent, 4>::new();
+    let mut events = pod::Buf::<PollEvent, 4>::new();
     let mut state = ConnectionState::default();
 
     // Well-known identifiers.

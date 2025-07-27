@@ -44,7 +44,7 @@ mod de;
 pub use self::de::{Decode, DecodeUnsized};
 
 mod array;
-pub use self::array::Array;
+pub use self::array::Buf;
 
 mod writer;
 pub use self::writer::Writer;
@@ -82,4 +82,4 @@ mod fd;
 pub use self::fd::Fd;
 
 mod choice;
-pub use self::choice::Choice;
+pub use self::choice::ChoiceType;

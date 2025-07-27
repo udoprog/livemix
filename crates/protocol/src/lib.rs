@@ -15,9 +15,9 @@ mod connection;
 pub use self::connection::Connection;
 
 #[cfg(feature = "alloc")]
-pub(crate) mod buf;
+pub(crate) mod dynamic_buf;
 #[cfg(feature = "alloc")]
-pub use self::buf::Buf;
+pub use self::dynamic_buf::DynamicBuf;
 
 pub mod types;
 

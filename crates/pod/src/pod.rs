@@ -1,10 +1,10 @@
 use core::fmt;
 
-use crate::de::{ArrayDecoder, ChoiceDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
+use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    Array, Choice, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod,
+    Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod,
     Visitor, WORD_SIZE, Writer,
 };
 
@@ -130,7 +130,7 @@ where
     }
 }
 
-impl Pod<Array<u64>> {
+impl Pod<Buf<u64>> {
     /// Construct a new [`Pod`] with a 128 word-sized array buffer.
     ///
     /// # Examples
@@ -145,7 +145,7 @@ impl Pod<Array<u64>> {
     /// ```
     #[inline]
     pub const fn array() -> Self {
-        Self::new(Array::new())
+        Self::new(Buf::new())
     }
 }
 
@@ -155,12 +155,12 @@ impl<B> Pod<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Array, Pod};
+    /// use pod::{Buf, Pod};
     ///
-    /// let mut buf = Array::<u64>::new();
+    /// let mut buf = Buf::<u64>::new();
     /// _ = Pod::new(&mut buf);
     ///
-    /// _ = Pod::new(Array::<u64, 16>::new());
+    /// _ = Pod::new(Buf::<u64, 16>::new());
     /// ```
     #[inline]
     pub const fn new(buf: B) -> Self {
@@ -497,10 +497,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Choice, Pod, Type};
+    /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    /// pod.as_mut().encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.entry()?.encode(1i32)?;
     ///     Ok(())
     /// })?;
@@ -509,7 +509,7 @@ where
     #[inline]
     pub fn encode_choice(
         self,
-        choice: Choice,
+        choice: ChoiceType,
         child_type: Type,
         f: impl FnOnce(&mut ChoiceEncoder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
@@ -750,7 +750,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(self) -> Result<ArrayDecoder<B>, Error> {
+    pub fn decode_array(self) -> Result<Array<B>, Error> {
         self.into_typed()?.decode_array()
     }
 
@@ -791,7 +791,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_struct(self) -> Result<StructDecoder<B>, Error> {
+    pub fn decode_struct(self) -> Result<Struct<B>, Error> {
         self.into_typed()?.decode_struct()
     }
 
@@ -845,7 +845,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_object(self) -> Result<ObjectDecoder<B>, Error> {
+    pub fn decode_object(self) -> Result<Object<B>, Error> {
         self.into_typed()?.decode_object()
     }
 
@@ -899,7 +899,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_sequence(self) -> Result<SequenceDecoder<B>, Error> {
+    pub fn decode_sequence(self) -> Result<Sequence<B>, Error> {
         self.into_typed()?.decode_sequence()
     }
 
@@ -908,10 +908,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Choice, Pod, Type};
+    /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |choice| {
+    /// pod.as_mut().encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.entry()?.encode(10i32)?;
     ///     choice.entry()?.encode(0i32)?;
     ///     choice.entry()?.encode(30i32)?;
@@ -930,17 +930,17 @@ where
     /// Encoding an empty choice:
     ///
     /// ```
-    /// use pod::{Choice, Pod, Type};
+    /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_choice(Choice::RANGE, Type::INT, |_| Ok(()))?;
+    /// pod.as_mut().encode_choice(ChoiceType::RANGE, Type::INT, |_| Ok(()))?;
     ///
     /// let mut choice = pod.decode_choice()?;
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_choice(self) -> Result<ChoiceDecoder<B>, Error> {
+    pub fn decode_choice(self) -> Result<Choice<B>, Error> {
         self.into_typed()?.decode_choice()
     }
 
