@@ -1,12 +1,10 @@
 use std::io;
 use std::mem;
 use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-use std::sync::Arc;
 
 /// Event file descriptor.
-#[derive(Clone)]
 pub struct EventFd {
-    fd: Arc<OwnedFd>,
+    fd: OwnedFd,
 }
 
 impl EventFd {
@@ -21,7 +19,7 @@ impl EventFd {
             }
 
             Ok(Self {
-                fd: Arc::new(OwnedFd::from_raw_fd(fd)),
+                fd: OwnedFd::from_raw_fd(fd),
             })
         }
     }

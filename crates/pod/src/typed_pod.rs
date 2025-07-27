@@ -5,7 +5,7 @@ use crate::bstr::BStr;
 use crate::de::{ArrayDecoder, ChoiceDecoder, ObjectDecoder, SequenceDecoder, StructDecoder};
 use crate::error::ErrorKind;
 use crate::{
-    Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pointer, Reader, Rectangle, Type,
+    Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pod, Pointer, Reader, Rectangle, Type,
     Visitor, WORD_SIZE,
 };
 
@@ -446,6 +446,40 @@ where
             Type::CHOICE => ChoiceDecoder::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::CHOICE,
+                actual: self.ty,
+            })),
+        }
+    }
+
+    /// Decode a struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, TypedPod};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_struct(|st| {
+    ///     st.field()?.encode(1i32)?;
+    ///     st.field()?.encode(2i32)?;
+    ///     st.field()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let mut st = pod.as_ref().into_typed()?.decode_struct()?;
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_pod(self) -> Result<Pod<B>, Error> {
+        match self.ty {
+            Type::POD => Ok(Pod::new(self.buf)),
+            _ => Err(Error::new(ErrorKind::Expected {
+                expected: Type::POD,
                 actual: self.ty,
             })),
         }

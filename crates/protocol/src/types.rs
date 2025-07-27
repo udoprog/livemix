@@ -2,17 +2,16 @@
 
 use core::fmt;
 
-use pod::Pod;
 use pod::utils::BytesInhabited;
 
 // SAFETY: The header is both word-aligned and word-sized.
 unsafe impl BytesInhabited for Header {}
 
 #[repr(C, align(8))]
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub struct Header {
     id: u32,
-    size_with_opcode: u32,
+    size_with_op: u32,
     seq: u32,
     n_fds: u32,
 }
@@ -20,16 +19,16 @@ pub struct Header {
 impl Header {
     /// Construct a new header.
     #[inline]
-    pub(crate) fn new(id: u32, op_code: u8, size: u32, seq: u32, n_fds: u32) -> Option<Self> {
+    pub(crate) fn new(id: u32, op: u8, size: u32, seq: u32, n_fds: u32) -> Option<Self> {
         if size > 0xffffff {
             return None;
         }
 
-        let size_with_opcode = ((op_code as u32) << 24) | (size & 0xffffff);
+        let size_with_op = ((op as u32) << 24) | (size & 0xffffff);
 
         Some(Self {
             id,
-            size_with_opcode,
+            size_with_op,
             seq,
             n_fds,
         })
@@ -43,14 +42,14 @@ impl Header {
 
     /// Get the opcode of the message.
     #[inline]
-    pub fn op_code(&self) -> u32 {
-        self.size_with_opcode >> 24
+    pub fn op(&self) -> u8 {
+        (self.size_with_op >> 24) as u8
     }
 
     /// Get the size of the message.
     #[inline]
     pub fn size(&self) -> u32 {
-        self.size_with_opcode & 0xffffff
+        self.size_with_op & 0xffffff
     }
 
     /// Get the number of file descriptors.
@@ -66,19 +65,9 @@ impl fmt::Debug for Header {
         f.debug_struct("Header")
             .field("id", &self.id)
             .field("size", &self.size())
-            .field("op_code", &self.op_code())
+            .field("op", &self.op())
             .field("seq", &self.seq)
             .field("n_fds", &self.n_fds)
             .finish()
     }
-}
-
-/// A read frame with a prepared pod for reading.
-#[derive(Debug)]
-#[non_exhaustive]
-pub struct Frame<'recv> {
-    /// The header of the frame.
-    pub header: Header,
-    /// The contents of the frame.
-    pub pod: Pod<&'recv [u64]>,
 }

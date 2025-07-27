@@ -42,6 +42,29 @@ where
     /// Clone the reader.
     fn clone_reader(&self) -> Self::Clone<'_>;
 
+    /// Returns the size of the remaining buffer in bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Reader};
+    ///
+    /// let mut array = Array::from_array([1u32, 2, 3]);
+    /// assert_eq!(array.remaining(), 3);
+    /// assert_eq!(array.remaining_bytes(), 12);
+    ///
+    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
+    /// assert_eq!(array.remaining(), 2);
+    /// assert_eq!(array.remaining_bytes(), 8);
+    /// assert_eq!(array.as_slice(), &[2, 3]);
+    ///
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(array.remaining(), 0);
+    /// assert_eq!(array.remaining_bytes(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    fn remaining_bytes(&self) -> usize;
+
     /// Skip the given number of bytes.
     fn skip(&mut self, size: u32) -> Result<(), Error>;
 
@@ -59,6 +82,39 @@ where
     where
         T: BytesInhabited,
         V: Visitor<'de, [u8]>;
+
+    /// Returns the bytes of the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Writer};
+    ///
+    /// let mut buf = Array::<u64>::new();
+    /// assert_eq!(buf.as_bytes().len(), 0);
+    ///
+    /// buf.write(42u64)?;
+    /// let expected = 42u64.to_ne_bytes();
+    /// assert_eq!(buf.as_bytes(), &expected[..]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    fn as_bytes(&self) -> &[u8];
+
+    /// Returns the slice of remaining data to be read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Writer};
+    ///
+    /// let mut buf = Array::<u64>::new();
+    /// assert_eq!(buf.as_slice().len(), 0);
+    ///
+    /// buf.write(42u64)?;
+    /// assert_eq!(buf.as_slice(), &[42]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    fn as_slice(&self) -> &[T];
 
     /// Read an array of words.
     #[inline]
@@ -121,6 +177,11 @@ where
     }
 
     #[inline]
+    fn remaining_bytes(&self) -> usize {
+        (**self).remaining_bytes()
+    }
+
+    #[inline]
     fn skip(&mut self, size: u32) -> Result<(), Error> {
         (**self).skip(size)
     }
@@ -148,6 +209,16 @@ where
     {
         (**self).read_bytes(len, visitor)
     }
+
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        (**self).as_bytes()
+    }
+
+    #[inline]
+    fn as_slice(&self) -> &[T] {
+        (**self).as_slice()
+    }
 }
 
 impl<'de, T> Reader<'de, T> for &'de [T]
@@ -172,6 +243,11 @@ where
     #[inline]
     fn clone_reader(&self) -> Self::Clone<'_> {
         *self
+    }
+
+    #[inline]
+    fn remaining_bytes(&self) -> usize {
+        self.len() * mem::size_of::<T>()
     }
 
     #[inline]
@@ -259,5 +335,19 @@ where
         let ok = visitor.visit_borrowed(value)?;
         *self = tail;
         Ok(ok)
+    }
+
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        // SAFETY: The slice is guaranteed to be valid since it was created from
+        // a slice of words.
+        unsafe {
+            slice::from_raw_parts(self.as_ptr().cast::<u8>(), self.len() * mem::size_of::<T>())
+        }
+    }
+
+    #[inline]
+    fn as_slice(&self) -> &[T] {
+        self
     }
 }

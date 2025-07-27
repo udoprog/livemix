@@ -98,5 +98,7 @@ declare! {
         pub const FD = 18;
         #[name = "Choice", size = None]
         pub const CHOICE = 19;
+        #[name = "Pod", size = None]
+        pub const POD = 20;
     }
 }

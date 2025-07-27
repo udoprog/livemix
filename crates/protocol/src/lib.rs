@@ -28,3 +28,9 @@ pub use self::poll::Poll;
 
 mod event_fd;
 pub use self::event_fd::EventFd;
+
+pub mod consts;
+pub mod op;
+
+#[cfg(feature = "alloc")]
+pub mod ids;

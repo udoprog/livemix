@@ -7,7 +7,6 @@ use alloc::alloc;
 use pod::Pod;
 use pod::utils::{Align, AlignableWith, UninitAlign};
 
-use crate::types::Frame;
 use crate::types::Header;
 
 pub(crate) const ALLOC: usize = 1024;
@@ -42,13 +41,13 @@ where
 
     /// Get the remaining readable capacity of the buffer
     #[inline]
-    pub(crate) fn remaining(&self) -> usize {
+    pub fn remaining(&self) -> usize {
         self.write - self.read
     }
 
     /// Get the remaining mutable capacity of the buffer
     #[inline]
-    pub(crate) fn remaining_mut(&self) -> usize {
+    pub fn remaining_mut(&self) -> usize {
         self.cap - self.write
     }
 
@@ -111,7 +110,7 @@ where
                 .cast::<A>()
                 .copy_from_nonoverlapping(words.as_ptr(), words.len());
 
-            self.set_written(n);
+            self.advance_written(n);
         }
     }
 
@@ -124,7 +123,7 @@ where
         let value = Align(value);
 
         debug_assert!(
-            self.write % mem::size_of::<T>() == 0,
+            self.write % mem::size_of::<A>() == 0,
             "Write position in buffer is not aligned for T"
         );
 
@@ -139,13 +138,13 @@ where
                 .cast::<A>()
                 .copy_from_nonoverlapping(value.as_ptr::<A>(), value.size::<A>());
 
-            self.set_written(mem::size_of::<T>());
+            self.advance_written(mem::size_of::<T>());
         }
     }
 
     /// Read `T` out of the buffer.
     #[inline]
-    pub(crate) fn read<T>(&mut self) -> Option<T>
+    pub fn read<T>(&mut self) -> Option<T>
     where
         T: AlignableWith<A>,
     {
@@ -164,7 +163,7 @@ where
                 .cast::<A>()
                 .copy_to_nonoverlapping(value.as_mut_ptr::<A>().cast::<A>(), value.size::<A>());
 
-            self.set_read(mem::size_of::<T>());
+            self.advance_read(mem::size_of::<T>());
             Some(value.assume_init())
         }
     }
@@ -184,7 +183,7 @@ where
                 self.data.as_ptr().cast::<u8>().add(self.read).cast::<A>(),
                 n,
             );
-            self.set_read(size);
+            self.advance_read(size);
             Some(value)
         }
     }
@@ -200,7 +199,7 @@ where
     /// `self.read..self.read + n` is a valid memory region in the buffer that
     /// has previously been written to.
     #[inline]
-    pub(crate) unsafe fn set_read(&mut self, n: usize) {
+    pub(crate) unsafe fn advance_read(&mut self, n: usize) {
         self.read = self.read + n;
 
         if self.read == self.write {
@@ -227,7 +226,7 @@ where
     /// `self.write..self.write + n` is a valid memory region in the buffer that
     /// has previously been written to.
     #[inline]
-    pub(crate) unsafe fn set_written(&mut self, n: usize) {
+    pub(crate) unsafe fn advance_written(&mut self, n: usize) {
         self.write = self.write + n;
 
         debug_assert!(
@@ -285,19 +284,10 @@ where
 
 impl Buf {
     /// Read a frame from the current buffer.
-    pub fn frame(&mut self, header: Header) -> Option<Frame<'_>> {
+    pub fn frame(&mut self, header: &Header) -> Option<Pod<&[u64]>> {
         let size = header.size() as usize;
-
-        if size > self.remaining() {
-            return None;
-        }
-
-        let words = self.read_words(size)?;
-
-        Some(Frame {
-            header,
-            pod: Pod::new(words),
-        })
+        debug_assert!(size % Self::WORD_SIZE == 0, "Size of frame is not aligned");
+        Some(Pod::new(self.read_words(size)?))
     }
 }
 

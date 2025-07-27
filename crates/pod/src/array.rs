@@ -70,6 +70,16 @@ impl<T, const N: usize> Array<T, N> {
     }
 
     /// Push a value into the array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Array;
+    ///
+    /// let mut buf = Array::<String>::new();
+    /// buf.push("Hello".to_string())?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     pub fn push(&mut self, value: T) -> Result<(), Error> {
         if self.write >= N {
             return Err(Error::new(ErrorKind::BufferOverflow));
@@ -86,6 +96,43 @@ impl<T, const N: usize> Array<T, N> {
 
         self.write += 1;
         Ok(())
+    }
+
+    /// Pop the next value to read from the array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Array;
+    ///
+    /// let mut buf = Array::<String>::new();
+    /// buf.push("Hello".to_string())?;
+    /// buf.push("World".to_string())?;
+    ///
+    /// assert_eq!(buf.pop_front(), Some("Hello".to_string()));
+    /// assert_eq!(buf.pop_front(), Some("World".to_string()));
+    /// assert!(buf.is_empty());
+    /// assert_eq!(buf.pop_front(), None);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn pop_front(&mut self) -> Option<T> {
+        if self.read == self.write {
+            return None;
+        }
+
+        // SAFETY: The buffer is initialized in the `self.read..self.write`
+        // range.
+        unsafe {
+            let value = self.data.as_ptr().add(self.read).cast::<T>().read();
+            self.read += 1;
+
+            if self.read == self.write {
+                self.read = 0;
+                self.write = 0;
+            }
+
+            Some(value)
+        }
     }
 }
 
@@ -168,29 +215,21 @@ impl<T, const N: usize> Array<T, N> {
         }
     }
 
-    /// Returns the size of the remaining buffer in bytes.
+    /// Returns if the array is empty.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pod::{Array, Reader};
+    /// use pod::Array;
     ///
-    /// let mut array = Array::from_array([1u32, 2, 3]);
-    /// assert_eq!(array.remaining(), 3);
-    /// assert_eq!(array.len(), 12);
-    ///
-    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
-    /// assert_eq!(array.remaining(), 2);
-    /// assert_eq!(array.len(), 8);
-    /// assert_eq!(array.as_slice(), &[2, 3]);
-    ///
-    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
-    /// assert_eq!(array.remaining(), 0);
-    /// assert_eq!(array.len(), 0);
+    /// let mut buf = Array::<u64>::new();
+    /// assert!(buf.is_empty());
+    /// buf.push(42)?;
+    /// assert!(!buf.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn len(&self) -> usize {
-        self.remaining() * mem::size_of::<T>() as usize
+    pub const fn is_empty(&self) -> bool {
+        self.read == self.write
     }
 
     /// Returns the number of words that can be read.
@@ -205,7 +244,7 @@ impl<T, const N: usize> Array<T, N> {
     ///
     /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
     /// assert_eq!(array.remaining(), 2);
-    /// assert_eq!(array.len(), 8);
+    /// assert_eq!(array.remaining_bytes(), 8);
     /// assert_eq!(array.as_slice(), &[2, 3]);
     ///
     /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
@@ -214,6 +253,31 @@ impl<T, const N: usize> Array<T, N> {
     /// ```
     pub const fn remaining(&self) -> usize {
         self.write - self.read
+    }
+
+    /// Returns the size of the remaining buffer in bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Reader};
+    ///
+    /// let mut array = Array::from_array([1u32, 2, 3]);
+    /// assert_eq!(array.remaining(), 3);
+    /// assert_eq!(array.remaining_bytes(), 12);
+    ///
+    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
+    /// assert_eq!(array.remaining(), 2);
+    /// assert_eq!(array.remaining_bytes(), 8);
+    /// assert_eq!(array.as_slice(), &[2, 3]);
+    ///
+    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(array.remaining(), 0);
+    /// assert_eq!(array.remaining_bytes(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn remaining_bytes(&self) -> usize {
+        self.remaining().wrapping_mul(mem::size_of::<T>())
     }
 
     /// Returns the number of words that can be written.
@@ -314,6 +378,32 @@ impl<T, const N: usize> Array<T, N> {
         self.read = 0;
     }
 
+    /// Returns the bytes of the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Array, Writer};
+    ///
+    /// let mut buf = Array::<u64>::new();
+    /// assert_eq!(buf.as_bytes().len(), 0);
+    ///
+    /// buf.write(42u64)?;
+    /// let expected = 42u64.to_ne_bytes();
+    /// assert_eq!(buf.as_bytes(), &expected[..]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
+        unsafe {
+            slice::from_raw_parts(
+                self.data.as_ptr().add(self.read).cast(),
+                self.remaining_bytes(),
+            )
+        }
+    }
+
     /// Returns the slice of remaining data to be read.
     ///
     /// # Examples
@@ -360,27 +450,6 @@ impl<T, const N: usize> Array<T, N> {
                 self.remaining(),
             )
         }
-    }
-
-    /// Returns the bytes of the buffer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Array, Writer};
-    ///
-    /// let mut buf = Array::<u64>::new();
-    /// assert_eq!(buf.as_bytes().len(), 0);
-    ///
-    /// buf.write(42u64)?;
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.as_bytes(), &expected[..]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
-        unsafe { slice::from_raw_parts(self.data.as_ptr().add(self.read).cast(), self.len()) }
     }
 }
 
@@ -687,6 +756,11 @@ where
     }
 
     #[inline]
+    fn remaining_bytes(&self) -> usize {
+        Array::remaining_bytes(self)
+    }
+
+    #[inline]
     fn skip(&mut self, size: u32) -> Result<(), Error> {
         let size = size.div_ceil(mem::size_of::<T>() as u32);
 
@@ -789,5 +863,15 @@ where
 
         self.read = read;
         Ok(ok)
+    }
+
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        Array::as_bytes(self)
+    }
+
+    #[inline]
+    fn as_slice(&self) -> &[T] {
+        Array::as_slice(self)
     }
 }

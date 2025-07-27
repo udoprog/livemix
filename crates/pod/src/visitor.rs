@@ -27,3 +27,16 @@ where
         Err(Error::new(ErrorKind::NotSupportedRef))
     }
 }
+
+impl<F, T, U> Visitor<'_, T> for F
+where
+    F: FnOnce(&T) -> U,
+    T: ?Sized,
+{
+    type Ok = U;
+
+    #[inline]
+    fn visit_ref(self, bytes: &T) -> Result<Self::Ok, Error> {
+        Ok(self(bytes))
+    }
+}

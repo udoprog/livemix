@@ -1,25 +1,32 @@
+use core::mem;
+use core::mem::MaybeUninit;
+use core::ptr;
 use std::env;
 use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::os::fd::AsRawFd;
+use std::os::fd::RawFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
 use pod::Pod;
+use pod::Reader;
 
 use crate::Error;
 use crate::buf::Buf;
+use crate::consts;
 use crate::error::ErrorKind;
+use crate::op;
+use crate::poll::ChangeInterest;
 use crate::poll::Interest;
-use crate::poll::Polled;
 use crate::types::Header;
 
 const ENVIRONS: &[&str] = &["PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR", "USERPROFILE"];
 const SOCKET: &str = "pipewire-0";
 
 const VERSION: i32 = 3;
-const MAX_SEND_SIZE: usize = 16;
+const MAX_SEND_SIZE: usize = 4096;
 
 impl AsRawFd for Connection {
     #[inline]
@@ -31,10 +38,11 @@ impl AsRawFd for Connection {
 /// A connection to a local pipewire server.
 pub struct Connection {
     socket: UnixStream,
-    seq: u32,
-    send: Buf,
-    header: Option<Header>,
+    message_sequence: u32,
+    sync_sequence: u32,
+    outgoing: Buf,
     interest: Interest,
+    modified: ChangeInterest,
 }
 
 impl Connection {
@@ -67,10 +75,11 @@ impl Connection {
 
         Ok(Self {
             socket,
-            seq: 0,
-            send: Buf::new(),
-            header: None,
+            message_sequence: 0,
+            sync_sequence: 1,
+            outgoing: Buf::new(),
             interest: Interest::READ,
+            modified: ChangeInterest::Unchanged,
         })
     }
 
@@ -89,43 +98,134 @@ impl Connection {
         self.interest
     }
 
-    /// Send core hello.
-    pub fn hello(&mut self) -> Result<Polled, Error> {
+    /// Return modified interest, if any.
+    #[inline]
+    pub fn modified(&mut self) -> ChangeInterest {
+        self.modified.take()
+    }
+
+    /// Send client hello.
+    pub fn core_hello(&mut self) -> Result<(), Error> {
         let mut pod = Pod::array();
         pod.as_mut()
             .encode_struct(|st| st.field()?.encode(VERSION))?;
 
-        let buf = pod.as_buf();
+        self.request(consts::CORE_ID, op::CORE_HELLO, pod)?;
+        Ok(())
+    }
 
-        let Ok(size) = u32::try_from(buf.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
+    /// Get registry.
+    pub fn core_get_registry(&mut self, new_id: i32) -> Result<(), Error> {
+        let mut pod = Pod::array();
 
-        let Some(header) = Header::new(0, 1, size, self.seq, 0) else {
-            return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
-        };
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(consts::REGISTRY_VERSION as i32)?;
+            st.field()?.encode(new_id)?;
+            Ok(())
+        })?;
 
-        self.send.write(header);
-        self.send.extend_from_words(buf.as_slice());
-        self.seq = self.seq.wrapping_add(1);
-        Ok(self.interest.set(Interest::WRITE))
+        self.request(consts::CORE_ID, op::CORE_GET_REGISTRY, pod)?;
+        Ok(())
+    }
+
+    /// Synchronize.
+    pub fn core_sync(&mut self, id: i32) -> Result<i32, Error> {
+        let sync_sequence = self.sync_sequence.cast_signed();
+        self.sync_sequence = self.sync_sequence.wrapping_add(1);
+
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(id)?;
+            st.field()?.encode(sync_sequence)?;
+            Ok(())
+        })?;
+
+        self.request(consts::CORE_ID, op::CORE_SYNC, pod)?;
+        Ok(sync_sequence)
+    }
+
+    /// Send a pong response to a ping.
+    pub fn core_pong(&mut self, id: i32, seq: i32) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(id)?;
+            st.field()?.encode(seq)?;
+            Ok(())
+        })?;
+
+        self.request(consts::CORE_ID, op::CORE_PONG, pod)?;
+        Ok(())
+    }
+
+    /// Create an object.
+    pub fn core_create_object(
+        &mut self,
+        factory_name: &str,
+        ty: &str,
+        version: i32,
+        new_id: i32,
+    ) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode_unsized(factory_name)?;
+            st.field()?.encode_unsized(ty)?;
+            st.field()?.encode(version)?;
+
+            st.field()?.encode_struct(|props| {
+                props.field()?.encode(1)?;
+                props.field()?.encode("node.name")?;
+                props.field()?.encode("livemix")?;
+                Ok(())
+            })?;
+
+            st.field()?.encode(new_id)?;
+            Ok(())
+        })?;
+
+        self.request(consts::CORE_ID, op::CORE_CREATE_OBJECT, pod)?;
+        Ok(())
+    }
+
+    /// Update client properties.
+    pub fn client_update_properties(&mut self) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode_struct(|st| {
+                st.field()?.encode(2)?;
+
+                st.field()?.encode("application.name")?;
+                st.field()?.encode("livemix")?;
+
+                st.field()?.encode("node.name")?;
+                st.field()?.encode("livemix")?;
+                Ok(())
+            })
+        })?;
+
+        self.request(consts::CLIENT_ID, op::CLIENT_UPDATE_PROPERTIES, pod)?;
+        Ok(())
     }
 
     /// Send data to the server.
     ///
     /// If this method returns `true`, the interest for the connection has been
     /// changed and should be updated with the main loop.
-    pub fn send(&mut self) -> Result<Polled, Error> {
+    pub fn send(&mut self) -> Result<(), Error> {
         // Keep track of how much we've sent to limit the amount of time we
         // spend sending.
         let mut sent = MAX_SEND_SIZE;
 
         loop {
-            if self.send.is_empty() {
-                return Ok(self.interest.unset(Interest::WRITE));
+            if self.outgoing.is_empty() {
+                self.modified |= self.interest.unset(Interest::WRITE);
+                return Ok(());
             }
 
-            let bytes = self.send.as_bytes();
+            let bytes = self.outgoing.as_bytes();
             let bytes = bytes.get(..bytes.len().min(sent)).unwrap_or_default();
 
             match self.socket.write(bytes) {
@@ -141,17 +241,18 @@ impl Connection {
                     // SAFETY: We trust the returned value `n` as the number of
                     // bytes read constained by the number of bytes available.
                     unsafe {
-                        self.send.set_read(n);
+                        self.outgoing.advance_read(n);
                     }
 
+                    tracing::trace!(bytes = n, remaining = self.outgoing.remaining(), "sent");
                     sent -= n;
 
                     if sent == 0 {
-                        return Ok(Polled::Unchanged);
+                        return Ok(());
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(Polled::Unchanged);
+                    return Ok(());
                 }
                 Err(e) => {
                     return Err(Error::new(ErrorKind::SendFailed(e)));
@@ -161,12 +262,11 @@ impl Connection {
     }
 
     /// Receive data from the server.
-    pub fn recv(&mut self, recv: &mut Buf) -> Result<Option<Header>, Error> {
+    pub fn recv(&mut self, recv: &mut Buf) -> Result<(), Error> {
         loop {
             // SAFETY: This is the only point which writes to the buffer, all
             // subsequent reads are aligned which only depends on the read cursor.
             let bytes = unsafe { recv.as_bytes_mut() };
-
             let result = self.socket.read(bytes);
 
             match result {
@@ -182,31 +282,147 @@ impl Connection {
                     // SAFETY: We trust the returned value `n` as the number of bytes
                     // read and therefore written into the buffer.
                     unsafe {
-                        recv.set_written(n);
+                        recv.advance_written(n);
                     }
+
+                    tracing::trace!(bytes = n, remaining = recv.remaining(), "received");
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(None);
+                    return Ok(());
                 }
                 Err(e) => {
                     return Err(Error::new(ErrorKind::ReceiveFailed(e)));
                 }
             };
-
-            let Some(header) = &self.header else {
-                self.header = recv.read::<Header>();
-                continue;
-            };
-
-            let size = header.size() as usize;
-
-            if size > recv.remaining() {
-                continue;
-            };
-
-            let header = *header;
-            self.header = None;
-            return Ok(Some(header));
         }
+    }
+
+    /// Receive file descriptors from the server.
+    pub fn recv_with_fds(&mut self, recv: &mut Buf, fds: &mut [RawFd]) -> Result<usize, Error> {
+        const {
+            assert!(mem::align_of::<MaybeUninit<[u64; 16]>>() >= mem::align_of::<libc::cmsghdr>());
+        }
+
+        let fd_len = mem::size_of::<RawFd>() * fds.len();
+        let size = unsafe { libc::CMSG_SPACE(fd_len as u32) as usize };
+
+        let mut buf = MaybeUninit::<[u64; 16]>::uninit();
+        assert!(mem::size_of_val(&buf) >= size);
+
+        let mut iov = libc::iovec {
+            iov_base: ptr::null_mut(),
+            iov_len: 0,
+        };
+
+        let mut msghdr = unsafe { mem::zeroed::<libc::msghdr>() };
+
+        loop {
+            unsafe {
+                // SAFETY: This is the only point which writes to the buffer, all
+                // subsequent reads are aligned which only depends on the read cursor.
+                let bytes = recv.as_bytes_mut();
+
+                iov.iov_base = bytes.as_mut_ptr().cast();
+                iov.iov_len = bytes.len();
+
+                msghdr.msg_name = ptr::null_mut();
+                msghdr.msg_namelen = 0;
+                msghdr.msg_iov = &mut iov;
+                msghdr.msg_iovlen = 1;
+                msghdr.msg_control = &mut buf as *mut _ as *mut libc::c_void;
+                msghdr.msg_controllen = size;
+
+                let n = libc::recvmsg(self.socket.as_raw_fd(), &mut msghdr as *mut _, 0);
+
+                if n < 0 {
+                    match io::Error::last_os_error() {
+                        e if e.kind() == io::ErrorKind::WouldBlock => {
+                            return Ok(0);
+                        }
+                        e => {
+                            return Err(Error::new(ErrorKind::ReceiveFailed(e)));
+                        }
+                    }
+                }
+
+                let n = n as usize;
+
+                debug_assert!(
+                    n <= bytes.len(),
+                    "Socket read returned more bytes than available in the buffer"
+                );
+
+                // SAFETY: We trust the returned value `n` as the number of bytes
+                // read and therefore written into the buffer.
+                recv.advance_written(n);
+
+                tracing::trace!(bytes = n, remaining = recv.remaining(), "received");
+
+                // Walk the ancillary data buffer and copy the raw descriptors
+                // from it into the output buffer.
+                let mut n_fds = 0usize;
+                let mut cur = libc::CMSG_FIRSTHDR(&mut msghdr as *mut _);
+
+                while let Some(c) = cur.as_ref() {
+                    if c.cmsg_level == libc::SOL_SOCKET && c.cmsg_type == libc::SCM_RIGHTS {
+                        let data_ptr = libc::CMSG_DATA(c);
+                        let data_offset = data_ptr.offset_from((c as *const libc::cmsghdr).cast());
+
+                        debug_assert!(data_offset >= 0);
+
+                        let data_byte_count = c.cmsg_len as usize - data_offset as usize;
+
+                        debug_assert!(c.cmsg_len as isize >= data_offset);
+                        debug_assert!(data_byte_count % mem::size_of::<RawFd>() == 0);
+
+                        let rawfd_count = (data_byte_count / mem::size_of::<RawFd>()) as usize;
+                        let fd_ptr = data_ptr.cast::<RawFd>();
+
+                        for i in 0..rawfd_count {
+                            fds[n_fds] = ptr::read_unaligned(fd_ptr.add(i));
+                            n_fds += 1;
+                        }
+                    }
+
+                    cur = libc::CMSG_NXTHDR(&mut msghdr as *mut _, cur);
+                }
+
+                if n_fds > 0 {
+                    return Ok(n_fds);
+                }
+
+                if n == 0 {
+                    return Err(Error::new(ErrorKind::RemoteClosed));
+                }
+            }
+        }
+    }
+
+    /// Serialize an outgoing message.
+    fn request<'de>(
+        &mut self,
+        id: u32,
+        op: u8,
+        pod: Pod<impl Reader<'de, u64>>,
+    ) -> Result<(), Error> {
+        let buf = pod.as_buf();
+
+        let Ok(size) = u32::try_from(buf.remaining_bytes()) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let Some(header) = Header::new(id, op, size, self.message_sequence, 0) else {
+            return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
+        };
+
+        let remaining_before = self.outgoing.remaining();
+
+        self.outgoing.write(header);
+        self.outgoing.extend_from_words(buf.as_slice());
+        self.message_sequence = self.message_sequence.wrapping_add(1);
+        self.modified |= self.interest.set(Interest::WRITE);
+
+        tracing::trace!(?header, ?remaining_before, remaining = ?self.outgoing.remaining(), "Sending");
+        Ok(())
     }
 }

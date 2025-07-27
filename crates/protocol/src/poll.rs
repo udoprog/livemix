@@ -1,6 +1,8 @@
 mod linux;
 pub use self::linux::Poll;
 
+use core::mem;
+use core::ops::BitOrAssign;
 use std::fmt;
 
 use libc::{POLLERR, POLLHUP, POLLIN, POLLOUT};
@@ -19,11 +21,28 @@ impl Token {
 
 /// An update to an interest.
 #[must_use = "Not applying an interest update might lead to the process being stalled"]
-pub enum Polled {
+pub enum ChangeInterest {
     /// The interest has changed.
     Changed(Interest),
     /// The interest has not changed.
     Unchanged,
+}
+
+impl ChangeInterest {
+    /// Take polled outcome and replace with unchanged.
+    #[inline]
+    pub fn take(&mut self) -> ChangeInterest {
+        mem::replace(self, ChangeInterest::Unchanged)
+    }
+}
+
+impl BitOrAssign for ChangeInterest {
+    #[inline]
+    fn bitor_assign(&mut self, rhs: Self) {
+        if matches!((&*self, &rhs), (_, ChangeInterest::Changed(..))) {
+            *self = rhs;
+        }
+    }
 }
 
 /// An output poll event.
@@ -57,26 +76,26 @@ impl Interest {
     ///
     /// Returns `true` if the interest was modified.
     #[inline]
-    pub fn set(&mut self, interest: Interest) -> Polled {
+    pub fn set(&mut self, interest: Interest) -> ChangeInterest {
         if self.0 & interest.0 != 0 {
-            return Polled::Unchanged;
+            return ChangeInterest::Unchanged;
         }
 
         self.0 |= interest.0;
-        Polled::Changed(*self)
+        ChangeInterest::Changed(*self)
     }
 
     /// Unset the specified interest.
     ///
     /// Returns `true` if the interest was modified.
     #[inline]
-    pub fn unset(&mut self, interest: Interest) -> Polled {
+    pub fn unset(&mut self, interest: Interest) -> ChangeInterest {
         if self.0 & interest.0 == 0 {
-            return Polled::Unchanged;
+            return ChangeInterest::Unchanged;
         }
 
         self.0 &= !interest.0;
-        Polled::Changed(*self)
+        ChangeInterest::Changed(*self)
     }
 
     /// Make a ready set with read interest.

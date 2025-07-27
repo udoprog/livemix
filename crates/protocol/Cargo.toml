@@ -9,7 +9,7 @@ std = ["alloc", "pod/std", "libc/std"]
 alloc = ["pod/alloc"]
 
 [dependencies]
-tracing = { version = "0.1.41", default-features = false }
+tracing = { version = "0.1.41", default-features = false, features = ["attributes"] }
 pod = { path = "../pod", default-features = false}
 
 bittle = "0.6.0"
