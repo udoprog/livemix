@@ -34,3 +34,6 @@ pub mod op;
 
 #[cfg(feature = "alloc")]
 pub mod ids;
+
+pub mod flags;
+pub mod id;

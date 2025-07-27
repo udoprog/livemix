@@ -12,47 +12,13 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
 use crate::{Bitmap, DecodeUnsized, OwnedBitmap, Visitor};
-use crate::{Error, Fd, Fraction, Id, IntoId, Pointer, Reader, Rectangle, Type, utils::WordBytes};
-
-pub(crate) mod sealed {
-    #[cfg(feature = "alloc")]
-    use alloc::ffi::CString;
-    #[cfg(feature = "alloc")]
-    use alloc::string::String;
-    #[cfg(feature = "alloc")]
-    use alloc::vec::Vec;
-
-    #[cfg(feature = "alloc")]
-    use crate::OwnedBitmap;
-    use crate::id::IntoId;
-    use crate::{DecodeUnsized, Fd, Fraction, Id, Pointer, Rectangle};
-
-    pub trait Sealed {}
-    impl Sealed for bool {}
-    impl<I> Sealed for Id<I> where I: IntoId {}
-    impl Sealed for i32 {}
-    impl Sealed for u32 {}
-    impl Sealed for i64 {}
-    impl Sealed for u64 {}
-    impl Sealed for f32 {}
-    impl Sealed for f64 {}
-    impl Sealed for Rectangle {}
-    impl Sealed for Fraction {}
-    #[cfg(feature = "alloc")]
-    impl Sealed for CString {}
-    #[cfg(feature = "alloc")]
-    impl Sealed for String {}
-    #[cfg(feature = "alloc")]
-    impl Sealed for Vec<u8> {}
-    #[cfg(feature = "alloc")]
-    impl Sealed for OwnedBitmap {}
-    impl Sealed for Pointer {}
-    impl Sealed for Fd {}
-    impl<'de, E> Sealed for &E where E: ?Sized + DecodeUnsized<'de> {}
-}
+use crate::{Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type, utils::WordBytes};
 
 /// A trait for types that can be decoded.
-pub trait Decode<'de>: Sized + self::sealed::Sealed {
+pub trait Decode<'de>
+where
+    Self: Sized,
+{
     /// The type of the decoded value.
     #[doc(hidden)]
     const TYPE: Type;
@@ -84,7 +50,7 @@ impl<'de> Decode<'de> for bool {
     }
 }
 
-/// [`Decode`] implementation for an [`IntoId`] type.
+/// [`Decode`] implementation for an [`RawId`] type.
 ///
 /// # Examples
 ///
@@ -98,7 +64,7 @@ impl<'de> Decode<'de> for bool {
 /// ```
 impl<'de, I> Decode<'de> for Id<I>
 where
-    I: IntoId,
+    I: RawId,
 {
     const TYPE: Type = Type::ID;
 

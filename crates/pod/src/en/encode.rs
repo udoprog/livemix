@@ -1,29 +1,11 @@
 use crate::utils::WordBytes;
-use crate::{EncodeUnsized, Error, Fd, Fraction, Id, IntoId, Pointer, Rectangle, Type, Writer};
-
-pub(crate) mod sealed {
-    use crate::id::IntoId;
-    use crate::{EncodeUnsized, Fd, Fraction, Id, Pointer, Rectangle};
-
-    pub trait Sealed {}
-    impl Sealed for bool {}
-    impl<I> Sealed for Id<I> where I: IntoId {}
-    impl Sealed for i32 {}
-    impl Sealed for u32 {}
-    impl Sealed for i64 {}
-    impl Sealed for u64 {}
-    impl Sealed for f32 {}
-    impl Sealed for f64 {}
-    impl Sealed for Rectangle {}
-    impl Sealed for Fraction {}
-    impl<const N: usize> Sealed for [u8; N] {}
-    impl Sealed for Pointer {}
-    impl Sealed for Fd {}
-    impl<E> Sealed for &E where E: ?Sized + EncodeUnsized {}
-}
+use crate::{EncodeUnsized, Error, Fd, Fraction, Id, Pointer, RawId, Rectangle, Type, Writer};
 
 /// A trait for types that can be encoded.
-pub trait Encode: Sized + self::sealed::Sealed {
+pub trait Encode
+where
+    Self: Sized,
+{
     /// The type of the encoded value.
     const TYPE: Type;
 
@@ -87,7 +69,7 @@ impl Encode for bool {
 /// ```
 impl<I> Encode for Id<I>
 where
-    I: IntoId,
+    I: RawId,
 {
     const TYPE: Type = Type::ID;
 

@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::os::fd::OwnedFd;
 
 use anyhow::bail;
-use pod::id;
 use pod::{Fd, Id, Pod};
 use protocol::consts;
+use protocol::id;
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::types::Header;
@@ -168,7 +168,7 @@ impl ConnectionState {
                             // c.client_node_get_node(client.id, 3, new_id)?;
                             // c.client_node_add_port(client.id, consts::Direction::Output, client.port_id)?;
                             c.client_node_set_active(client.id, true)?;
-                            // c.client_node_update(client.id)?;
+                            c.client_node_update(client.id)?;
                         }
                     }
                 }

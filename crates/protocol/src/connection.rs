@@ -15,6 +15,8 @@ use pod::Reader;
 
 use crate::consts;
 use crate::error::ErrorKind;
+use crate::flags;
+use crate::id;
 use crate::op;
 use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
@@ -247,10 +249,37 @@ impl Connection {
     pub fn client_node_update(&mut self, id: u32) -> Result<(), Error> {
         let mut pod = Pod::array();
 
+        let change_mask = flags::ClientNodeUpdate::INFO | flags::ClientNodeUpdate::PARAMS;
+
+        let max_input_ports = 2u32;
+        let max_output_ports = 2u32;
+
+        let inner_change_mask = flags::NodeChangeMask::FLAGS
+            | flags::NodeChangeMask::PROPS
+            | flags::NodeChangeMask::PARAMS;
+
+        let node_flags = flags::Node::IN_DYNAMIC_PORTS | flags::Node::OUT_DYNAMIC_PORTS;
+
         pod.as_mut().encode_struct(|st| {
-            st.field()?.encode(0i64)?;
-            st.field()?.encode_none()?;
-            st.field()?.encode_none()?;
+            st.field()?.encode(change_mask)?;
+            st.field()?.encode(0u32)?;
+
+            st.field()?.encode_struct(|st| {
+                st.field()?.encode(max_input_ports)?;
+                st.field()?.encode(max_output_ports)?;
+                st.field()?.encode(inner_change_mask)?;
+                st.field()?.encode(node_flags)?;
+
+                st.field()?.encode(1u32)?;
+                st.field()?.encode_unsized("node.name")?;
+                st.field()?.encode_unsized("livemix2")?;
+
+                st.field()?.encode(1u32)?;
+                st.field()?.encode(id::Param::ENUM_FORMAT)?;
+                st.field()?.encode(flags::Param::READ)?;
+
+                Ok(())
+            })?;
             Ok(())
         })?;
 
