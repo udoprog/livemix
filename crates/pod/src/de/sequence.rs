@@ -1,10 +1,11 @@
 use core::fmt;
+use core::mem;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Control, Error, Reader, TypedPod, WORD_SIZE};
+use crate::{AsReader, Control, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
 
 /// A decoder for a sequence.
 pub struct Sequence<B> {
@@ -254,6 +255,79 @@ where
     #[inline]
     pub fn as_ref(&self) -> Sequence<B::Reader<'_>> {
         Sequence::new(self.buf.as_reader(), self.size, self.unit, self.pad)
+    }
+}
+
+/// [`Encode`] implementation for [`Struct`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, TypedPod};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode_sequence(|seq| {
+///     seq.control(1, 2)?.push(1i32)?;
+///     seq.control(1, 2)?.push(2i32)?;
+///     seq.control(1, 2)?.push(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let seq = pod.decode_sequence()?;
+///
+/// let mut pod2 = Pod::array();
+/// pod2.as_mut().push(seq)?;
+///
+/// let seq = pod2.decode_sequence()?;
+///
+/// let mut seq = seq.as_ref();
+/// assert!(!seq.is_empty());
+/// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
+/// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
+/// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+/// assert!(seq.is_empty());
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<B> Encode for Sequence<B>
+where
+    B: AsReader<u64>,
+{
+    const TYPE: Type = Type::SEQUENCE;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        (self
+            .buf
+            .as_reader()
+            .as_slice()
+            .len()
+            .wrapping_mul(mem::size_of::<u64>()) as u32)
+            .wrapping_add(WORD_SIZE)
+    }
+
+    #[inline]
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        let data = self.buf.as_reader();
+        let data = data.as_slice();
+
+        let size = data
+            .len()
+            .wrapping_mul(mem::size_of::<u64>())
+            .wrapping_add(WORD_SIZE as usize);
+
+        let Ok(size) = u32::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([size, Type::SEQUENCE.into_u32(), self.unit, self.pad])?;
+        writer.write_words(data.as_slice())?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        writer.write([self.unit, self.pad])?;
+        writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 

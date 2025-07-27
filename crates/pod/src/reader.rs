@@ -307,7 +307,10 @@ where
         // SAFETY: The slice is guaranteed to be valid since it was created from
         // a slice of words.
         unsafe {
-            slice::from_raw_parts(self.as_ptr().cast::<u8>(), self.len() * mem::size_of::<T>())
+            slice::from_raw_parts(
+                self.as_ptr().cast::<u8>(),
+                self.len().wrapping_mul(mem::size_of::<T>()),
+            )
         }
     }
 

@@ -1,11 +1,11 @@
-use core::fmt;
+use core::{fmt, mem};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, Error, Reader, Type, TypedPod, WORD_SIZE};
+use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
 
 /// A decoder for an array.
 ///
@@ -304,6 +304,88 @@ where
             self.child_type,
             self.remaining,
         )
+    }
+}
+
+/// [`Encode`] implementation for [`Array`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, Type};
+///
+/// let mut pod = Pod::array();
+///
+/// pod.as_mut().push_array(Type::INT, |array| {
+///     array.child()?.push(1i32)?;
+///     array.child()?.push(2i32)?;
+///     array.child()?.push(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let array = pod.decode_array()?;
+/// let mut pod2 = Pod::array();
+/// pod2.as_mut().push(array)?;
+///
+/// let mut array = pod2.decode_array()?;
+///
+/// assert!(!array.is_empty());
+/// assert_eq!(array.len(), 3);
+///
+/// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
+/// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
+/// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
+///
+/// assert!(array.is_empty());
+/// assert_eq!(array.len(), 0);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<B> Encode for Array<B>
+where
+    B: AsReader<u64>,
+{
+    const TYPE: Type = Type::ARRAY;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        (self
+            .buf
+            .as_reader()
+            .as_slice()
+            .len()
+            .wrapping_mul(mem::size_of::<u64>()) as u32)
+            .wrapping_add(WORD_SIZE)
+    }
+
+    #[inline]
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        let data = self.buf.as_reader();
+        let data = data.as_slice();
+
+        let size = data
+            .len()
+            .wrapping_mul(mem::size_of::<u64>())
+            .wrapping_add(WORD_SIZE as usize);
+
+        let Ok(size) = u32::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([
+            size,
+            Type::ARRAY.into_u32(),
+            self.child_size,
+            self.child_type.into_u32(),
+        ])?;
+
+        writer.write_words(data.as_slice())?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        writer.write([self.child_size, self.child_type.into_u32()])?;
+        writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 

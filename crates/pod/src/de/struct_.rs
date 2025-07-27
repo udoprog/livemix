@@ -1,10 +1,11 @@
 use core::fmt;
+use core::mem;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Error, Reader, TypedPod};
+use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a struct.
 pub struct Struct<B> {
@@ -178,6 +179,72 @@ where
     #[inline]
     pub fn as_ref(&self) -> Struct<B::Reader<'_>> {
         Struct::new(self.buf.as_reader(), self.size)
+    }
+}
+
+/// [`Encode`] implementation for [`Struct`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push_struct(|st| {
+///     st.field()?.push(1i32)?;
+///     st.field()?.push(2i32)?;
+///     st.field()?.push(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let st = pod.decode_struct()?;
+///
+/// let mut pod2 = Pod::array();
+/// pod2.as_mut().push(st)?;
+///
+/// let mut st = pod2.decode_struct()?;
+///
+/// assert!(!st.is_empty());
+/// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+/// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+/// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+/// assert!(st.is_empty());
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<B> Encode for Struct<B>
+where
+    B: AsReader<u64>,
+{
+    const TYPE: Type = Type::STRUCT;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        self.buf
+            .as_reader()
+            .as_slice()
+            .len()
+            .wrapping_mul(mem::size_of::<u64>()) as u32
+    }
+
+    #[inline]
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        let data = self.buf.as_reader();
+        let data = data.as_slice();
+
+        let size = data.len().wrapping_mul(mem::size_of::<u64>());
+
+        let Ok(size) = u32::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([size, Type::STRUCT.into_u32()])?;
+        writer.write_words(data.as_slice())?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 

@@ -1,13 +1,42 @@
-use core::fmt;
+use core::{fmt, mem};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, ChoiceType, Error, Reader, Type, TypedPod, WORD_SIZE};
+use crate::{AsReader, ChoiceType, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
 
 /// A decoder for a choice.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ChoiceType, Pod, Type};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+///     choice.entry()?.push(10i32)?;
+///     choice.entry()?.push(0i32)?;
+///     choice.entry()?.push(30i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut choice = pod.decode_choice()?;
+/// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
+///
+/// let mut count = 0;
+///
+/// while !choice.is_empty() {
+///     let pod = choice.entry()?;
+///     assert_eq!(pod.ty(), Type::INT);
+///     assert_eq!(pod.size(), 4);
+///     count += 1;
+/// }
+///
+/// assert_eq!(count, 3);
+/// # Ok::<_, pod::Error>(())
+/// ```
 pub struct Choice<B> {
     buf: B,
     choice_type: ChoiceType,
@@ -34,7 +63,7 @@ impl<B> Choice<B> {
     /// })?;
     ///
     /// let mut choice = pod.decode_choice()?;
-    /// assert_eq!(choice.ty(), ChoiceType::RANGE);
+    /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
     ///
@@ -133,8 +162,8 @@ where
 
     #[inline]
     pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
-        let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
-        let choice_type = ChoiceType::from_u32(ty);
+        let [choice_type, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
+        let choice_type = ChoiceType::from_u32(choice_type);
         let child_type = Type::new(child_type);
         let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
 
@@ -206,7 +235,7 @@ where
     /// })?;
     ///
     /// let mut choice = pod.decode_choice()?;
-    /// assert_eq!(choice.ty(), ChoiceType::RANGE);
+    /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
     ///
@@ -249,7 +278,7 @@ where
     /// })?;
     ///
     /// let choice = pod.decode_choice()?.to_owned();
-    /// assert_eq!(choice.ty(), ChoiceType::RANGE);
+    /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
     ///
@@ -301,7 +330,7 @@ where
     /// })?;
     ///
     /// let choice = pod.decode_choice()?.to_owned();
-    /// assert_eq!(choice.ty(), ChoiceType::RANGE);
+    /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
     ///
@@ -327,6 +356,98 @@ where
             self.child_type,
             self.remaining,
         )
+    }
+}
+
+/// [`Encode`] implementation for [`Choice`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{ChoiceType, Pod, Type};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+///     choice.entry()?.push(10i32)?;
+///     choice.entry()?.push(0i32)?;
+///     choice.entry()?.push(30i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut choice = pod.decode_choice()?;
+///
+/// let mut pod2 = Pod::array();
+/// pod2.as_mut().push(choice)?;
+///
+/// let mut choice = pod2.decode_choice()?;
+/// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
+///
+/// let mut count = 0;
+///
+/// while !choice.is_empty() {
+///     let pod = choice.entry()?;
+///     assert_eq!(pod.ty(), Type::INT);
+///     assert_eq!(pod.size(), 4);
+///     count += 1;
+/// }
+///
+/// assert_eq!(count, 3);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<B> Encode for Choice<B>
+where
+    B: AsReader<u64>,
+{
+    const TYPE: Type = Type::CHOICE;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        (self
+            .buf
+            .as_reader()
+            .as_slice()
+            .len()
+            .wrapping_mul(mem::size_of::<u64>()) as u32)
+            .wrapping_add(WORD_SIZE * 2)
+    }
+
+    #[inline]
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        let data = self.buf.as_reader();
+        let data = data.as_slice();
+
+        let size = data
+            .len()
+            .wrapping_mul(mem::size_of::<u64>())
+            .wrapping_add((WORD_SIZE * 2) as usize);
+
+        let Ok(size) = u32::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([
+            size,
+            Type::CHOICE.into_u32(),
+            self.choice_type.into_u32(),
+            self.flags,
+            self.child_size,
+            self.child_type.into_u32(),
+        ])?;
+
+        writer.write_words(data.as_slice())?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        writer.write([
+            self.choice_type.into_u32(),
+            self.flags,
+            self.child_size,
+            self.child_type.into_u32(),
+        ])?;
+
+        writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 

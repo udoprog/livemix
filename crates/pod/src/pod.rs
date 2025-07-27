@@ -1,4 +1,5 @@
 use core::fmt;
+use core::mem;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -1064,6 +1065,78 @@ where
             buf: self.buf.as_reader(),
             kind: self.kind,
         }
+    }
+}
+
+/// [`Encode`] implementation for [`Pod`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, Type};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push_object(10, 20, |obj| {
+///     obj.property(1, 10)?.push(1i32)?;
+///     obj.property(2, 20)?.push(2i32)?;
+///     obj.property(3, 30)?.push(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut pod2 = Pod::array();
+/// pod2.as_mut().push(pod)?;
+///
+/// let mut obj = pod2.decode_pod()?.decode_object()?;
+/// assert!(!obj.is_empty());
+///
+/// let p = obj.property()?;
+/// assert_eq!(p.key(), 1);
+/// assert_eq!(p.flags(), 10);
+/// assert_eq!(p.value().decode::<i32>()?, 1);
+///
+/// let p = obj.property()?;
+/// assert_eq!(p.key(), 2);
+/// assert_eq!(p.flags(), 20);
+/// assert_eq!(p.value().decode::<i32>()?, 2);
+///
+/// let p = obj.property()?;
+/// assert_eq!(p.key(), 3);
+/// assert_eq!(p.flags(), 30);
+/// assert_eq!(p.value().decode::<i32>()?, 3);
+///
+/// assert!(obj.is_empty());
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<B> Encode for Pod<B>
+where
+    B: AsReader<u64>,
+{
+    const TYPE: Type = Type::POD;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        self.buf.as_reader().as_slice().len() as u32
+    }
+
+    #[inline]
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        let reader = self.buf.as_reader();
+
+        let data = reader.as_slice();
+        let size = data.len().wrapping_mul(mem::size_of::<u64>());
+
+        let Ok(size) = u32::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([size, Type::POD.into_u32()])?;
+        writer.write_words(data.as_slice())?;
+        Ok(())
+    }
+
+    #[inline]
+    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 
