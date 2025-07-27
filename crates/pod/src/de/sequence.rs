@@ -24,9 +24,9 @@ impl<B> Sequence<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.encode(1i32)?;
-    ///     seq.control(1, 2)?.encode(2i32)?;
-    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     seq.control(1, 2)?.push(1i32)?;
+    ///     seq.control(1, 2)?.push(2i32)?;
+    ///     seq.control(1, 2)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -48,9 +48,9 @@ impl<B> Sequence<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.encode(1i32)?;
-    ///     seq.control(1, 2)?.encode(2i32)?;
-    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     seq.control(1, 2)?.push(1i32)?;
+    ///     seq.control(1, 2)?.push(2i32)?;
+    ///     seq.control(1, 2)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -107,9 +107,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.encode(1i32)?;
-    ///     seq.control(1, 2)?.encode(2i32)?;
-    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     seq.control(1, 2)?.push(1i32)?;
+    ///     seq.control(1, 2)?.push(2i32)?;
+    ///     seq.control(1, 2)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -135,9 +135,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.encode(1i32)?;
-    ///     seq.control(1, 2)?.encode(2i32)?;
-    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     seq.control(1, 2)?.push(1i32)?;
+    ///     seq.control(1, 2)?.push(2i32)?;
+    ///     seq.control(1, 2)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -186,9 +186,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.encode(1i32)?;
-    ///     seq.control(1, 2)?.encode(2i32)?;
-    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     seq.control(1, 2)?.push(1i32)?;
+    ///     seq.control(1, 2)?.push(2i32)?;
+    ///     seq.control(1, 2)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -229,9 +229,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.encode(1i32)?;
-    ///     seq.control(1, 2)?.encode(2i32)?;
-    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     seq.control(1, 2)?.push(1i32)?;
+    ///     seq.control(1, 2)?.push(2i32)?;
+    ///     seq.control(1, 2)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///

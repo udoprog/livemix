@@ -64,8 +64,8 @@ where
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.encode_choice(ChoiceType::NONE, Type::INT, |choice| {
-    ///     choice.entry()?.encode(1i32)?;
+    /// pod.push_choice(ChoiceType::NONE, Type::INT, |choice| {
+    ///     choice.entry()?.push(1i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

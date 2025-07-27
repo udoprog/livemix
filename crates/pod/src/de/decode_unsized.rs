@@ -17,7 +17,10 @@ mod sealed {
 }
 
 /// A trait for unsized types that can be decoded.
-pub trait DecodeUnsized<'de>: self::sealed::Sealed {
+pub trait DecodeUnsized<'de>
+where
+    Self: self::sealed::Sealed,
+{
     const TYPE: Type;
 
     #[doc(hidden)]
@@ -59,7 +62,7 @@ pub trait DecodeUnsized<'de>: self::sealed::Sealed {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized(c"hello world")?;
+/// pod.as_mut().push_unsized(c"hello world")?;
 /// assert_eq!(pod.as_ref().decode_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -117,7 +120,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized("hello world")?;
+/// pod.as_mut().push_unsized("hello world")?;
 /// assert_eq!(pod.as_ref().decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -164,7 +167,7 @@ impl<'de> DecodeUnsized<'de> for str {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized(&b"hello world"[..])?;
+/// pod.as_mut().push_unsized(&b"hello world"[..])?;
 /// assert_eq!(pod.as_ref().decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -192,7 +195,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 /// use pod::{Bitmap, Pod};
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized(Bitmap::new(b"asdfasdf"))?;
+/// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
 /// assert_eq!(pod.as_ref().decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```

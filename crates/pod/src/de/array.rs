@@ -16,10 +16,10 @@ use crate::{AsReader, Error, Reader, Type, TypedPod, WORD_SIZE};
 ///
 /// let mut pod = Pod::array();
 ///
-/// pod.as_mut().encode_array(Type::INT, |array| {
-///     array.push()?.encode(1i32)?;
-///     array.push()?.encode(2i32)?;
-///     array.push()?.encode(3i32)?;
+/// pod.as_mut().push_array(Type::INT, |array| {
+///     array.child()?.push(1i32)?;
+///     array.child()?.push(2i32)?;
+///     array.child()?.push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
@@ -43,10 +43,10 @@ use crate::{AsReader, Error, Reader, Type, TypedPod, WORD_SIZE};
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized_array(Type::STRING, 4, |array| {
-///     array.push()?.encode_unsized("foo")?;
-///     array.push()?.encode_unsized("bar")?;
-///     array.push()?.encode_unsized("baz")?;
+/// pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
+///     array.child()?.push_unsized("foo")?;
+///     array.child()?.push_unsized("bar")?;
+///     array.child()?.push_unsized("baz")?;
 ///     Ok(())
 /// })?;
 ///
@@ -67,10 +67,10 @@ use crate::{AsReader, Error, Reader, Type, TypedPod, WORD_SIZE};
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized_array(Type::STRING, 4, |array| {
-///     array.push()?.encode_unsized("foo")?;
-///     array.push()?.encode_unsized("bar")?;
-///     array.push()?.encode_unsized("baz")?;
+/// pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
+///     array.child()?.push_unsized("foo")?;
+///     array.child()?.push_unsized("bar")?;
+///     array.child()?.push_unsized("baz")?;
 ///     Ok(())
 /// })?;
 ///
@@ -107,8 +107,8 @@ impl<B> Array<B> {
     ///
     /// let mut pod = Pod::array();
     ///
-    /// pod.as_mut().encode_array(Type::INT, |array| {
-    ///     array.push()?.encode(1i32)?;
+    /// pod.as_mut().push_array(Type::INT, |array| {
+    ///     array.child()?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -131,7 +131,7 @@ impl<B> Array<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_array(Type::INT, |_| Ok(()))?;
+    /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
     /// let mut array = pod.decode_array()?;
     /// assert!(array.is_empty());
@@ -178,10 +178,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_array(Type::INT, |array| {
-    ///     array.push()?.encode(1i32)?;
-    ///     array.push()?.encode(2i32)?;
-    ///     array.push()?.encode(3i32)?;
+    /// pod.as_mut().push_array(Type::INT, |array| {
+    ///     array.child()?.push(1i32)?;
+    ///     array.child()?.push(2i32)?;
+    ///     array.child()?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -220,10 +220,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_array(Type::INT, |array| {
-    ///     array.push()?.encode(1i32)?;
-    ///     array.push()?.encode(2i32)?;
-    ///     array.push()?.encode(3i32)?;
+    /// pod.as_mut().push_array(Type::INT, |array| {
+    ///     array.child()?.push(1i32)?;
+    ///     array.child()?.push(2i32)?;
+    ///     array.child()?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -268,10 +268,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_array(Type::INT, |array| {
-    ///     array.push()?.encode(1i32)?;
-    ///     array.push()?.encode(2i32)?;
-    ///     array.push()?.encode(3i32)?;
+    /// pod.as_mut().push_array(Type::INT, |array| {
+    ///     array.child()?.push(1i32)?;
+    ///     array.child()?.push(2i32)?;
+    ///     array.child()?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///

@@ -43,9 +43,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.encode(1i32)?;
-    ///     seq.control(2, 20)?.encode(2i32)?;
-    ///     seq.control(3, 30)?.encode(3i32)?;
+    ///     seq.control(1, 10)?.push(1i32)?;
+    ///     seq.control(2, 20)?.push(2i32)?;
+    ///     seq.control(3, 30)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

@@ -50,10 +50,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 0)?.encode(1i32)?;
-    ///     obj.property(2, 0)?.encode(2i32)?;
-    ///     obj.property(3, 0)?.encode(3i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 0)?.push(1i32)?;
+    ///     obj.property(2, 0)?.push(2i32)?;
+    ///     obj.property(3, 0)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

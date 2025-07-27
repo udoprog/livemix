@@ -23,8 +23,8 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -46,8 +46,8 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -69,8 +69,8 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///

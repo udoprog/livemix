@@ -37,7 +37,7 @@ impl RawId for u32 {
 /// use pod::{Pod, Id};
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode(Id(142u32))?;
+/// pod.as_mut().push(Id(142u32))?;
 /// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```

@@ -70,10 +70,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
-    ///     obj.property(2, 20)?.encode(2i32)?;
-    ///     obj.property(3, 30)?.encode(3i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
+    ///     obj.property(2, 20)?.push(2i32)?;
+    ///     obj.property(3, 30)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -111,10 +111,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
-    ///     obj.property(2, 20)?.encode(2i32)?;
-    ///     obj.property(3, 30)?.encode(3i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
+    ///     obj.property(2, 20)?.push(2i32)?;
+    ///     obj.property(3, 30)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -175,10 +175,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
-    ///     obj.property(2, 20)?.encode(2i32)?;
-    ///     obj.property(3, 30)?.encode(3i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
+    ///     obj.property(2, 20)?.push(2i32)?;
+    ///     obj.property(3, 30)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -231,10 +231,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.encode(1i32)?;
-    ///     obj.property(2, 20)?.encode(2i32)?;
-    ///     obj.property(3, 30)?.encode(3i32)?;
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property(1, 10)?.push(1i32)?;
+    ///     obj.property(2, 20)?.push(2i32)?;
+    ///     obj.property(3, 30)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///

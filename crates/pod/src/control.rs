@@ -11,7 +11,7 @@ use crate::{Reader, TypedPod};
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().encode_sequence(|seq| {
-///     seq.control(1, 10)?.encode(1i32)?;
+///     seq.control(1, 10)?.push(1i32)?;
 ///     Ok(())
 /// })?;
 ///
@@ -44,7 +44,7 @@ impl<B> Control<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     seq.control(1, 10)?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -67,7 +67,7 @@ impl<B> Control<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     seq.control(1, 10)?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -90,7 +90,7 @@ impl<B> Control<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.encode(1i32)?;
+    ///     seq.control(1, 10)?.push(1i32)?;
     ///     Ok(())
     /// })?;
     ///

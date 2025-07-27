@@ -34,7 +34,7 @@ macro_rules! __id {
             #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
-            #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+            #[doc = concat!(" pod.push(", stringify!($ty), "::", stringify!($example), ")?;")]
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl $crate::Encode for $ty {
@@ -46,8 +46,8 @@ macro_rules! __id {
                 }
 
                 #[inline]
-                fn encode(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
-                    $crate::Id(*self).encode(writer)
+                fn write(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
+                    $crate::Id(*self).write(writer)
                 }
 
                 #[inline]
@@ -66,13 +66,13 @@ macro_rules! __id {
             ///
             /// let mut pod = Pod::array();
             ///
-            #[doc = concat!(" pod.as_mut().encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+            #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
             #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
             ///
             /// let mut pod = Pod::array();
-            #[doc = concat!(" pod.as_mut().encode(", stringify!($ty), "::", stringify!($example), ")?;")]
+            #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
             #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
@@ -86,7 +86,7 @@ macro_rules! __id {
             #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
-            /// pod.as_mut().encode(Id(u32::MAX / 2))?;
+            /// pod.as_mut().push(Id(u32::MAX / 2))?;
             ///
             #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
             /// assert!(id.is_invalid());
@@ -231,7 +231,7 @@ macro_rules! __flags {
             #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
-            #[doc = concat!(" pod.encode(", stringify!($ty), "::", stringify!($example0), ")?;")]
+            #[doc = concat!(" pod.push(", stringify!($ty), "::", stringify!($example0), ")?;")]
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl $crate::Encode for $ty {
@@ -243,8 +243,8 @@ macro_rules! __flags {
                 }
 
                 #[inline]
-                fn encode(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
-                    <$repr as $crate::Encode>::encode(&self.0, writer)
+                fn write(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
+                    <$repr as $crate::Encode>::write(&self.0, writer)
                 }
 
                 #[inline]
@@ -263,13 +263,13 @@ macro_rules! __flags {
             ///
             /// let mut pod = Pod::array();
             ///
-            #[doc = concat!(" pod.as_mut().encode(", stringify!($ty), "::", stringify!($example0), ")?;")]
+            #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example0), ")?;")]
             ///
             #[doc = concat!(" let flags = pod.decode::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(flags, ", stringify!($ty), "::", stringify!($example0), ");")]
             ///
             /// let mut pod = Pod::array();
-            #[doc = concat!(" pod.as_mut().encode(", stringify!($ty), "::", stringify!($example0), ")?;")]
+            #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example0), ")?;")]
             ///
             #[doc = concat!(" let flags = pod.decode::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(flags, ", stringify!($ty), "::", stringify!($example0), ");")]
@@ -283,7 +283,7 @@ macro_rules! __flags {
             #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
-            #[doc = concat!(" pod.as_mut().encode(1 | (1 as ", stringify!($repr), ").rotate_right(1))?;")]
+            #[doc = concat!(" pod.as_mut().push(1 | (1 as ", stringify!($repr), ").rotate_right(1))?;")]
             ///
             #[doc = concat!(" let flags = pod.decode::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(flags.unknown_bits(), (1 as ", stringify!($repr), ").rotate_right(1));")]

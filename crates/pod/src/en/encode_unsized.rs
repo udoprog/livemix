@@ -17,7 +17,10 @@ mod sealed {
 }
 
 /// A trait for unsized types that can be encoded.
-pub trait EncodeUnsized: self::sealed::Sealed {
+pub trait EncodeUnsized
+where
+    Self: self::sealed::Sealed,
+{
     /// The type of the encoded value.
     #[doc(hidden)]
     const TYPE: Type;
@@ -27,7 +30,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
     fn size(&self) -> u32;
 
     #[doc(hidden)]
-    fn encode_unsized(&self, writer: impl Writer<u64>) -> Result<(), Error>;
+    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error>;
 
     #[doc(hidden)]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
@@ -41,7 +44,7 @@ pub trait EncodeUnsized: self::sealed::Sealed {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized(&b"hello world"[..])?;
+/// pod.as_mut().push_unsized(&b"hello world"[..])?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
@@ -55,7 +58,7 @@ impl EncodeUnsized for [u8] {
     }
 
     #[inline]
-    fn encode_unsized(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         let Ok(len) = u32::try_from(self.len()) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
@@ -80,7 +83,7 @@ impl EncodeUnsized for [u8] {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized(c"hello world")?;
+/// pod.as_mut().push_unsized(c"hello world")?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
@@ -94,7 +97,7 @@ impl EncodeUnsized for CStr {
     }
 
     #[inline]
-    fn encode_unsized(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         let bytes = self.to_bytes_with_nul();
 
         let Ok(len) = u32::try_from(bytes.len()) else {
@@ -121,7 +124,7 @@ impl EncodeUnsized for CStr {
 /// use pod::Pod;
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized("hello world")?;
+/// pod.as_mut().push_unsized("hello world")?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
@@ -135,7 +138,7 @@ impl EncodeUnsized for str {
     }
 
     #[inline]
-    fn encode_unsized(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         let bytes = self.as_bytes();
 
         let Some(len) = bytes
@@ -170,7 +173,7 @@ impl EncodeUnsized for str {
 /// use pod::{Bitmap, Pod};
 ///
 /// let mut pod = Pod::array();
-/// pod.as_mut().encode_unsized(Bitmap::new(b"asdfasdf"))?;
+/// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.decode_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
@@ -184,7 +187,7 @@ impl EncodeUnsized for Bitmap {
     }
 
     #[inline]
-    fn encode_unsized(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         let value = self.as_bytes();
 
         let Ok(len) = u32::try_from(value.len()) else {

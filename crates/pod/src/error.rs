@@ -81,7 +81,7 @@ impl fmt::Display for Error {
             ErrorKind::NotSupportedRef => write!(f, "Decoding into reference is not supported"),
             ErrorKind::UnsizedTypeInArray { ty } => write!(
                 f,
-                "Unsized type {ty:?} in array, use encode_unsized_array instead"
+                "Unsized type {ty:?} in array, use push_unsized_array instead"
             ),
             ErrorKind::Expected { expected, actual } => {
                 write!(f, "Expected {expected:?}, but found {actual:?}")
