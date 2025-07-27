@@ -31,7 +31,9 @@ pub(crate) mod sealed {
     impl Sealed for bool {}
     impl<I> Sealed for Id<I> where I: IntoId {}
     impl Sealed for i32 {}
+    impl Sealed for u32 {}
     impl Sealed for i64 {}
+    impl Sealed for u64 {}
     impl Sealed for f32 {}
     impl Sealed for f64 {}
     impl Sealed for Rectangle {}
@@ -129,6 +131,31 @@ impl<'de> Decode<'de> for i32 {
     }
 }
 
+/// [`Decode`] implementation for `u32`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10u32)?;
+/// assert_eq!(pod.as_ref().decode::<u32>()?, 10u32);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10i32)?;
+/// assert_eq!(pod.as_ref().decode::<u32>()?, 10u32);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for u32 {
+    const TYPE: Type = Type::INT;
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+        Ok(i32::read_content(reader, size)?.cast_unsigned())
+    }
+}
+
 /// [`Decode`] implementation for `i64`.
 ///
 /// # Examples
@@ -147,6 +174,31 @@ impl<'de> Decode<'de> for i64 {
     #[inline]
     fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
         Ok(reader.read::<u64>()?.cast_signed())
+    }
+}
+
+/// [`Decode`] implementation for `u64`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10u64)?;
+/// assert_eq!(pod.decode::<i64>()?, 10);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10i64)?;
+/// assert_eq!(pod.decode::<i64>()?, 10);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for u64 {
+    const TYPE: Type = Type::LONG;
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+        Ok(i64::read_content(reader, size)?.cast_unsigned())
     }
 }
 

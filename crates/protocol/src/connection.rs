@@ -134,8 +134,8 @@ impl Connection {
         let mut pod = Pod::array();
 
         pod.as_mut().encode_struct(|st| {
-            st.field()?.encode(id.cast_signed())?;
-            st.field()?.encode(sync_sequence.cast_signed())?;
+            st.field()?.encode(id)?;
+            st.field()?.encode(sync_sequence)?;
             Ok(())
         })?;
 
@@ -144,7 +144,7 @@ impl Connection {
     }
 
     /// Send a pong response to a ping.
-    pub fn core_pong(&mut self, id: i32, seq: i32) -> Result<(), Error> {
+    pub fn core_pong(&mut self, id: u32, seq: u32) -> Result<(), Error> {
         let mut pod = Pod::array();
 
         pod.as_mut().encode_struct(|st| {
@@ -170,7 +170,7 @@ impl Connection {
         pod.as_mut().encode_struct(|st| {
             st.field()?.encode_unsized(factory_name)?;
             st.field()?.encode_unsized(ty)?;
-            st.field()?.encode(version.cast_signed())?;
+            st.field()?.encode(version)?;
 
             st.field()?.encode_struct(|props| {
                 props.field()?.encode(6)?;
@@ -195,7 +195,7 @@ impl Connection {
                 Ok(())
             })?;
 
-            st.field()?.encode(new_id.cast_signed())?;
+            st.field()?.encode(new_id)?;
             Ok(())
         })?;
 
@@ -234,8 +234,8 @@ impl Connection {
         let mut pod = Pod::array();
 
         pod.as_mut().encode_struct(|st| {
-            st.field()?.encode(version.cast_signed())?;
-            st.field()?.encode(new_id.cast_signed())?;
+            st.field()?.encode(version)?;
+            st.field()?.encode(new_id)?;
             Ok(())
         })?;
 

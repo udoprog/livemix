@@ -11,15 +11,6 @@ mod tests;
 
 pub(crate) const WORD_SIZE: u32 = core::mem::size_of::<u64>() as u32;
 
-/// Alias for the `Int` type.
-pub type Int = i32;
-/// Alias for the `Long` type.
-pub type Long = i64;
-/// Alias for the `Float` type.
-pub type Float = f32;
-/// Alias for the `Double` type.
-pub type Double = f64;
-
 pub(crate) mod bstr;
 
 pub mod pod;

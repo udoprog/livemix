@@ -9,7 +9,9 @@ pub(crate) mod sealed {
     impl Sealed for bool {}
     impl<I> Sealed for Id<I> where I: IntoId {}
     impl Sealed for i32 {}
+    impl Sealed for u32 {}
     impl Sealed for i64 {}
+    impl Sealed for u64 {}
     impl Sealed for f32 {}
     impl Sealed for f64 {}
     impl Sealed for Rectangle {}
@@ -136,6 +138,41 @@ impl Encode for i32 {
     }
 }
 
+/// [`Encode`] implementation for `u32`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10u32)?;
+/// assert_eq!(pod.decode::<u32>()?, 10);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10i32)?;
+/// assert_eq!(pod.decode::<u32>()?, 10);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for u32 {
+    const TYPE: Type = Type::INT;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        4
+    }
+
+    #[inline]
+    fn encode(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        self.cast_signed().encode(writer)
+    }
+
+    #[inline]
+    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        self.cast_signed().write_content(writer)
+    }
+}
+
 /// [`Encode`] implementation for `i64`.
 ///
 /// # Examples
@@ -166,6 +203,41 @@ impl Encode for i64 {
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write(self.cast_unsigned())
+    }
+}
+
+/// [`Encode`] implementation for `u64`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10u64)?;
+/// assert_eq!(pod.decode::<u64>()?, 10);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().encode(10i64)?;
+/// assert_eq!(pod.decode::<u64>()?, 10);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for u64 {
+    const TYPE: Type = Type::LONG;
+
+    #[inline]
+    fn size(&self) -> u32 {
+        8
+    }
+
+    #[inline]
+    fn encode(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        self.cast_signed().encode(writer)
+    }
+
+    #[inline]
+    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        self.cast_signed().write_content(writer)
     }
 }
 
