@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+pod = { path = "crates/pod" }
+protocol = { path = "crates/protocol" }
+client = { path = "crates/client" }
 anyhow = "1.0.98"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
-pod = { path = "crates/pod" }
-protocol = { path = "crates/protocol" }
 
 [workspace]
 members = [

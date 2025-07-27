@@ -1,0 +1,11 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pod = { path = "../pod" }
+protocol = { path = "../protocol" }
+
+anyhow = "1.0.98"
+tracing = "0.1.41"
