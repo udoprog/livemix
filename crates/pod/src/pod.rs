@@ -5,7 +5,7 @@ use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, Str
 use crate::error::ErrorKind;
 use crate::{
     Array, Choice, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod,
-    Visitor, Writer,
+    Visitor, WORD_SIZE, Writer,
 };
 
 /// An unlimited pod.
@@ -519,6 +519,58 @@ where
         Ok(())
     }
 
+    /// Encode a nested pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, TypedPod};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_pod(|pod| {
+    ///     pod.as_mut().encode_struct(|st| {
+    ///         st.field()?.encode(1i32)?;
+    ///         st.field()?.encode(2i32)?;
+    ///         st.field()?.encode(3i32)?;
+    ///         Ok(())
+    ///     })
+    /// })?;
+    ///
+    /// let pod = pod.as_ref().into_typed()?.decode_pod()?;
+    /// let mut st = pod.decode_struct()?;
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode_pod(
+        mut self,
+        f: impl FnOnce(&mut Pod<B>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        // Reserve space for the header of the choice which includes its size
+        // that will be determined later.
+        let header = self.buf.reserve([0, Type::POD.into_u32()])?;
+
+        let mut pod = Pod::new(self.buf);
+
+        f(&mut pod)?;
+
+        let Some(size) = pod
+            .buf
+            .distance_from(header)
+            .and_then(|v| v.checked_sub(WORD_SIZE))
+        else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        self.kind.check(Type::POD, size)?;
+        pod.buf.write_at(header, [size, Type::POD.into_u32()])?;
+        Ok(())
+    }
+
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
     #[inline]
@@ -890,6 +942,37 @@ where
     #[inline]
     pub fn decode_choice(self) -> Result<ChoiceDecoder<B>, Error> {
         self.into_typed()?.decode_choice()
+    }
+
+    /// Decode a nested pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, TypedPod};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_pod(|pod| {
+    ///     pod.as_mut().encode_struct(|st| {
+    ///         st.field()?.encode(1i32)?;
+    ///         st.field()?.encode(2i32)?;
+    ///         st.field()?.encode(3i32)?;
+    ///         Ok(())
+    ///     })
+    /// })?;
+    ///
+    /// let pod = pod.as_ref().decode_pod()?;
+    /// let mut st = pod.decode_struct()?;
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode_pod(self) -> Result<Pod<B>, Error> {
+        self.into_typed()?.decode_pod()
     }
 
     /// Convert the [`Pod`] into a one borrowing from but without modifying the

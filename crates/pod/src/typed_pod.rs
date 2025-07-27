@@ -451,7 +451,7 @@ where
         }
     }
 
-    /// Decode a struct.
+    /// Decode a nested pod.
     ///
     /// # Examples
     ///
@@ -459,14 +459,17 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_struct(|st| {
-    ///     st.field()?.encode(1i32)?;
-    ///     st.field()?.encode(2i32)?;
-    ///     st.field()?.encode(3i32)?;
-    ///     Ok(())
+    /// pod.as_mut().encode_pod(|pod| {
+    ///     pod.as_mut().encode_struct(|st| {
+    ///         st.field()?.encode(1i32)?;
+    ///         st.field()?.encode(2i32)?;
+    ///         st.field()?.encode(3i32)?;
+    ///         Ok(())
+    ///     })
     /// })?;
     ///
-    /// let mut st = pod.as_ref().into_typed()?.decode_struct()?;
+    /// let pod = pod.as_ref().into_typed()?.decode_pod()?;
+    /// let mut st = pod.decode_struct()?;
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
     /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
