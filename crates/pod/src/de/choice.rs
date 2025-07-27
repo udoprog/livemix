@@ -10,7 +10,7 @@ use crate::{AsReader, ChoiceType, Error, Reader, Type, TypedPod, WORD_SIZE};
 /// A decoder for a choice.
 pub struct Choice<B> {
     buf: B,
-    ty: ChoiceType,
+    choice_type: ChoiceType,
     flags: u32,
     child_size: u32,
     child_type: Type,
@@ -49,20 +49,62 @@ impl<B> Choice<B> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn ty(&self) -> ChoiceType {
-        self.ty
+    pub const fn choice_type(&self) -> ChoiceType {
+        self.choice_type
     }
 
     /// Return the type of the child element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ChoiceType, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.push(10i32)?;
+    ///     choice.entry()?.push(0i32)?;
+    ///     choice.entry()?.push(30i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let choice = pod.decode_choice()?;
+    /// assert_eq!(choice.child_type(), Type::INT);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     pub const fn child_type(&self) -> Type {
         self.child_type
     }
 
     /// Return the size of the child element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ChoiceType, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.push(10i32)?;
+    ///     choice.entry()?.push(0i32)?;
+    ///     choice.entry()?.push(30i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let choice = pod.decode_choice()?;
+    /// assert_eq!(choice.child_size(), 4);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     pub const fn child_size(&self) -> u32 {
         self.child_size
+    }
+
+    /// Get a reference to the underlying buffer.
+    #[inline]
+    pub fn as_buf(&self) -> &B {
+        &self.buf
     }
 }
 
@@ -73,7 +115,7 @@ where
     #[inline]
     pub fn new(
         buf: B,
-        ty: ChoiceType,
+        choice_type: ChoiceType,
         flags: u32,
         child_size: u32,
         child_type: Type,
@@ -81,7 +123,7 @@ where
     ) -> Self {
         Self {
             buf,
-            ty,
+            choice_type,
             flags,
             child_size,
             child_type,
@@ -92,13 +134,13 @@ where
     #[inline]
     pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
         let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
-        let ty = ChoiceType::from_u32(ty);
+        let choice_type = ChoiceType::from_u32(ty);
         let child_type = Type::new(child_type);
         let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
 
         Ok(Self {
             buf: reader,
-            ty,
+            choice_type,
             flags,
             child_size,
             child_type,
@@ -228,7 +270,7 @@ where
     pub fn to_owned(&self) -> Choice<Box<[u64]>> {
         Choice {
             buf: Box::from(self.buf.as_slice()),
-            ty: self.ty,
+            choice_type: self.choice_type,
             flags: self.flags,
             child_size: self.child_size,
             child_type: self.child_type,
@@ -279,7 +321,7 @@ where
     pub fn as_ref(&self) -> Choice<B::Reader<'_>> {
         Choice::new(
             self.buf.as_reader(),
-            self.ty,
+            self.choice_type,
             self.flags,
             self.child_size,
             self.child_type,
@@ -321,7 +363,7 @@ where
         }
 
         let mut f = f.debug_struct("Choice");
-        f.field("type", &self.ty());
+        f.field("type", &self.choice_type());
         f.field("child_type", &self.child_type());
         f.field("entries", &Entries(self));
         f.finish()

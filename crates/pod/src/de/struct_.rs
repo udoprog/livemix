@@ -12,6 +12,14 @@ pub struct Struct<B> {
     size: u32,
 }
 
+impl<B> Struct<B> {
+    /// Get a reference to the underlying buffer.
+    #[inline]
+    pub fn as_buf(&self) -> &B {
+        &self.buf
+    }
+}
+
 impl<'de, B> Struct<B>
 where
     B: Reader<'de, u64>,

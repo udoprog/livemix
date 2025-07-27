@@ -26,6 +26,12 @@ impl<B> Object<B> {
     pub const fn object_id(&self) -> u32 {
         self.object_id
     }
+
+    /// Get a reference to the underlying buffer.
+    #[inline]
+    pub fn as_buf(&self) -> &B {
+        &self.buf
+    }
 }
 
 impl<'de, B> Object<B>

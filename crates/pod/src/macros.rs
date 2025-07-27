@@ -14,7 +14,7 @@ macro_rules! __id {
     ) => {
         $(
             $(#[doc = $doc])*
-            #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+            #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
             $ty_vis struct $ty(u32);
 
             impl $ty {

@@ -62,6 +62,12 @@ impl<B> Sequence<B> {
     pub const fn pad(&self) -> u32 {
         self.pad
     }
+
+    /// Get a reference to the underlying buffer.
+    #[inline]
+    pub fn as_buf(&self) -> &B {
+        &self.buf
+    }
 }
 
 impl<'de, B> Sequence<B>

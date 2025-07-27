@@ -34,7 +34,7 @@ mod en;
 pub use self::en::{Encode, EncodeUnsized};
 
 mod de;
-pub use self::de::{Decode, DecodeUnsized};
+pub use self::de::{Array, Choice, Decode, DecodeUnsized, Object, Sequence, Struct};
 
 mod array;
 pub use self::array::Buf;

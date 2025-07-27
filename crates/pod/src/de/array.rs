@@ -141,6 +141,12 @@ impl<B> Array<B> {
     pub fn is_empty(&self) -> bool {
         self.remaining == 0
     }
+
+    /// Get a reference to the underlying buffer.
+    #[inline]
+    pub fn as_buf(&self) -> &B {
+        &self.buf
+    }
 }
 
 impl<'de, B> Array<B>

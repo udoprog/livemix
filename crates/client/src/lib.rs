@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::os::fd::OwnedFd;
 
 use anyhow::bail;
-use pod::{Fd, Id, Pod};
+use pod::{Fd, Id, Object, Pod};
 use protocol::consts;
 use protocol::id;
 use protocol::ids::Ids;
@@ -69,6 +69,7 @@ struct ClientNodeState {
     read_fd: Option<OwnedFd>,
     write_fd: Option<OwnedFd>,
     activation: Option<Activation>,
+    params: BTreeMap<id::Param, Object<Box<[u64]>>>,
 }
 
 #[derive(Debug)]
@@ -268,9 +269,9 @@ impl ConnectionState {
                 tracing::trace!(self.header.id = ?self.header.id(), self.header.op = ?self.header.op(), "Received frame");
 
                 let result = match self.header.id() {
-                    consts::CORE_ID => self.handle_core(pod),
-                    consts::CLIENT_ID => self.handle_client(pod),
-                    _ => self.handle_dynamic(pod),
+                    consts::CORE_ID => self.core(pod),
+                    consts::CLIENT_ID => self.client(pod),
+                    _ => self.dynamic(pod),
                 };
 
                 if self.header.n_fds() > 0 {
@@ -353,6 +354,7 @@ impl ConnectionState {
             write_fd: None,
             read_fd: None,
             activation: None,
+            params: BTreeMap::new(),
         });
 
         self.local_id_to_kind
@@ -360,28 +362,25 @@ impl ConnectionState {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_core(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         match self.header.op() {
             op::CORE_INFO_EVENT => {
-                self.handle_core_info_event(pod).context("Core::Info")?;
+                self.core_info_event(pod).context("Core::Info")?;
             }
             op::CORE_DONE_EVENT => {
-                self.handle_core_done_event(pod).context("Core::Done")?;
+                self.core_done_event(pod).context("Core::Done")?;
             }
             op::CORE_PING_EVENT => {
-                self.handle_core_ping_event(pod).context("Core::Ping")?;
+                self.core_ping_event(pod).context("Core::Ping")?;
             }
             op::CORE_ERROR_EVENT => {
-                self.handle_core_error_event(pod).context("Core::Error")?;
+                self.core_error_event(pod).context("Core::Error")?;
             }
             op::CORE_BOUND_ID_EVENT => {
-                self.handle_core_bound_id_event(pod)
-                    .context("Core::BoundId")?;
+                self.core_bound_id_event(pod).context("Core::BoundId")?;
             }
             op::CORE_ADD_MEM_EVENT => {
-                self.handle_core_add_mem_event(pod)
-                    .context("Core::AddMem")?;
+                self.core_add_mem_event(pod).context("Core::AddMem")?;
             }
             op => {
                 tracing::warn!(op, "Core unsupported op");
@@ -391,14 +390,13 @@ impl ConnectionState {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_client(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn client(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         match self.header.op() {
             op::CLIENT_INFO_EVENT => {
-                self.handle_client_info(pod).context("Client::Info")?;
+                self.client_info(pod).context("Client::Info")?;
             }
             op::CLIENT_ERROR_EVENT => {
-                self.handle_client_error(pod).context("Client::Error")?;
+                self.client_error(pod).context("Client::Error")?;
             }
             op => {
                 tracing::warn!(op, "Client unsupported op");
@@ -408,8 +406,7 @@ impl ConnectionState {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_dynamic(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn dynamic(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let Some(kind) = self.local_id_to_kind.get(&self.header.id()) else {
             tracing::warn!(?self.header, "Unknown receiver");
             return Ok(());
@@ -418,11 +415,10 @@ impl ConnectionState {
         match *kind {
             Kind::Registry => match self.header.op() {
                 op::REGISTRY_GLOBAL_EVENT => {
-                    self.handle_registry_global(pod)
-                        .context("Registry::Global")?;
+                    self.registry_global(pod).context("Registry::Global")?;
                 }
                 op::REGISTRY_GLOBAL_REMOVE_EVENT => {
-                    self.handle_registry_global_remove(pod)
+                    self.registry_global_remove(pod)
                         .context("Registry::GlobalRemove")?;
                 }
                 op => {
@@ -431,19 +427,19 @@ impl ConnectionState {
             },
             Kind::ClientNode(index) => match self.header.op() {
                 op::CLIENT_NODE_TRANSPORT_EVENT => {
-                    self.handle_client_node_transport(index, pod)
+                    self.client_node_transport(index, pod)
                         .context("ClientNode::Transport")?;
                 }
                 op::CLIENT_NODE_SET_PARAM_EVENT => {
-                    self.handle_client_node_set_param(index, pod)
+                    self.client_node_set_param(index, pod)
                         .context("ClientNode::SetParam")?;
                 }
                 op::CLIENT_NODE_SET_IO_EVENT => {
-                    self.handle_client_node_set_io(index, pod)
+                    self.client_node_set_io(index, pod)
                         .context("ClientNode::SetIO")?;
                 }
                 op::CLIENT_NODE_SET_ACTIVATION_EVENT => {
-                    self.handle_client_node_set_activation(index, pod)
+                    self.client_node_set_activation(index, pod)
                         .context("ClientNode::SetActivation")?;
                 }
                 op => {
@@ -456,7 +452,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_core_info_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_info_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<u32>()?;
         let cookie = st.field()?.decode::<i32>()?;
@@ -489,7 +485,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_core_done_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_done_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<u32>()?;
         let seq = st.field()?.decode::<u32>()?;
@@ -511,7 +507,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_core_ping_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_ping_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode()?;
         let seq = st.field()?.decode()?;
@@ -522,7 +518,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_core_error_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_error_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<i32>()?;
         let seq = st.field()?.decode::<i32>()?;
@@ -534,7 +530,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_core_bound_id_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_bound_id_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let local_id = st.field()?.decode::<u32>()?;
         let global_id = st.field()?.decode::<u32>()?;
@@ -544,7 +540,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_core_add_mem_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_add_mem_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<u32>()?;
         let ty = st.field()?.decode::<Id<u32>>()?;
@@ -558,7 +554,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_client_info(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_info(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<u32>()?;
         let change_mask = st.field()?.decode::<u64>()?;
@@ -580,7 +576,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_client_error(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_error(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<i32>()?;
         let res = st.field()?.decode::<i32>()?;
@@ -590,7 +586,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_registry_global(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn registry_global(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
 
         let id = st.field()?.decode::<u32>()?;
@@ -645,7 +641,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_registry_global_remove(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn registry_global_remove(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<u32>()?;
 
@@ -682,8 +678,8 @@ impl ConnectionState {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_client_node_transport(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_transport(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let read_fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
         let write_fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
@@ -710,20 +706,22 @@ impl ConnectionState {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_client_node_set_param(&mut self, _: usize, pod: Pod<&[u64]>) -> Result<()> {
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_set_param(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let param = st.field()?.decode::<id::Param>()?;
         let flags = st.field()?.decode::<i32>()?;
-        let mut obj = st.field()?.decode_object()?;
+        let obj = st.field()?.decode_object()?;
 
         let object_type = id::ObjectType::from_id(obj.object_type());
         let object_id = id::Param::from_id(obj.object_id());
 
+        let mut o = obj.as_ref();
+
         match object_id {
             id::Param::PROPS => {
-                while !obj.is_empty() {
-                    let p = obj.property()?;
+                while !o.is_empty() {
+                    let p = o.property()?;
 
                     match id::Prop::from_id(p.key()) {
                         id::Prop::CHANNEL_VOLUMES => {
@@ -741,12 +739,16 @@ impl ConnectionState {
             }
         }
 
-        tracing::info!(?param, flags, ?object_type, ?object_id, "Set param");
+        if let Some(client) = self.client_nodes.get_mut(index) {
+            client.params.insert(param, obj.to_owned());
+        }
+
+        tracing::info!(?param, flags, ?object_type, ?object_id, ?obj, "Set param");
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_client_node_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
         let Some(..) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -761,8 +763,8 @@ impl ConnectionState {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all)]
-    fn handle_client_node_set_activation(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_set_activation(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let node_id = st.field()?.decode::<i32>()?;
         let fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
