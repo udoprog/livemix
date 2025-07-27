@@ -3,7 +3,7 @@ macro_rules! __id {
     (
         $(
             #[example = $example:ident]
-            $ty_vis:vis enum $ty:ident {
+            $ty_vis:vis struct $ty:ident {
                 $default:ident
                 $(,
                     $(#[$($field_meta:meta)*])* $field:ident = $field_value:expr
@@ -296,7 +296,7 @@ macro_rules! __flags {
                 }
             }
 
-            /// Bitwise operations for the flags.
+            /// Combine two flags with a bitwise or operation.
             ///
             /// # Examples
             ///
@@ -314,6 +314,50 @@ macro_rules! __flags {
                 #[inline]
                 fn bitor(self, rhs: Self) -> Self::Output {
                     Self(self.0 | rhs.0)
+                }
+            }
+
+            /// Test if the flags contain another set.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            ///
+            #[doc = concat!(" let flags = ", stringify!($ty), "::", stringify!($example0) $(," | ", stringify!($ty), "::", stringify!($example))*, ";")]
+            #[doc = concat!(" assert!(flags & ", stringify!($ty), "::", stringify!($example0), ");")]
+            $(#[doc = concat!(" assert!(flags & ", stringify!($ty), "::", stringify!($example), ");")])*
+            $(#[doc = concat!(" assert!(!(flags & ", stringify!($ty), "::", stringify!($not_set), "));")])*
+            /// ```
+            impl core::ops::BitAnd for $ty {
+                type Output = bool;
+
+                #[inline]
+                fn bitand(self, rhs: Self) -> Self::Output {
+                    self.contains(rhs)
+                }
+            }
+
+            /// Assign value to the flags with a bitwise or assign operation.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            ///
+            #[doc = concat!(" let mut flags = ", stringify!($ty), "::", stringify!($example0), ";")]
+            #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
+            $(
+                #[doc = concat!(" assert!(!flags.contains(", stringify!($ty), "::", stringify!($example), "));")]
+                #[doc = concat!(" flags |= ", stringify!($ty), "::", stringify!($example), ");")]
+                #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example), "));")]
+            )*
+            $(#[doc = concat!(" assert!(!flags.contains(", stringify!($ty), "::", stringify!($not_set), "));")])*
+            /// ```
+            impl core::ops::BitOrAssign for $ty {
+                #[inline]
+                fn bitor_assign(&mut self, rhs: Self) {
+                    self.0 |= rhs.0;
                 }
             }
 

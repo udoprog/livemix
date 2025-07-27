@@ -245,18 +245,20 @@ impl Connection {
         Ok(())
     }
 
-    /// Update the client.
+    /// Update client node.
     pub fn client_node_update(&mut self, id: u32) -> Result<(), Error> {
         let mut pod = Pod::array();
 
-        let change_mask = flags::ClientNodeUpdate::INFO | flags::ClientNodeUpdate::PARAMS;
+        let mut change_mask = flags::ClientNodeUpdate::NONE;
+
+        change_mask |= flags::ClientNodeUpdate::INFO;
 
         let max_input_ports = 2u32;
         let max_output_ports = 2u32;
 
-        let inner_change_mask = flags::NodeChangeMask::FLAGS
-            | flags::NodeChangeMask::PROPS
-            | flags::NodeChangeMask::PARAMS;
+        let mut node_change_mask = flags::NodeChangeMask::FLAGS;
+        node_change_mask |= flags::NodeChangeMask::PROPS;
+        node_change_mask |= flags::NodeChangeMask::PARAMS;
 
         let node_flags = flags::Node::IN_DYNAMIC_PORTS | flags::Node::OUT_DYNAMIC_PORTS;
 
@@ -264,26 +266,104 @@ impl Connection {
             st.field()?.encode(change_mask)?;
             st.field()?.encode(0u32)?;
 
-            st.field()?.encode_struct(|st| {
-                st.field()?.encode(max_input_ports)?;
-                st.field()?.encode(max_output_ports)?;
-                st.field()?.encode(inner_change_mask)?;
-                st.field()?.encode(node_flags)?;
+            if change_mask & flags::ClientNodeUpdate::INFO {
+                st.field()?.encode_struct(|st| {
+                    st.field()?.encode(max_input_ports)?;
+                    st.field()?.encode(max_output_ports)?;
+                    st.field()?.encode(node_change_mask)?;
+                    st.field()?.encode(node_flags)?;
 
-                st.field()?.encode(1u32)?;
-                st.field()?.encode_unsized("node.name")?;
-                st.field()?.encode_unsized("livemix2")?;
+                    st.field()?.encode(1u32)?;
+                    st.field()?.encode("node.name")?;
+                    st.field()?.encode_unsized("livemix2")?;
 
-                st.field()?.encode(1u32)?;
-                st.field()?.encode(id::Param::ENUM_FORMAT)?;
-                st.field()?.encode(flags::Param::READ)?;
+                    st.field()?.encode(4u32)?;
+                    st.field()?.encode(id::Param::PROP_INFO)?;
+                    st.field()?.encode(flags::Param::NONE)?;
 
-                Ok(())
-            })?;
+                    st.field()?.encode(id::Param::PROPS)?;
+                    st.field()?.encode(flags::Param::WRITE)?;
+
+                    st.field()?.encode(id::Param::ENUM_FORMAT)?;
+                    st.field()?.encode(flags::Param::READ)?;
+
+                    st.field()?.encode(id::Param::FORMAT)?;
+                    st.field()?.encode(flags::Param::WRITE)?;
+                    Ok(())
+                })?;
+            } else {
+                st.field()?.encode_none()?;
+            }
+
             Ok(())
         })?;
 
         self.request(id, op::CLIENT_NODE_UPDATE, pod)?;
+        Ok(())
+    }
+
+    /// Update client node port.
+    pub fn client_node_port_update(
+        &mut self,
+        id: u32,
+        direction: consts::Direction,
+        port_id: u32,
+    ) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        let mut change_mask = flags::ClientNodePortUpdate::NONE;
+        change_mask |= flags::ClientNodePortUpdate::INFO;
+
+        let mut port_change_mask = flags::PortChangeMask::NONE;
+        port_change_mask |= flags::PortChangeMask::FLAGS;
+        port_change_mask |= flags::PortChangeMask::PROPS;
+        port_change_mask |= flags::PortChangeMask::PARAMS;
+
+        let port_flags = flags::Port::NONE;
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(direction as u32)?;
+            st.field()?.encode(port_id)?;
+            st.field()?.encode(change_mask)?;
+            st.field()?.encode(0u32)?;
+
+            if change_mask & flags::ClientNodePortUpdate::INFO {
+                st.field()?.encode_struct(|st| {
+                    st.field()?.encode(port_change_mask)?;
+                    st.field()?.encode(port_flags)?;
+
+                    // Rate num / denom
+                    st.field()?.encode(0u32)?;
+                    st.field()?.encode(0u32)?;
+
+                    // Properties.
+                    st.field()?.encode(1u32)?;
+                    st.field()?.encode("port.name")?;
+                    st.field()?.encode_unsized("livemix_port0")?;
+
+                    // Parameters.
+                    st.field()?.encode(4u32)?;
+                    st.field()?.encode(id::Param::PROP_INFO)?;
+                    st.field()?.encode(flags::Param::NONE)?;
+
+                    st.field()?.encode(id::Param::PROPS)?;
+                    st.field()?.encode(flags::Param::WRITE)?;
+
+                    st.field()?.encode(id::Param::ENUM_FORMAT)?;
+                    st.field()?.encode(flags::Param::READ)?;
+
+                    st.field()?.encode(id::Param::FORMAT)?;
+                    st.field()?.encode(flags::Param::WRITE)?;
+                    Ok(())
+                })?;
+            } else {
+                st.field()?.encode_none()?;
+            }
+
+            Ok(())
+        })?;
+
+        self.request(id, op::CLIENT_NODE_PORT_UPDATE, pod)?;
         Ok(())
     }
 

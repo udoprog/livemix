@@ -37,6 +37,31 @@ impl Ids {
         self.layer |= 1u128 << index;
     }
 
+    /// Unset an identifier.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use protocol::ids::Ids;
+    ///
+    /// let mut ids = Ids::new();
+    ///
+    /// assert_eq!(ids.alloc(), Some(0));
+    /// assert_eq!(ids.alloc(), Some(1));
+    /// ids.set(2);
+    /// assert_eq!(ids.alloc(), Some(3));
+    ///
+    /// assert!(ids.test(0));
+    /// assert!(ids.test(2));
+    /// assert!(!ids.test(4));
+    /// assert!(ids.unset(2));
+    /// assert!(!ids.test(2));
+    /// ```
+    pub fn unset(&mut self, index: u32) {
+        assert!(index < 128, "Index out of bounds: {index}");
+        self.layer &= !(1u128 << index);
+    }
+
     /// Test if the given index is set.
     ///
     /// # Examples

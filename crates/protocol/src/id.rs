@@ -1,6 +1,6 @@
 pod::macros::id! {
     #[example = FORMAT]
-    pub enum Param {
+    pub struct Param {
         UNKNOWN,
         PROP_INFO = 1,
         PROPS = 2,
@@ -22,7 +22,7 @@ pod::macros::id! {
     }
 
     #[example = OPUS]
-    pub enum MediaSubType {
+    pub struct MediaSubType {
         UNKNOWN,
         RAW = 1,
         DSP = 2,
@@ -69,7 +69,7 @@ pod::macros::id! {
     }
 
     #[example = FORMAT]
-    pub enum ObjectType {
+    pub struct ObjectType {
         UNKNOWN,
         PROP_INFO = 0x40001,
         PROPS = 0x40002,
@@ -87,7 +87,7 @@ pod::macros::id! {
     }
 
     #[example = FREQUENCY]
-    pub enum Prop {
+    pub struct Prop {
         UNKNOWN,
         START_DEVICE = 0x100,
         DEVICE = 0x101,
@@ -167,5 +167,33 @@ pod::macros::id! {
         /// simple control params (Struct((String: key, Pod: value)*)).
         PARAMS = 0x80001,
         START_CUSTOM = 0x1000000,
+    }
+
+    #[example = FREQUENCY]
+    pub struct Io {
+        INVALID,
+        /// Area to exchange buffers, `struct spa_io_buffers`.
+        BUFFERS = 1,
+        /// Expected byte range, `struct spa_io_range` (currently not used in
+        /// PipeWire).
+        RANGE = 2,
+        /// Area to update clock information, `struct spa_io_clock`.
+        CLOCK = 3,
+        /// Latency reporting, `struct spa_io_latency` (currently not used in
+        /// PipeWire). See `spa_param_latency`.
+        LATENCY = 4,
+        /// Area for control messages, `struct spa_io_sequence`.
+        CONTROL = 5,
+        /// Area for notify messages, `struct spa_io_sequence`.
+        NOTIFY = 6,
+        /// Position information in the graph, `struct spa_io_position`.
+        POSITION = 7,
+        /// Rate matching between nodes, `struct spa_io_rate_match`.
+        RATE_MATCH = 8,
+        /// Memory pointer, `struct spa_io_memory` (currently not used in
+        /// PipeWire).
+        MEMORY = 9,
+        /// Async area to exchange buffers, `struct spa_io_async_buffers`.
+        ASYNC_BUFFERS = 10,
     }
 }

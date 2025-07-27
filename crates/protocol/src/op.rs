@@ -76,6 +76,9 @@ pub const CLIENT_NODE_GET_NODE: u8 = 1;
 /// Update the params and info of the node.
 pub const CLIENT_NODE_UPDATE: u8 = 2;
 
+/// Create, Update or destroy a node port.
+pub const CLIENT_NODE_PORT_UPDATE: u8 = 3;
+
 /// Set the node active or inactive.
 pub const CLIENT_NODE_SET_ACTIVE: u8 = 4;
 

@@ -11,6 +11,7 @@ use protocol::types::Header;
 use protocol::{Connection, DynamicBuf};
 
 use anyhow::{Context, Result};
+use slab::Slab;
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
 const GET_REGISTRY_SYNC: u32 = 0x1000;
@@ -96,17 +97,66 @@ struct MemoryState {
     flags: i32,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
+pub struct GlobalMap {
+    global_to_local: BTreeMap<u32, u32>,
+    local_to_global: BTreeMap<u32, u32>,
+}
+
+impl GlobalMap {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            global_to_local: BTreeMap::new(),
+            local_to_global: BTreeMap::new(),
+        }
+    }
+
+    #[inline]
+    fn insert(&mut self, local_id: u32, global_id: u32) {
+        self.global_to_local.insert(global_id, local_id);
+        self.local_to_global.insert(local_id, global_id);
+    }
+
+    /// Map a global to a local id.
+    #[inline]
+    fn by_global(&self, global_id: u32) -> Option<u32> {
+        self.global_to_local.get(&global_id).copied()
+    }
+
+    /// Map a local to a global id.
+    #[inline]
+    fn by_local(&self, local_id: u32) -> Option<u32> {
+        self.local_to_global.get(&local_id).copied()
+    }
+
+    #[inline]
+    fn remove_by_local(&mut self, local_id: u32) -> Option<u32> {
+        let global_id = self.local_to_global.remove(&local_id)?;
+        self.global_to_local.remove(&global_id);
+        Some(global_id)
+    }
+
+    #[inline]
+    fn remove_by_global(&mut self, global_id: u32) -> Option<u32> {
+        let local_id = self.global_to_local.remove(&global_id)?;
+        self.local_to_global.remove(&local_id);
+        Some(local_id)
+    }
+}
+
+#[derive(Debug)]
 pub struct ConnectionState {
     core: CoreState,
     client: ClientState,
-    registries: BTreeMap<u32, RegistryState>,
-    factories: BTreeMap<String, u32>,
-    globals: BTreeMap<u32, u32>,
+    registries: Slab<RegistryState>,
+    id_to_registry: BTreeMap<u32, usize>,
+    factories: BTreeMap<String, usize>,
+    globals: GlobalMap,
     state: State,
     has_header: bool,
     header: Header,
-    client_nodes: Vec<ClientNodeState>,
+    client_nodes: Slab<ClientNodeState>,
     id_to_kind: BTreeMap<u32, Kind>,
     ids: Ids,
     fds: VecDeque<ReceivedFd>,
@@ -125,13 +175,14 @@ impl ConnectionState {
         Self {
             core: CoreState::default(),
             client: ClientState::default(),
-            registries: BTreeMap::new(),
+            registries: Slab::new(),
+            id_to_registry: BTreeMap::new(),
             factories: BTreeMap::new(),
-            globals: BTreeMap::new(),
+            globals: GlobalMap::new(),
             state: State::ClientHello,
             has_header: false,
             header: Header::default(),
-            client_nodes: Vec::new(),
+            client_nodes: Slab::new(),
             id_to_kind: BTreeMap::new(),
             ids,
             fds: VecDeque::with_capacity(16),
@@ -164,11 +215,13 @@ impl ConnectionState {
                         tracing::info!("Adding port to client node");
 
                         if let Some(client) = self.client_nodes.get(client) {
-                            // let new_id = self.ids.alloc().context("ran out of identifiers")?;
-                            // c.client_node_get_node(client.id, 3, new_id)?;
-                            // c.client_node_add_port(client.id, consts::Direction::Output, client.port_id)?;
-                            c.client_node_set_active(client.id, true)?;
                             c.client_node_update(client.id)?;
+                            c.client_node_port_update(
+                                client.id,
+                                consts::Direction::Output,
+                                client.port_id,
+                            )?;
+                            c.client_node_set_active(client.id, true)?;
                         }
                     }
                 }
@@ -272,7 +325,7 @@ impl ConnectionState {
         let Some(registry) = self
             .factories
             .get("client-node")
-            .and_then(|id| self.registries.get(id))
+            .and_then(|&id| self.registries.get(id))
         else {
             bail!("No factory for client-node");
         };
@@ -294,10 +347,7 @@ impl ConnectionState {
 
         c.core_create_object("client-node", type_name, version, new_id)?;
 
-        let index = self.client_nodes.len();
-        self.id_to_kind.insert(new_id, Kind::ClientNode(index));
-
-        self.client_nodes.push(ClientNodeState {
+        let index = self.client_nodes.insert(ClientNodeState {
             id: new_id,
             port_id,
             write_fd: None,
@@ -305,6 +355,7 @@ impl ConnectionState {
             activation: None,
         });
 
+        self.id_to_kind.insert(new_id, Kind::ClientNode(index));
         Ok(())
     }
 
@@ -448,9 +499,11 @@ impl ConnectionState {
                 tracing::info!(id, seq, "Intitial registry sync done");
             }
             CREATE_CLIENT_NODE => {
-                tracing::info!("Client node created");
+                tracing::info!(id, seq, "Client node created");
             }
-            _ => {}
+            id => {
+                tracing::warn!(id, seq, "Unknown core done event id");
+            }
         }
 
         Ok(())
@@ -484,19 +537,8 @@ impl ConnectionState {
         let mut st = pod.decode_struct()?;
         let local_id = st.field()?.decode::<u32>()?;
         let global_id = st.field()?.decode::<u32>()?;
+
         self.globals.insert(local_id, global_id);
-
-        tracing::info!(local_id, global_id, "Core bound id");
-
-        if let Some(kind) = self.id_to_kind.get_mut(&local_id) {
-            match *kind {
-                Kind::Registry => {}
-                Kind::ClientNode(index) => {
-                    self.ops.push_back(Op::AddPort { client: index });
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -552,7 +594,9 @@ impl ConnectionState {
 
         let id = st.field()?.decode::<u32>()?;
 
-        let registry = self.registries.entry(id).or_default();
+        let index = self.registries.vacant_key();
+
+        let mut registry = RegistryState::default();
 
         registry.id = id;
         registry.permissions = st.field()?.decode::<i32>()?;
@@ -571,11 +615,31 @@ impl ConnectionState {
 
         if registry.ty == consts::INTERFACE_FACTORY {
             if let Some(name) = registry.properties.get("factory.name") {
-                self.factories.insert(name.clone(), id);
+                self.factories.insert(name.clone(), index);
             }
         }
 
         tracing::trace!(id, ?registry, "Registry global event");
+        self.id_to_registry.insert(id, index);
+        self.registries.insert(registry);
+
+        if let Some(kind) = self
+            .globals
+            .by_global(id)
+            .and_then(|local_id| self.id_to_kind.get_mut(&local_id))
+        {
+            match *kind {
+                Kind::Registry => {}
+                Kind::ClientNode(index) => {
+                    tracing::warn!(
+                        index,
+                        "Found interesting client node that was just registered"
+                    );
+                    self.ops.push_back(Op::AddPort { client: index });
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -584,10 +648,37 @@ impl ConnectionState {
         let mut st = pod.decode_struct()?;
         let id = st.field()?.decode::<u32>()?;
 
-        tracing::info!(id, "Registry global remove event");
+        let Some(registry_index) = self.id_to_registry.remove(&id) else {
+            tracing::warn!(id, "Tried to remove unknown registry");
+            return Ok(());
+        };
 
-        if self.registries.remove(&id).is_none() {
-            tracing::warn!("Tried to remove unknown registry {id}");
+        let Some(registry) = self.registries.try_remove(registry_index) else {
+            tracing::warn!(registry_index, "Tried to remove unknown registry index");
+            return Ok(());
+        };
+
+        tracing::info!(?registry, "Removed registry");
+
+        let Some(local_id) = self.globals.remove_by_global(id) else {
+            tracing::warn!(id, "Tried to remove unknown global id");
+            return Ok(());
+        };
+
+        self.ids.unset(local_id);
+
+        if let Some(kind) = self.id_to_kind.remove(&local_id) {
+            match kind {
+                Kind::Registry => {}
+                Kind::ClientNode(index) => {
+                    let Some(..) = self.client_nodes.try_remove(index) else {
+                        tracing::warn!(index, "Tried to remove unknown client node");
+                        return Ok(());
+                    };
+
+                    tracing::info!(index, "Removed client node");
+                }
+            }
         }
 
         Ok(())
@@ -622,9 +713,7 @@ impl ConnectionState {
     }
 
     #[tracing::instrument(skip_all)]
-    fn handle_client_node_set_param(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        tracing::info!(index, ?pod, "set param");
-
+    fn handle_client_node_set_param(&mut self, _: usize, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
         let param = st.field()?.decode::<id::Param>()?;
         let flags = st.field()?.decode::<i32>()?;
@@ -654,7 +743,7 @@ impl ConnectionState {
             }
         }
 
-        tracing::info!(?param, flags, ?object_type, ?object_id, "set param");
+        tracing::info!(?param, flags, ?object_type, ?object_id, "Set param");
         Ok(())
     }
 
@@ -665,12 +754,12 @@ impl ConnectionState {
         };
 
         let mut st = pod.decode_struct()?;
-        let Id(id) = st.field()?.decode::<Id<u32>>()?;
+        let id = st.field()?.decode::<id::Io>()?;
         let memid = st.field()?.decode::<i32>()?;
         let offset = st.field()?.decode::<i32>()?;
         let size = st.field()?.decode::<i32>()?;
 
-        tracing::info!(index, id, memid, offset, size, "Client node set IO");
+        tracing::info!(index, ?id, memid, offset, size, "Client node set IO");
         Ok(())
     }
 

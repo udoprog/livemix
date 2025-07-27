@@ -56,13 +56,35 @@ pod::macros::flags! {
         pub const INFO = 1 << 1;
     }
 
+    #[examples = [PARAMS]]
+    #[not_set = [INFO]]
+    pub struct ClientNodePortUpdate(u32) {
+        pub const NONE;
+        pub const PARAMS = 1 << 0;
+        pub const INFO = 1 << 1;
+    }
+
     #[examples = [FLAGS, PROPS]]
     #[not_set = [PARAMS]]
-    pub struct NodeChangeMask(u32) {
+    pub struct NodeChangeMask(u64) {
         pub const NONE;
         pub const FLAGS = 1 << 0;
         pub const PROPS = 1 << 1;
         pub const PARAMS = 1 << 2;
+    }
+
+    #[examples = [FLAGS, PROPS]]
+    #[not_set = [PARAMS]]
+    pub struct PortChangeMask(u64) {
+        pub const NONE;
+        /// Same as `SPA_PORT_CHANGE_MASK_FLAGS`.
+        pub const FLAGS = 1 << 0;
+        /// Same as `SPA_PORT_CHANGE_MASK_RATE`.
+        pub const RATE = 1 << 1;
+        /// Same as `SPA_PORT_CHANGE_MASK_PROPS`.
+        pub const PROPS = 1 << 2;
+        /// Same as `SPA_PORT_CHANGE_MASK_PARAMS`.
+        pub const PARAMS = 1 << 3;
     }
 
     #[examples = [RT, NEED_CONFIGURE]]
@@ -83,6 +105,35 @@ pod::macros::flags! {
         pub const NEED_CONFIGURE = 1 << 5;
         /// The process function might not immediately produce or consume data but might offload the work to a worker thread.
         pub const ASYNC = 1 << 6;
+    }
+
+    #[examples = [REMOVABLE, OPTIONAL]]
+    #[not_set = [TERMINAL]]
+    pub struct Port(u64) {
+        pub const NONE;
+        /// Port can be removed.
+        pub const REMOVABLE = 1 << 0;
+        /// Processing on port is optional.
+        pub const OPTIONAL = 1 << 1;
+        /// The port can allocate buffer data.
+        pub const CAN_ALLOC_BUFFERS = 1 << 2;
+        /// The port can process data in-place and will need a writable input
+        /// buffer.
+        pub const IN_PLACE = 1 << 3;
+        /// The port does not keep a ref on the buffer. This means the node will
+        /// always completely consume the input buffer and it will be recycled
+        /// after process.
+        pub const NO_REF = 1 << 4;
+        /// Output buffers from this port are timestamped against a live clock.
+        pub const LIVE = 1 << 5;
+        /// Connects to some device.
+        pub const PHYSICAL = 1 << 6;
+        /// Data was not created from this port or will not be made available on
+        /// another port.
+        pub const TERMINAL = 1 << 7;
+        /// Data pointer on buffers can be changed. Only the buffer data marked
+        /// as DYNAMIC can be changed.
+        pub const DYNAMIC_DATA = 1 << 8;
     }
 
     #[examples = [SERIAL, READ]]

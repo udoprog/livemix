@@ -9,3 +9,4 @@ protocol = { path = "../protocol" }
 
 anyhow = "1.0.98"
 tracing = "0.1.41"
+slab = "0.4.10"
