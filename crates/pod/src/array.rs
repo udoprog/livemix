@@ -5,7 +5,7 @@ use core::slice;
 
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
-use crate::{Error, Reader, Visitor, Writer};
+use crate::{AsReader, Error, Reader, Visitor, Writer};
 
 const DEFAULT_SIZE: usize = 128;
 
@@ -734,6 +734,18 @@ where
     }
 }
 
+impl<T, const N: usize> AsReader<T> for Buf<T, N>
+where
+    T: 'static + Copy,
+{
+    type Reader<'this> = &'this [T];
+
+    #[inline]
+    fn as_reader(&self) -> Self::Reader<'_> {
+        self.as_slice()
+    }
+}
+
 impl<'de, T, const N: usize> Reader<'de, T> for Buf<T, N>
 where
     T: 'static + Copy,
@@ -743,16 +755,9 @@ where
     where
         Self: 'this;
 
-    type Clone<'this> = &'this [T];
-
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         self
-    }
-
-    #[inline]
-    fn clone_reader(&self) -> Self::Clone<'_> {
-        self.as_slice()
     }
 
     #[inline]
@@ -779,7 +784,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
+    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error> {
         let at = at.div_ceil(mem::size_of::<T>() as u32);
 
         let Ok(at) = usize::try_from(at) else {

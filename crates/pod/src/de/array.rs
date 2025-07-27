@@ -1,8 +1,11 @@
 use core::fmt;
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{Error, Reader, Type, TypedPod, WORD_SIZE};
+use crate::{AsReader, Error, Reader, Type, TypedPod, WORD_SIZE};
 
 /// A decoder for an array.
 ///
@@ -81,40 +84,14 @@ use crate::{Error, Reader, Type, TypedPod, WORD_SIZE};
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
 /// ```
-pub struct Array<R> {
-    reader: R,
+pub struct Array<B> {
+    buf: B,
     child_size: u32,
     child_type: Type,
     remaining: u32,
 }
 
-impl<'de, R> Array<R>
-where
-    R: Reader<'de, u64>,
-{
-    #[inline]
-    fn new(reader: R, child_size: u32, child_type: Type, remaining: u32) -> Self {
-        Self {
-            reader,
-            child_size,
-            child_type,
-            remaining,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
-        let (child_size, child_type) = reader.header()?;
-        let remaining = array_remaining(size, child_size, WORD_SIZE)?;
-
-        Ok(Self {
-            reader,
-            child_size,
-            child_type,
-            remaining,
-        })
-    }
-
+impl<B> Array<B> {
     /// Return the type of the child element.
     #[inline]
     pub fn child_type(&self) -> Type {
@@ -164,6 +141,34 @@ where
     pub fn is_empty(&self) -> bool {
         self.remaining == 0
     }
+}
+
+impl<'de, B> Array<B>
+where
+    B: Reader<'de, u64>,
+{
+    #[inline]
+    fn new(buf: B, child_size: u32, child_type: Type, remaining: u32) -> Self {
+        Self {
+            buf,
+            child_size,
+            child_type,
+            remaining,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
+        let (child_size, child_type) = reader.header()?;
+        let remaining = array_remaining(size, child_size, WORD_SIZE)?;
+
+        Ok(Self {
+            buf: reader,
+            child_size,
+            child_type,
+            remaining,
+        })
+    }
 
     /// Get the next element in the array.
     ///
@@ -195,24 +200,100 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn item(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
+    pub fn item(&mut self) -> Result<TypedPod<B::Reader<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
 
-        let tail = self.reader.split(self.child_size)?;
+        let tail = self.buf.split(self.child_size)?;
 
         let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
         Ok(pod)
     }
 
-    /// Convert the [`ArrayDecoder`] into a one borrowing from but without
-    /// modifying the current buffer.
+    /// Coerce into an owned [`Array`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     array.push()?.encode(2i32)?;
+    ///     array.push()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let array = pod.decode_array()?.to_owned();
+    /// let mut array = array.as_ref();
+    ///
+    /// let mut count = 0;
+    ///
+    /// while !array.is_empty() {
+    ///     let pod = array.item()?;
+    ///     assert_eq!(pod.ty(), Type::INT);
+    ///     assert_eq!(pod.size(), 4);
+    ///     count += 1;
+    /// }
+    ///
+    /// assert_eq!(count, 3);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
-    pub fn as_ref(&self) -> Array<R::Clone<'_>> {
+    pub fn to_owned(&self) -> Array<Box<[u64]>> {
+        Array {
+            buf: Box::from(self.buf.as_slice()),
+            child_size: self.child_size,
+            child_type: self.child_type,
+            remaining: self.remaining,
+        }
+    }
+}
+
+impl<B> Array<B>
+where
+    B: AsReader<u64>,
+{
+    /// Coerce into a borrowed [`Array`].
+    ///
+    /// Decoding this object does not affect the original object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_array(Type::INT, |array| {
+    ///     array.push()?.encode(1i32)?;
+    ///     array.push()?.encode(2i32)?;
+    ///     array.push()?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let array = pod.decode_array()?.to_owned();
+    /// let mut array = array.as_ref();
+    ///
+    /// let mut count = 0;
+    ///
+    /// while !array.is_empty() {
+    ///     let pod = array.item()?;
+    ///     assert_eq!(pod.ty(), Type::INT);
+    ///     assert_eq!(pod.size(), 4);
+    ///     count += 1;
+    /// }
+    ///
+    /// assert_eq!(count, 3);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_ref(&self) -> Array<B::Reader<'_>> {
         Array::new(
-            self.reader.clone_reader(),
+            self.buf.as_reader(),
             self.child_size,
             self.child_type,
             self.remaining,
@@ -220,16 +301,16 @@ where
     }
 }
 
-impl<'de, R> fmt::Debug for Array<R>
+impl<B> fmt::Debug for Array<B>
 where
-    R: Reader<'de, u64>,
+    B: AsReader<u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Entries<'a, R>(&'a Array<R>);
+        struct Entries<'a, B>(&'a Array<B>);
 
-        impl<'de, R> fmt::Debug for Entries<'_, R>
+        impl<B> fmt::Debug for Entries<'_, B>
         where
-            R: Reader<'de, u64>,
+            B: AsReader<u64>,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

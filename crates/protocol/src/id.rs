@@ -35,10 +35,10 @@ pod::macros::id! {
     #[example = OPUS]
     pub struct MediaSubType {
         UNKNOWN,
-        RAW = 1,
-        DSP = 2,
-        IEC958 = 3,
-        DSD = 4,
+        RAW = 0x00001,
+        DSP = 0x00002,
+        IEC958 = 0x00003,
+        DSD = 0x00004,
         START_AUDIO = 0x10000,
         MP3 = 0x10001,
         AAC = 0x10002,
@@ -79,6 +79,7 @@ pod::macros::id! {
         CONTROL = 0x60001,
     }
 
+    /// These correspond to the values of `SPA_TYPE_OBJECT_*`.
     #[example = FORMAT]
     pub struct ObjectType {
         UNKNOWN,

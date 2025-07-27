@@ -1,11 +1,14 @@
 use core::fmt;
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, RawId, Reader, Type,
-    TypedPod, Visitor, WORD_SIZE, Writer,
+    AsReader, Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, RawId, Reader,
+    Type, TypedPod, Visitor, WORD_SIZE, Writer,
 };
 
 /// An unlimited pod.
@@ -584,9 +587,10 @@ where
     }
 }
 
-impl<'de, B> Pod<B>
+impl<'de, B, K> Pod<B, K>
 where
     B: Reader<'de, u64>,
+    K: PodKind,
 {
     /// Skip a value in the pod.
     ///
@@ -980,13 +984,6 @@ where
         self.into_typed()?.decode_pod()
     }
 
-    /// Convert the [`Pod`] into a one borrowing from but without modifying the
-    /// current buffer.
-    #[inline]
-    pub fn as_ref(&self) -> Pod<B::Clone<'_>> {
-        Pod::new(self.buf.clone_reader())
-    }
-
     /// Convert the [`Pod`] into a [`TypedPod`] taking ownership of the current
     /// buffer.
     ///
@@ -1016,15 +1013,67 @@ where
     pub fn as_typed_mut(&mut self) -> Result<TypedPod<B::Mut<'_>>, Error> {
         TypedPod::from_reader(self.buf.borrow_mut())
     }
+
+    /// Coerce any pod into an owned pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode(10i32)?;
+    ///
+    /// let pod = pod.to_owned();
+    ///
+    /// assert_eq!(pod.as_ref().decode::<i32>()?, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    pub fn to_owned(&self) -> Pod<Box<[u64]>, K> {
+        Pod {
+            buf: Box::from(self.buf.as_slice()),
+            kind: self.kind,
+        }
+    }
 }
 
-impl<'de, B> fmt::Debug for Pod<B>
+impl<B, K> Pod<B, K>
 where
-    B: Reader<'de, u64>,
+    B: AsReader<u64>,
+    K: PodKind,
+{
+    /// Coerce an owned pod into a borrowed pod which can be used for reading.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode(10i32)?;
+    ///
+    /// let pod = pod.to_owned();
+    ///
+    /// assert_eq!(pod.as_ref().decode::<i32>()?, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_ref(&self) -> Pod<B::Reader<'_>, K> {
+        Pod {
+            buf: self.buf.as_reader(),
+            kind: self.kind,
+        }
+    }
+}
+
+impl<B, K> fmt::Debug for Pod<B, K>
+where
+    B: AsReader<u64>,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.clone_reader()) {
+        match TypedPod::from_reader(self.buf.as_reader()) {
             Ok(pod) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }

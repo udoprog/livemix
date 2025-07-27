@@ -2,6 +2,7 @@
 macro_rules! __id {
     (
         $(
+            $(#[doc = $doc:literal])*
             #[example = $example:ident]
             $ty_vis:vis struct $ty:ident {
                 $default:ident
@@ -12,6 +13,7 @@ macro_rules! __id {
         )*
     ) => {
         $(
+            $(#[doc = $doc])*
             #[derive(Clone, Copy, PartialEq, Eq, Hash)]
             $ty_vis struct $ty(u32);
 

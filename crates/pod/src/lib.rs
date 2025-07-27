@@ -43,7 +43,7 @@ mod writer;
 pub use self::writer::Writer;
 
 mod reader;
-pub use self::reader::Reader;
+pub use self::reader::{AsReader, Reader};
 
 mod visitor;
 pub use self::visitor::Visitor;

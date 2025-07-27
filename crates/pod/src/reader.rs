@@ -1,6 +1,9 @@
 use core::mem::{self, MaybeUninit};
 use core::slice;
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 use crate::error::ErrorKind;
 use crate::utils::{AlignableWith, BytesInhabited, UninitAlign};
 use crate::visitor::Visitor;
@@ -20,10 +23,40 @@ mod sealed {
     }
 }
 
+/// Base trait to convert anything into a reader.
+pub trait AsReader<T>
+where
+    T: Copy,
+{
+    /// A clone of the reader.
+    type Reader<'this>: Reader<'this, T>
+    where
+        Self: 'this;
+
+    /// Borrow the value as a reader.
+    fn as_reader(&self) -> Self::Reader<'_>;
+}
+
+#[cfg(feature = "alloc")]
+impl<T> AsReader<T> for Box<[T]>
+where
+    T: 'static + Copy,
+{
+    type Reader<'this>
+        = &'this [T]
+    where
+        Self: 'this;
+
+    #[inline]
+    fn as_reader(&self) -> Self::Reader<'_> {
+        self
+    }
+}
+
 /// A type that u32 words can be read from.
 pub trait Reader<'de, T>
 where
-    Self: self::sealed::Sealed<T>,
+    Self: AsReader<T> + self::sealed::Sealed<T>,
     T: Copy,
 {
     /// The mutable borrow of a reader.
@@ -31,16 +64,8 @@ where
     where
         Self: 'this;
 
-    /// A clone of the reader.
-    type Clone<'this>: Reader<'this, T>
-    where
-        Self: 'this;
-
     /// Borrow the current reader mutably.
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
-
-    /// Clone the reader.
-    fn clone_reader(&self) -> Self::Clone<'_>;
 
     /// Returns the size of the remaining buffer in bytes.
     ///
@@ -69,7 +94,7 @@ where
     fn skip(&mut self, size: u32) -> Result<(), Error>;
 
     /// Split off the head of the current buffer.
-    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error>;
+    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
@@ -151,6 +176,22 @@ where
     }
 }
 
+impl<'de, R, T> AsReader<T> for &mut R
+where
+    R: ?Sized + Reader<'de, T>,
+    T: Copy,
+{
+    type Reader<'this>
+        = R::Reader<'this>
+    where
+        Self: 'this;
+
+    #[inline]
+    fn as_reader(&self) -> Self::Reader<'_> {
+        (**self).as_reader()
+    }
+}
+
 impl<'de, R, T> Reader<'de, T> for &mut R
 where
     R: ?Sized + Reader<'de, T>,
@@ -161,19 +202,9 @@ where
     where
         Self: 'this;
 
-    type Clone<'this>
-        = R::Clone<'this>
-    where
-        Self: 'this;
-
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         (**self).borrow_mut()
-    }
-
-    #[inline]
-    fn clone_reader(&self) -> Self::Clone<'_> {
-        (**self).clone_reader()
     }
 
     #[inline]
@@ -187,7 +218,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
+    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error> {
         (**self).split(at)
     }
 
@@ -221,6 +252,21 @@ where
     }
 }
 
+impl<'de, T> AsReader<T> for &'de [T]
+where
+    T: 'de + Copy,
+{
+    type Reader<'this>
+        = &'this [T]
+    where
+        Self: 'this;
+
+    #[inline]
+    fn as_reader(&self) -> Self::Reader<'_> {
+        *self
+    }
+}
+
 impl<'de, T> Reader<'de, T> for &'de [T]
 where
     T: 'de + Copy,
@@ -230,19 +276,9 @@ where
     where
         Self: 'this;
 
-    type Clone<'this>
-        = &'this [T]
-    where
-        Self: 'this;
-
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         self
-    }
-
-    #[inline]
-    fn clone_reader(&self) -> Self::Clone<'_> {
-        *self
     }
 
     #[inline]
@@ -267,7 +303,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: u32) -> Result<Self::Clone<'_>, Error> {
+    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error> {
         let Ok(at) = usize::try_from(at) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };

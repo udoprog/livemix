@@ -1,12 +1,15 @@
 use core::fmt;
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{ChoiceType, Error, Reader, Type, TypedPod, WORD_SIZE};
+use crate::{AsReader, ChoiceType, Error, Reader, Type, TypedPod, WORD_SIZE};
 
 /// A decoder for a choice.
-pub struct Choice<R> {
-    reader: R,
+pub struct Choice<B> {
+    buf: B,
     ty: ChoiceType,
     flags: u32,
     child_size: u32,
@@ -14,46 +17,7 @@ pub struct Choice<R> {
     remaining: u32,
 }
 
-impl<'de, R> Choice<R>
-where
-    R: Reader<'de, u64>,
-{
-    #[inline]
-    pub fn new(
-        reader: R,
-        ty: ChoiceType,
-        flags: u32,
-        child_size: u32,
-        child_type: Type,
-        remaining: u32,
-    ) -> Self {
-        Self {
-            reader,
-            ty,
-            flags,
-            child_size,
-            child_type,
-            remaining,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
-        let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
-        let ty = ChoiceType::from_u32(ty);
-        let child_type = Type::new(child_type);
-        let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
-
-        Ok(Self {
-            reader,
-            ty,
-            flags,
-            child_size,
-            child_type,
-            remaining,
-        })
-    }
-
+impl<B> Choice<B> {
     /// Return the type of the choice.
     ///
     /// # Examples
@@ -99,6 +63,47 @@ where
     #[inline]
     pub const fn child_size(&self) -> u32 {
         self.child_size
+    }
+}
+
+impl<'de, B> Choice<B>
+where
+    B: Reader<'de, u64>,
+{
+    #[inline]
+    pub fn new(
+        buf: B,
+        ty: ChoiceType,
+        flags: u32,
+        child_size: u32,
+        child_type: Type,
+        remaining: u32,
+    ) -> Self {
+        Self {
+            buf,
+            ty,
+            flags,
+            child_size,
+            child_type,
+            remaining,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
+        let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
+        let ty = ChoiceType::from_u32(ty);
+        let child_type = Type::new(child_type);
+        let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
+
+        Ok(Self {
+            buf: reader,
+            ty,
+            flags,
+            child_size,
+            child_type,
+            remaining,
+        })
     }
 
     /// Get the number of elements left to decode from the array.
@@ -174,24 +179,106 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn entry(&mut self) -> Result<TypedPod<R::Clone<'_>>, Error> {
+    pub fn entry(&mut self) -> Result<TypedPod<B::Reader<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
 
-        let tail = self.reader.split(self.child_size)?;
+        let tail = self.buf.split(self.child_size)?;
 
         let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
         Ok(pod)
     }
 
-    /// Convert the [`ChoiceDecoder`] into a one borrowing from but without
-    /// modifying the current buffer.
+    /// Coerce into an owned [`Choice`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ChoiceType, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(10i32)?;
+    ///     choice.entry()?.encode(0i32)?;
+    ///     choice.entry()?.encode(30i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let choice = pod.decode_choice()?.to_owned();
+    /// assert_eq!(choice.ty(), ChoiceType::RANGE);
+    ///
+    /// let mut choice = choice.as_ref();
+    ///
+    /// let mut count = 0;
+    ///
+    /// while !choice.is_empty() {
+    ///     let pod = choice.entry()?;
+    ///     assert_eq!(pod.ty(), Type::INT);
+    ///     assert_eq!(pod.size(), 4);
+    ///     count += 1;
+    /// }
+    ///
+    /// assert_eq!(count, 3);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
-    pub fn as_ref(&self) -> Choice<R::Clone<'_>> {
+    pub fn to_owned(&self) -> Choice<Box<[u64]>> {
+        Choice {
+            buf: Box::from(self.buf.as_slice()),
+            ty: self.ty,
+            flags: self.flags,
+            child_size: self.child_size,
+            child_type: self.child_type,
+            remaining: self.remaining,
+        }
+    }
+}
+
+impl<B> Choice<B>
+where
+    B: AsReader<u64>,
+{
+    /// Coerce into a borrowed [`Choice`].
+    ///
+    /// Decoding this object does not affect the original object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ChoiceType, Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.entry()?.encode(10i32)?;
+    ///     choice.entry()?.encode(0i32)?;
+    ///     choice.entry()?.encode(30i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let choice = pod.decode_choice()?.to_owned();
+    /// assert_eq!(choice.ty(), ChoiceType::RANGE);
+    ///
+    /// let mut choice = choice.as_ref();
+    ///
+    /// let mut count = 0;
+    ///
+    /// while !choice.is_empty() {
+    ///     let pod = choice.entry()?;
+    ///     assert_eq!(pod.ty(), Type::INT);
+    ///     assert_eq!(pod.size(), 4);
+    ///     count += 1;
+    /// }
+    ///
+    /// assert_eq!(count, 3);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_ref(&self) -> Choice<B::Reader<'_>> {
         Choice::new(
-            self.reader.clone_reader(),
+            self.buf.as_reader(),
             self.ty,
             self.flags,
             self.child_size,
@@ -201,16 +288,16 @@ where
     }
 }
 
-impl<'de, R> fmt::Debug for Choice<R>
+impl<B> fmt::Debug for Choice<B>
 where
-    R: Reader<'de, u64>,
+    B: AsReader<u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Entries<'a, R>(&'a Choice<R>);
+        struct Entries<'a, B>(&'a Choice<B>);
 
-        impl<'de, R> fmt::Debug for Entries<'_, R>
+        impl<B> fmt::Debug for Entries<'_, B>
         where
-            R: Reader<'de, u64>,
+            B: AsReader<u64>,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

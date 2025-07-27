@@ -1,50 +1,20 @@
 use core::fmt;
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 use crate::error::ErrorKind;
-use crate::{Control, Error, Reader, TypedPod, WORD_SIZE};
+use crate::{AsReader, Control, Error, Reader, TypedPod, WORD_SIZE};
 
 /// A decoder for a sequence.
-pub struct Sequence<R> {
-    reader: R,
+pub struct Sequence<B> {
+    buf: B,
     size: u32,
     unit: u32,
     pad: u32,
 }
 
-impl<'de, R> Sequence<R>
-where
-    R: Reader<'de, u64>,
-{
-    #[inline]
-    pub fn new(reader: R, size: u32, unit: u32, pad: u32) -> Self {
-        Self {
-            reader,
-            size,
-            unit,
-            pad,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
-        let [unit, pad] = reader.read::<[u32; 2]>()?;
-
-        // Remove the size of the object header.
-        let Some(size) = size.checked_sub(WORD_SIZE) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size,
-                sub: WORD_SIZE,
-            }));
-        };
-
-        Ok(Self {
-            reader,
-            size,
-            unit,
-            pad,
-        })
-    }
-
+impl<B> Sequence<B> {
     /// Get the unit of the sequence.
     ///
     /// # Examples
@@ -91,6 +61,41 @@ where
     #[inline]
     pub const fn pad(&self) -> u32 {
         self.pad
+    }
+}
+
+impl<'de, B> Sequence<B>
+where
+    B: Reader<'de, u64>,
+{
+    #[inline]
+    pub fn new(buf: B, size: u32, unit: u32, pad: u32) -> Self {
+        Self {
+            buf,
+            size,
+            unit,
+            pad,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
+        let [unit, pad] = reader.read::<[u32; 2]>()?;
+
+        // Remove the size of the object header.
+        let Some(size) = size.checked_sub(WORD_SIZE) else {
+            return Err(Error::new(ErrorKind::SizeUnderflow {
+                size,
+                sub: WORD_SIZE,
+            }));
+        };
+
+        Ok(Self {
+            buf: reader,
+            size,
+            unit,
+            pad,
+        })
     }
 
     /// Test if the decoder is empty.
@@ -145,14 +150,14 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn control(&mut self) -> Result<Control<R::Clone<'_>>, Error> {
+    pub fn control(&mut self) -> Result<Control<B::Reader<'_>>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
 
-        let [control_offset, control_ty] = self.reader.read::<[u32; 2]>()?;
-        let (size, ty) = self.reader.header()?;
-        let pod = TypedPod::new(size, ty, self.reader.split(size)?);
+        let [control_offset, control_ty] = self.buf.read::<[u32; 2]>()?;
+        let (size, ty) = self.buf.header()?;
+        let pod = TypedPod::new(size, ty, self.buf.split(size)?);
 
         let Some(size_with_header) = pod
             .size_with_header()
@@ -172,24 +177,90 @@ where
         Ok(Control::new(control_offset, control_ty, pod))
     }
 
-    /// Convert the [`SequenceDecoder`] into a one borrowing from but without
-    /// modifying the current buffer.
+    /// Coerce into an owned [`Sequence`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, TypedPod};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 2)?.encode(1i32)?;
+    ///     seq.control(1, 2)?.encode(2i32)?;
+    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let seq = pod.decode_sequence()?.to_owned();
+    ///
+    /// let mut seq = seq.as_ref();
+    /// assert!(!seq.is_empty());
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert!(seq.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[cfg(feature = "alloc")]
     #[inline]
-    pub fn as_ref(&self) -> Sequence<R::Clone<'_>> {
-        Sequence::new(self.reader.clone_reader(), self.size, self.unit, self.pad)
+    pub fn to_owned(&self) -> Sequence<Box<[u64]>> {
+        Sequence {
+            buf: Box::from(self.buf.as_slice()),
+            size: self.size,
+            unit: self.unit,
+            pad: self.pad,
+        }
     }
 }
 
-impl<'de, R> fmt::Debug for Sequence<R>
+impl<B> Sequence<B>
 where
-    R: Reader<'de, u64>,
+    B: AsReader<u64>,
+{
+    /// Coerce into a borrowed [`Sequence`].
+    ///
+    /// Decoding this object does not affect the original object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, TypedPod};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode_sequence(|seq| {
+    ///     seq.control(1, 2)?.encode(1i32)?;
+    ///     seq.control(1, 2)?.encode(2i32)?;
+    ///     seq.control(1, 2)?.encode(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let seq = pod.decode_sequence()?.to_owned();
+    ///
+    /// let mut seq = seq.as_ref();
+    /// assert!(!seq.is_empty());
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert!(seq.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_ref(&self) -> Sequence<B::Reader<'_>> {
+        Sequence::new(self.buf.as_reader(), self.size, self.unit, self.pad)
+    }
+}
+
+impl<B> fmt::Debug for Sequence<B>
+where
+    B: AsReader<u64>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Controls<'a, R>(&'a Sequence<R>);
+        struct Controls<'a, B>(&'a Sequence<B>);
 
-        impl<'de, R> fmt::Debug for Controls<'_, R>
+        impl<B> fmt::Debug for Controls<'_, B>
         where
-            R: Reader<'de, u64>,
+            B: AsReader<u64>,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

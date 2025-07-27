@@ -250,7 +250,7 @@ impl Connection {
         let mut pod = Pod::array();
 
         let mut change_mask = flags::ClientNodeUpdate::NONE;
-
+        change_mask |= flags::ClientNodeUpdate::PARAMS;
         change_mask |= flags::ClientNodeUpdate::INFO;
 
         let max_input_ports = 2u32;
@@ -264,7 +264,34 @@ impl Connection {
 
         pod.as_mut().encode_struct(|st| {
             st.field()?.encode(change_mask)?;
-            st.field()?.encode(0u32)?;
+
+            st.field()?.encode(2)?;
+
+            st.field()?
+                .encode_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
+                    obj.property(id::Format::MEDIA_TYPE, 0)?
+                        .encode(id::MediaType::AUDIO)?;
+                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                        .encode(id::MediaSubType::RAW)?;
+                    obj.property(id::Format::AUDIO_FORMAT, 0)?
+                        .encode(id::AudioFormat::S16)?;
+                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(1u32)?;
+                    obj.property(id::Format::AUDIO_RATE, 0)?.encode(44100u32)?;
+                    Ok(())
+                })?;
+
+            st.field()?
+                .encode_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
+                    obj.property(id::Format::MEDIA_TYPE, 0)?
+                        .encode(id::MediaType::AUDIO)?;
+                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                        .encode(id::MediaSubType::RAW)?;
+                    obj.property(id::Format::AUDIO_FORMAT, 0)?
+                        .encode(id::AudioFormat::S16)?;
+                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(1u32)?;
+                    obj.property(id::Format::AUDIO_RATE, 0)?.encode(44100u32)?;
+                    Ok(())
+                })?;
 
             if change_mask & flags::ClientNodeUpdate::INFO {
                 st.field()?.encode_struct(|st| {
@@ -338,7 +365,7 @@ impl Connection {
                         .encode(id::MediaSubType::RAW)?;
                     obj.property(id::Format::AUDIO_FORMAT, 0)?
                         .encode(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(2u32)?;
+                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(1u32)?;
                     obj.property(id::Format::AUDIO_RATE, 0)?.encode(44100u32)?;
                     Ok(())
                 })?;
@@ -351,7 +378,7 @@ impl Connection {
                         .encode(id::MediaSubType::RAW)?;
                     obj.property(id::Format::AUDIO_FORMAT, 0)?
                         .encode(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(2u32)?;
+                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(1u32)?;
                     obj.property(id::Format::AUDIO_RATE, 0)?.encode(44100u32)?;
                     Ok(())
                 })?;

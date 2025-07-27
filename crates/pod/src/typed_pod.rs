@@ -5,8 +5,8 @@ use crate::bstr::BStr;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
-    Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pod, Pointer, Reader, Rectangle, Type,
-    Visitor, WORD_SIZE,
+    AsReader, Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pod, Pointer, Reader,
+    Rectangle, Type, Visitor, WORD_SIZE,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -487,12 +487,17 @@ where
             })),
         }
     }
+}
 
+impl<B> TypedPod<B>
+where
+    B: AsReader<u64>,
+{
     /// Convert the [`TypedPod`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> TypedPod<B::Clone<'_>> {
-        TypedPod::new(self.size, self.ty, self.buf.clone_reader())
+    pub fn as_ref(&self) -> TypedPod<B::Reader<'_>> {
+        TypedPod::new(self.size, self.ty, self.buf.as_reader())
     }
 }
 
