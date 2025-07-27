@@ -3,20 +3,22 @@ macro_rules! declare_id {
         $(
             #[example = $example:ident]
             $ty_vis:vis enum $ty:ident {
-                $default:ident = $default_value:expr,
-                $(
+                $default:ident
+                $(,
                     $(#[$($field_meta:meta)*])* $field:ident = $field_value:expr
-                ),* $(,)?
+                )* $(,)?
             }
         )*
     ) => {
         $(
-            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-            #[repr(u32)]
-            $ty_vis enum $ty {
-                $default = $default_value,
+            #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+            $ty_vis struct $ty(u32);
+
+            impl $ty {
                 $(
-                    $(#[$($field_meta)*])* $field = $field_value,
+                    $(
+                        #[$($field_meta)*])*
+                        $ty_vis const $field: Self = Self($field_value);
                 )*
             }
 
@@ -89,7 +91,7 @@ macro_rules! declare_id {
             /// pod.as_mut().encode(Id(u32::MAX / 2))?;
             ///
             #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
-            #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($default), ");")]
+            /// assert!(id.is_invalid());
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl<'de> $crate::Decode<'de> for $ty {
@@ -103,10 +105,18 @@ macro_rules! declare_id {
             }
 
             impl $ty {
+                /// Test if the identifier is invalid.
+                pub fn is_invalid(&self) -> bool {
+                    match self.0 {
+                        $($field_value => false,)*
+                        _ => true,
+                    }
+                }
+
                 /// Get the identifier value.
                 #[inline]
                 pub fn into_id(self) -> u32 {
-                    self as u32
+                    self.0
                 }
 
                 /// Convert an identifier value into the type.
@@ -114,7 +124,7 @@ macro_rules! declare_id {
                 pub fn from_id(value: u32) -> Self {
                     match value {
                         $($field_value => Self::$field,)*
-                        _ => Self::$default,
+                        _ => Self(value),
                     }
                 }
             }
@@ -130,185 +140,189 @@ macro_rules! declare_id {
                     <$ty>::from_id(value)
                 }
             }
+
+            impl core::fmt::Debug for $ty {
+                #[inline]
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    match self.0 {
+                        $($field_value => write!(f, "{}", stringify!($field)),)*
+                        _ => write!(f, "{}({})", stringify!($default), self.0),
+                    }
+                }
+            }
         )*
     };
 }
 
 declare_id! {
-    #[example = Format]
+    #[example = FORMAT]
     pub enum Param {
-        Invalid = 0,
-        PropInfo = 1,
-        Props = 2,
-        EnumFormat = 3,
-        Format = 4,
-        Buffers = 5,
-        Meta = 6,
+        UNKNOWN,
+        PROP_INFO = 1,
+        PROPS = 2,
+        ENUM_FORMAT = 3,
+        FORMAT = 4,
+        BUFFERS = 5,
+        META = 6,
         IO = 7,
-        EnumProfile = 8,
-        Profile = 9,
-        EnumPortConfig = 10,
-        PortConfig = 11,
-        EnumRoute = 12,
-        Route = 13,
-        Control = 14,
-        Latency = 15,
-        ProcessLatency = 16,
-        Tag = 17,
+        ENUM_PROFILE = 8,
+        PROFILE = 9,
+        ENUM_PORT_CONFIG = 10,
+        PORT_CONFIG = 11,
+        ENUM_ROUTE = 12,
+        ROUTE = 13,
+        CONTROL = 14,
+        LATENCY = 15,
+        PROCESS_LATENCY = 16,
+        TAG = 17,
     }
 
-    #[example = Opus]
+    #[example = OPUS]
     pub enum MediaSubType {
-        Unknown = 0,
-        Raw = 1,
-        Dsp = 2,
-        Iec958 = 3,
-        Dsd = 4,
-        StartAudio = 0x10000,
-        Mp3 = 0x10001,
-        Aac = 0x10002,
-        Vorbis = 0x10003,
-        Wma = 0x10004,
-        Ra = 0x10005,
-        Sbc = 0x10006,
-        Adpcm = 0x10007,
+        UNKNOWN,
+        RAW = 1,
+        DSP = 2,
+        IEC958 = 3,
+        DSD = 4,
+        START_AUDIO = 0x10000,
+        MP3 = 0x10001,
+        AAC = 0x10002,
+        VORBIS = 0x10003,
+        WMA = 0x10004,
+        RA = 0x10005,
+        SBC = 0x10006,
+        ADPCM = 0x10007,
         G723 = 0x10008,
         G726 = 0x10009,
         G729 = 0x1000a,
-        Amr = 0x1000b,
-        Gsm = 0x1000c,
-        Alac = 0x1000d,
-        Flac = 0x1000e,
-        Ape = 0x1000f,
-        Opus = 0x10010,
-        StartVideo = 0x20000,
+        AMR = 0x1000b,
+        GSM = 0x1000c,
+        ALAC = 0x1000d,
+        FLAC = 0x1000e,
+        APE = 0x1000f,
+        OPUS = 0x10010,
+        START_VIDEO = 0x20000,
         H264 = 0x20001,
-        Mjpg = 0x20002,
-        Dv = 0x20003,
-        Mpegts = 0x20004,
+        MJPG = 0x20002,
+        DV = 0x20003,
+        MPEGTS = 0x20004,
         H263 = 0x20005,
-        Mpeg1 = 0x20006,
-        Mpeg2 = 0x20007,
-        Mpeg4 = 0x20008,
-        Xvid = 0x20009,
-        Vc1 = 0x2000a,
-        Vp8 = 0x2000b,
-        Vp9 = 0x2000c,
-        Bayer = 0x2000d,
-        StartImage = 0x30000,
-        Jpeg = 0x30001,
-        StartBinary = 0x40000,
-        StartStream = 0x50000,
-        Midi = 0x50001,
-        StartApplication = 0x60000,
-        Control = 0x60001,
+        MPEG1 = 0x20006,
+        MPEG2 = 0x20007,
+        MPEG4 = 0x20008,
+        XVID = 0x20009,
+        VC1 = 0x2000a,
+        VP8 = 0x2000b,
+        VP9 = 0x2000c,
+        BAYER = 0x2000d,
+        START_IMAGE = 0x30000,
+        JPEG = 0x30001,
+        START_BINARY = 0x40000,
+        START_STREAM = 0x50000,
+        MIDI = 0x50001,
+        START_APPLICATION = 0x60000,
+        CONTROL = 0x60001,
     }
 
-    #[example = Format]
+    #[example = FORMAT]
     pub enum ObjectType {
-        Invalid = 0x40000,
-        PropInfo = 0x40001,
-        Props = 0x40002,
-        Format = 0x40003,
-        ParamBuffers = 0x40004,
-        ParamMeta = 0x40005,
-        ParamIO = 0x40006,
-        ParamProfile = 0x40007,
-        ParamPortConfig = 0x40008,
-        ParamRoute = 0x40009,
-        Profiler = 0x4000a,
-        ParamLatency = 0x4000b,
-        ParamProcessLatency = 0x4000c,
-        ParamTag = 0x4000d,
+        UNKNOWN,
+        PROP_INFO = 0x40001,
+        PROPS = 0x40002,
+        FORMAT = 0x40003,
+        PARAM_BUFFERS = 0x40004,
+        PARAM_META = 0x40005,
+        PARAM_IO = 0x40006,
+        PARAM_PROFILE = 0x40007,
+        PARAM_PORT_CONFIG = 0x40008,
+        PARAM_ROUTE = 0x40009,
+        PROFILER = 0x4000a,
+        PARAM_LATENCY = 0x4000b,
+        PARAM_PROCESS_LATENCY = 0x4000c,
+        PARAM_TAG = 0x4000d,
     }
 
-    #[example = Frequency]
+    #[example = FREQUENCY]
     pub enum Prop {
-        Unknown = 0,
-
-        StartDevice = 0x100,
-        Device = 0x101,
-        DeviceName = 0x102,
-        DeviceFd = 0x103,
-        Card = 0x104,
-        CardName = 0x105,
-
-        MinLatency = 0x106,
-        MaxLatency = 0x107,
-        Periods = 0x108,
-        PeriodSize = 0x109,
-        PeriodEvent = 0x10a,
-        Live = 0x10b,
-        Rate = 0x10c,
-        Quality = 0x10d,
-        BluetoothAudioCodec = 0x10e,
-        BluetoothOffloadActive = 0x10f,
-
-        StartAudio = 0x10000,
-        WaveType = 0x10001,
-        Frequency = 0x10002,
+        UNKNOWN,
+        START_DEVICE = 0x100,
+        DEVICE = 0x101,
+        DEVICE_NAME = 0x102,
+        DEVICE_FD = 0x103,
+        CARD = 0x104,
+        CARD_NAME = 0x105,
+        MIN_LATENCY = 0x106,
+        MAX_LATENCY = 0x107,
+        PERIODS = 0x108,
+        PERIOD_SIZE = 0x109,
+        PERIOD_EVENT = 0x10a,
+        LIVE = 0x10b,
+        RATE = 0x10c,
+        QUALITY = 0x10d,
+        BLUETOOTH_AUDIO_CODEC = 0x10e,
+        BLUETOOTH_OFFLOAD_ACTIVE = 0x10f,
+        START_AUDIO = 0x10000,
+        WAVE_TYPE = 0x10001,
+        FREQUENCY = 0x10002,
         /// A volume (Float), 0.0 silence, 1.0 no attenutation.
-        Volume = 0x10003,
+        VOLUME = 0x10003,
         /// Mute (Bool)
-        Mute = 0x10004,
-        PatternType = 0x10005,
-        DitherType = 0x10006,
-        Truncate = 0x10007,
+        MUTE = 0x10004,
+        PATTERN_TYPE = 0x10005,
+        DITHER_TYPE = 0x10006,
+        TRUNCATE = 0x10007,
         /// A volume array, one (linear) volume per channel (Array of Float).
         /// 0.0 is silence, 1.0 is without attenuation. This is the effective
         /// volume that is applied. It can result in a hardware volume and
         /// software volume (see softVolumes)
-        ChannelVolumes = 0x10008,
+        CHANNEL_VOLUMES = 0x10008,
         /// A volume base (Float)
-        VolumeBase = 0x10009,
+        VOLUME_BASE = 0x10009,
         /// A volume step (Float)
-        VolumeStep = 0x1000a,
+        VOLUME_STEP = 0x1000a,
         /// A channelmap array (Array (Id enum spa_audio_channel)).
-        ChannelMap = 0x1000b,
+        CHANNEL_MAP = 0x1000b,
         /// mute (Bool)
-        MonitorMute = 0x1000c,
+        MONITOR_MUTE = 0x1000c,
         /// a volume array, one (linear) volume per channel (Array of Float).
-        MonitorVolumes = 0x1000d,
+        MONITOR_VOLUMES = 0x1000d,
         /// Delay adjustment.
-        LatencyOffsetNsec = 0x1000e,
+        LATENCY_OFFSET_NSEC = 0x1000e,
         /// Mute (Bool) applied in software.
-        SoftMute = 0x1000f,
+        SOFT_MUTE = 0x1000f,
         /// A volume array, one (linear) volume per channel
         /// (Array of Float). 0.0 is silence, 1.0 is without
         /// attenuation. This is the volume applied in
         /// software, there might be a part applied in
         /// hardware.
-        SoftVolumes = 0x10010,
-
+        SOFT_VOLUMES = 0x10010,
         /// Enabled IEC958 (S/PDIF) codecs (Array (Id enum spa_audio_iec958_codec).
-        Iec958Codecs = 0x10011,
+        IEC958_CODECS = 0x10011,
         /// Samples to ramp the volume over.
-        VolumeRampSamples = 0x10012,
+        VOLUME_RAMP_SAMPLES = 0x10012,
         /// Step or incremental Samples to ramp the volume over.
-        VolumeRampStepSamples = 0x10013,
+        VOLUME_RAMP_STEP_SAMPLES = 0x10013,
         /// Time in millisec to ramp the volume over.
-        VolumeRampTime = 0x10014,
+        VOLUME_RAMP_TIME = 0x10014,
         /// Step or incremental Time in nano seconds to ramp the.
-        VolumeRampStepTime = 0x10015,
+        VOLUME_RAMP_STEP_TIME = 0x10015,
         /// The scale or graph to used to ramp the volume.
-        VolumeRampScale = 0x10016,
-
+        VOLUME_RAMP_SCALE = 0x10016,
         /// Video related properties.
-        StartVideo = 0x20000,
-        Brightness = 0x20001,
-        Contrast = 0x20002,
-        Saturation = 0x20003,
-        Hue = 0x20004,
-        Gamma = 0x20005,
-        Exposure = 0x20006,
-        Gain = 0x20007,
-        Sharpness = 0x20008,
-
+        START_VIDEO = 0x20000,
+        BRIGHTNESS = 0x20001,
+        CONTRAST = 0x20002,
+        SATURATION = 0x20003,
+        HUE = 0x20004,
+        GAMMA = 0x20005,
+        EXPOSURE = 0x20006,
+        GAIN = 0x20007,
+        SHARPNESS = 0x20008,
         /// Other properties.
-        StartOther = 0x80000,
+        START_OTHER = 0x80000,
         /// simple control params (Struct((String: key, Pod: value)*)).
-        Params = 0x80001,
-        StartCustom = 0x1000000,
+        PARAMS = 0x80001,
+        START_CUSTOM = 0x1000000,
     }
 }
 

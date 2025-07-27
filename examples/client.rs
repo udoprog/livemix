@@ -605,12 +605,12 @@ impl ConnectionState {
         let object_id = id::Param::from_id(obj.object_id());
 
         match object_id {
-            id::Param::Props => {
+            id::Param::PROPS => {
                 while !obj.is_empty() {
                     let p = obj.property()?;
 
                     match id::Prop::from_id(p.key()) {
-                        id::Prop::ChannelVolumes => {
+                        id::Prop::CHANNEL_VOLUMES => {
                             let value = p.value().decode_array()?;
                             tracing::info!(?value, "Set channel volumes");
                         }
