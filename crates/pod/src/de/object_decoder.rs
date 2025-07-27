@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::error::ErrorKind;
 use crate::{Error, Property, Reader, TypedPod, WORD_SIZE};
 
@@ -13,6 +15,16 @@ impl<'de, R> ObjectDecoder<R>
 where
     R: Reader<'de, u64>,
 {
+    #[inline]
+    fn new(reader: R, size: u32, object_type: u32, object_id: u32) -> Self {
+        Self {
+            reader,
+            size,
+            object_type,
+            object_id,
+        }
+    }
+
     #[inline]
     pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
         let [object_type, object_id] = reader.read::<[u32; 2]>()?;
@@ -148,5 +160,57 @@ where
 
         self.size = size;
         Ok(Property::new(key, flags, pod))
+    }
+
+    /// Convert the [`ObjectDecoder`] into a one borrowing from but without
+    /// modifying the current buffer.
+    #[inline]
+    pub fn as_ref(&self) -> ObjectDecoder<R::Clone<'_>> {
+        ObjectDecoder::new(
+            self.reader.clone_reader(),
+            self.size,
+            self.object_type,
+            self.object_id,
+        )
+    }
+}
+
+impl<'de, R> fmt::Debug for ObjectDecoder<R>
+where
+    R: Reader<'de, u64>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Properties<'a, R>(&'a ObjectDecoder<R>);
+
+        impl<'de, R> fmt::Debug for Properties<'_, R>
+        where
+            R: Reader<'de, u64>,
+        {
+            #[inline]
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut this = self.0.as_ref();
+
+                let mut f = f.debug_list();
+
+                while !this.is_empty() {
+                    match this.property() {
+                        Ok(prop) => {
+                            f.entry(&prop);
+                        }
+                        Err(e) => {
+                            f.entry(&e);
+                        }
+                    }
+                }
+
+                f.finish()
+            }
+        }
+
+        let mut f = f.debug_struct("Object");
+        f.field("object_type", &self.object_type());
+        f.field("object_id", &self.object_id());
+        f.field("properties", &Properties(self));
+        f.finish()
     }
 }

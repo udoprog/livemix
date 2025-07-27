@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::error::ErrorKind;
 use crate::{Error, Reader, TypedPod};
 
@@ -92,5 +94,50 @@ where
 
         self.size = size;
         Ok(pod)
+    }
+
+    /// Convert the [`StructDecoder`] into a one borrowing from but without
+    /// modifying the current buffer.
+    #[inline]
+    pub fn as_ref(&self) -> StructDecoder<R::Clone<'_>> {
+        StructDecoder::new(self.reader.clone_reader(), self.size)
+    }
+}
+
+impl<'de, R> fmt::Debug for StructDecoder<R>
+where
+    R: Reader<'de, u64>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Fields<'a, R>(&'a StructDecoder<R>);
+
+        impl<'de, R> fmt::Debug for Fields<'_, R>
+        where
+            R: Reader<'de, u64>,
+        {
+            #[inline]
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut this = self.0.as_ref();
+
+                let mut f = f.debug_list();
+
+                while !this.is_empty() {
+                    match this.field() {
+                        Ok(field) => {
+                            f.entry(&field);
+                        }
+                        Err(e) => {
+                            f.entry(&e);
+                        }
+                    }
+                }
+
+                f.finish()
+            }
+        }
+
+        let mut f = f.debug_struct("Struct");
+        f.field("fields", &Fields(self));
+        f.finish()
     }
 }

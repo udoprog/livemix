@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::error::ErrorKind;
 use crate::{Control, Error, Reader, TypedPod, WORD_SIZE};
 
@@ -13,6 +15,16 @@ impl<'de, R> SequenceDecoder<R>
 where
     R: Reader<'de, u64>,
 {
+    #[inline]
+    pub fn new(reader: R, size: u32, unit: u32, pad: u32) -> Self {
+        Self {
+            reader,
+            size,
+            unit,
+            pad,
+        }
+    }
+
     #[inline]
     pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
         let [unit, pad] = reader.read::<[u32; 2]>()?;
@@ -158,5 +170,52 @@ where
 
         self.size = size;
         Ok(Control::new(control_offset, control_ty, pod))
+    }
+
+    /// Convert the [`SequenceDecoder`] into a one borrowing from but without
+    /// modifying the current buffer.
+    #[inline]
+    pub fn as_ref(&self) -> SequenceDecoder<R::Clone<'_>> {
+        SequenceDecoder::new(self.reader.clone_reader(), self.size, self.unit, self.pad)
+    }
+}
+
+impl<'de, R> fmt::Debug for SequenceDecoder<R>
+where
+    R: Reader<'de, u64>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Controls<'a, R>(&'a SequenceDecoder<R>);
+
+        impl<'de, R> fmt::Debug for Controls<'_, R>
+        where
+            R: Reader<'de, u64>,
+        {
+            #[inline]
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut this = self.0.as_ref();
+
+                let mut f = f.debug_list();
+
+                while !this.is_empty() {
+                    match this.control() {
+                        Ok(control) => {
+                            f.entry(&control);
+                        }
+                        Err(e) => {
+                            f.entry(&e);
+                        }
+                    }
+                }
+
+                f.finish()
+            }
+        }
+
+        let mut f = f.debug_struct("Sequence");
+        f.field("unit", &self.unit());
+        f.field("pad", &self.pad());
+        f.field("controls", &Controls(self));
+        f.finish()
     }
 }

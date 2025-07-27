@@ -604,9 +604,25 @@ impl ConnectionState {
         let object_type = id::ObjectType::from_id(obj.object_type());
         let object_id = id::Param::from_id(obj.object_id());
 
-        while !obj.is_empty() {
-            let p = obj.property()?;
-            dbg!(id::Prop::from_id(p.key()));
+        match object_id {
+            id::Param::Props => {
+                while !obj.is_empty() {
+                    let p = obj.property()?;
+
+                    match id::Prop::from_id(p.key()) {
+                        id::Prop::ChannelVolumes => {
+                            let value = p.value().decode_array()?;
+                            tracing::info!(?value, "Set channel volumes");
+                        }
+                        prop => {
+                            tracing::warn!(?prop, "Unsupported property in set param");
+                        }
+                    }
+                }
+            }
+            id => {
+                tracing::warn!(?id, "Unsupported param in set param");
+            }
         }
 
         tracing::info!(?param, flags, ?object_type, ?object_id, "set param");

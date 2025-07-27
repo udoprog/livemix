@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
 use crate::{Choice, Error, Reader, Type, TypedPod, WORD_SIZE};
@@ -6,7 +8,6 @@ use crate::{Choice, Error, Reader, Type, TypedPod, WORD_SIZE};
 pub struct ChoiceDecoder<R> {
     reader: R,
     ty: Choice,
-    #[allow(unused)]
     flags: u32,
     child_size: u32,
     child_type: Type,
@@ -17,6 +18,25 @@ impl<'de, R> ChoiceDecoder<R>
 where
     R: Reader<'de, u64>,
 {
+    #[inline]
+    pub fn new(
+        reader: R,
+        ty: Choice,
+        flags: u32,
+        child_size: u32,
+        child_type: Type,
+        remaining: u32,
+    ) -> Self {
+        Self {
+            reader,
+            ty,
+            flags,
+            child_size,
+            child_type,
+            remaining,
+        }
+    }
+
     #[inline]
     pub(crate) fn from_reader(mut reader: R, size: u32) -> Result<Self, Error> {
         let [ty, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
@@ -164,5 +184,59 @@ where
         let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
         Ok(pod)
+    }
+
+    /// Convert the [`ChoiceDecoder`] into a one borrowing from but without
+    /// modifying the current buffer.
+    #[inline]
+    pub fn as_ref(&self) -> ChoiceDecoder<R::Clone<'_>> {
+        ChoiceDecoder::new(
+            self.reader.clone_reader(),
+            self.ty,
+            self.flags,
+            self.child_size,
+            self.child_type,
+            self.remaining,
+        )
+    }
+}
+
+impl<'de, R> fmt::Debug for ChoiceDecoder<R>
+where
+    R: Reader<'de, u64>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Entries<'a, R>(&'a ChoiceDecoder<R>);
+
+        impl<'de, R> fmt::Debug for Entries<'_, R>
+        where
+            R: Reader<'de, u64>,
+        {
+            #[inline]
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut this = self.0.as_ref();
+
+                let mut f = f.debug_list();
+
+                while !this.is_empty() {
+                    match this.entry() {
+                        Ok(e) => {
+                            f.entry(&e);
+                        }
+                        Err(e) => {
+                            f.entry(&e);
+                        }
+                    }
+                }
+
+                f.finish()
+            }
+        }
+
+        let mut f = f.debug_struct("Choice");
+        f.field("type", &self.ty());
+        f.field("child_type", &self.child_type());
+        f.field("entries", &Entries(self));
+        f.finish()
     }
 }

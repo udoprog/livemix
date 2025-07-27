@@ -1,4 +1,6 @@
-use crate::TypedPod;
+use core::fmt;
+
+use crate::{Reader, TypedPod};
 
 /// A property inside of an object.
 pub struct Property<B> {
@@ -80,5 +82,18 @@ impl<B> Property<B> {
     #[inline]
     pub fn value(self) -> TypedPod<B> {
         self.value
+    }
+}
+
+impl<'de, B> fmt::Debug for Property<B>
+where
+    B: Reader<'de, u64>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Property")
+            .field("key", &self.key)
+            .field("flags", &self.flags)
+            .field("value", &self.value)
+            .finish()
     }
 }

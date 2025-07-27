@@ -488,41 +488,48 @@ where
         }
     }
 
-    pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let container = matches!(
-            self.ty,
-            Type::ARRAY | Type::STRUCT | Type::OBJECT | Type::SEQUENCE | Type::CHOICE | Type::POD
-        );
-        write!(f, "{}", self.ty)?;
-
-        if !container {
-            write!(f, "(")?;
-        }
-
-        self.debug_fmt(f)?;
-
-        if !container {
-            write!(f, ")")?;
-        }
-
-        Ok(())
+    /// Convert the [`TypedPod`] into a one borrowing from but without modifying
+    /// the current buffer.
+    #[inline]
+    pub fn as_ref(&self) -> TypedPod<B::Clone<'_>> {
+        TypedPod::new(self.size, self.ty, self.buf.clone_reader())
     }
+}
 
-    fn debug_fmt(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<B> Clone for TypedPod<B>
+where
+    B: Clone,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        TypedPod {
+            size: self.size,
+            ty: self.ty,
+            buf: self.buf.clone(),
+        }
+    }
+}
+
+impl<'de, B> fmt::Debug for TypedPod<B>
+where
+    B: Reader<'de, u64>,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         macro_rules! tri {
             ($expr:expr) => {
                 match $expr {
                     Ok(value) => value,
-                    Err(e) => return write!(f, "{{{e}}}"),
+                    Err(e) => return e.fmt(f),
                 }
             };
         }
 
         macro_rules! decode {
             ($ty:ty, $pat:pat => $expr:expr) => {
-                match self.decode::<$ty>() {
+                match self.as_ref().decode::<$ty>() {
                     Ok($pat) => $expr,
-                    Err(e) => write!(f, "{{{e}}}"),
+                    Err(e) => e.fmt(f),
                 }
             };
         }
@@ -531,12 +538,12 @@ where
             ($ty:ty, $pat:pat => $expr:expr) => {{
                 let mut outer = Ok(());
 
-                let result = self.decode_unsized(FunctionVisitor(|$pat: &$ty| {
+                let result = self.as_ref().decode_unsized(FunctionVisitor(|$pat: &$ty| {
                     outer = $expr;
                 }));
 
                 if let Err(e) = result {
-                    return write!(f, "{{{e}}}");
+                    return e.fmt(f);
                 }
 
                 outer
@@ -570,185 +577,24 @@ where
                 decode_unsized!([u8], value => write!(f, "{:?}", BStr::new(value)))
             }
             Type::RECTANGLE => {
-                decode!(Rectangle, value => write!(
-                    f,
-                    "{{width: {:?}, height: {:?}}}",
-                    value.width, value.height
-                ))
+                decode!(Rectangle, value => value.fmt(f))
             }
             Type::FRACTION => {
-                decode!(Fraction, value => write!(f, "{{num: {:?}, denom: {:?}}}", value.num, value.denom))
+                decode!(Fraction, value => value.fmt(f))
             }
             Type::BITMAP => {
-                decode_unsized!(Bitmap, value => write!(f, "{:?}", BStr::new(value.as_bytes())))
+                decode_unsized!(Bitmap, value => value.fmt(f))
             }
-            Type::ARRAY => {
-                let mut array = tri!(self.decode_array());
-                write!(f, "[{:?}](", array.child_type())?;
-
-                while !array.is_empty() {
-                    match array.item() {
-                        Ok(item) => item.debug_fmt(f)?,
-                        Err(e) => write!(f, "{{{e}}}")?,
-                    }
-
-                    if !array.is_empty() {
-                        write!(f, ", ")?;
-                    }
-                }
-
-                write!(f, ")")?;
-                Ok(())
-            }
-            Type::STRUCT => {
-                let mut st = tri!(self.decode_struct());
-                write!(f, "{{")?;
-
-                while !st.is_empty() {
-                    match st.field() {
-                        Ok(pod) => {
-                            write!(f, "{:?}: ", pod.ty())?;
-                            pod.debug_fmt(f)?;
-                        }
-                        Err(e) => {
-                            write!(f, "?: {{{e}}}")?;
-                        }
-                    }
-
-                    if !st.is_empty() {
-                        write!(f, ", ")?;
-                    }
-                }
-
-                write!(f, "}}")?;
-                Ok(())
-            }
-            Type::OBJECT => {
-                let mut st = tri!(self.decode_object());
-                write!(f, "[{}, {}]{{", st.object_type(), st.object_id())?;
-
-                while !st.is_empty() {
-                    match st.property() {
-                        Ok(prop) => {
-                            if prop.flags() != 0 {
-                                write!(
-                                    f,
-                                    "{{key: {}, flags: 0b{:b}}}: ",
-                                    prop.key(),
-                                    prop.flags()
-                                )?;
-                            } else {
-                                write!(f, "{:?}: ", prop.key())?;
-                            }
-
-                            prop.value().debug_fmt_with_type(f)?;
-                        }
-                        Err(e) => {
-                            write!(f, "?: {{{e}}}")?;
-                        }
-                    }
-
-                    if !st.is_empty() {
-                        write!(f, ", ")?;
-                    }
-                }
-
-                write!(f, "}}")?;
-                Ok(())
-            }
-            Type::SEQUENCE => {
-                let mut st = tri!(self.decode_sequence());
-                write!(f, "[{}, {}]{{", st.unit(), st.pad())?;
-
-                while !st.is_empty() {
-                    match st.control() {
-                        Ok(c) => {
-                            write!(f, "{{offset: {:?}, type: {:?}}}: ", c.offset(), c.ty())?;
-                            c.value().debug_fmt_with_type(f)?;
-                        }
-                        Err(e) => {
-                            write!(f, "?: {{{e}}}")?;
-                        }
-                    }
-
-                    if !st.is_empty() {
-                        write!(f, ", ")?;
-                    }
-                }
-
-                write!(f, "}}")?;
-                Ok(())
-            }
-            Type::POINTER => {
-                decode!(Pointer, p => {
-                    if p.ty() != 0 {
-                        write!(f, "{{pointer: {:?}, type: {:?}}}", p.pointer(), p.ty())
-                    } else {
-                        write!(f, "{:?}", p.pointer())
-                    }
-                })
-            }
-            Type::FD => {
-                decode!(Fd, fd => write!(f, "{:?}", fd.fd()))
-            }
-            Type::CHOICE => {
-                let mut choice = tri!(self.decode_choice());
-                write!(f, "[{:?}, {:?}](", choice.ty(), choice.child_type())?;
-
-                while !choice.is_empty() {
-                    match choice.entry() {
-                        Ok(e) => e.debug_fmt(f)?,
-                        Err(e) => write!(f, "{{{e}}}")?,
-                    }
-
-                    if !choice.is_empty() {
-                        write!(f, ", ")?;
-                    }
-                }
-
-                write!(f, ")")?;
-                Ok(())
-            }
-            Type::POD => tri!(tri!(self.decode_pod()).into_typed()).debug_fmt(f),
-            ty => {
-                if let Err(e) = self.skip() {
-                    write!(f, "{e}")
-                } else {
-                    write!(f, "{{{ty:?}}}")
-                }
-            }
+            Type::ARRAY => tri!(self.as_ref().decode_array()).fmt(f),
+            Type::STRUCT => tri!(self.as_ref().decode_struct()).fmt(f),
+            Type::OBJECT => tri!(self.as_ref().decode_object()).fmt(f),
+            Type::SEQUENCE => tri!(self.as_ref().decode_sequence()).fmt(f),
+            Type::POINTER => decode!(Pointer, value => value.fmt(f)),
+            Type::FD => decode!(Fd, value => value.fmt(f)),
+            Type::CHOICE => tri!(self.as_ref().decode_choice()).fmt(f),
+            Type::POD => tri!(tri!(self.as_ref().decode_pod()).into_typed()).fmt(f),
+            ty => write!(f, "{{{ty:?}}}"),
         }
-    }
-
-    /// Convert the [`TypedPod`] into a one borrowing from but without modifying
-    /// the current buffer.
-    #[inline]
-    pub fn as_ref(&self) -> TypedPod<B::Clone<'_>> {
-        TypedPod::new(self.size, self.ty, self.buf.clone_reader())
-    }
-}
-
-impl<B> Clone for TypedPod<B>
-where
-    B: Clone,
-{
-    #[inline]
-    fn clone(&self) -> Self {
-        TypedPod {
-            size: self.size,
-            ty: self.ty,
-            buf: self.buf.clone(),
-        }
-    }
-}
-
-impl<'de, B> fmt::Debug for TypedPod<B>
-where
-    B: Reader<'de, u64>,
-{
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().debug_fmt_with_type(f)
     }
 }
 

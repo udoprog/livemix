@@ -222,7 +222,7 @@ declare_id! {
         ParamTag = 0x4000d,
     }
 
-    #[example = Format]
+    #[example = Frequency]
     pub enum Prop {
         Unknown = 0,
 

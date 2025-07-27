@@ -1019,10 +1019,9 @@ where
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Ok(pod) = TypedPod::from_reader(self.buf.clone_reader()) else {
-            return write!(f, "{{invalid}}");
-        };
-
-        pod.debug_fmt_with_type(f)
+        match TypedPod::from_reader(self.buf.clone_reader()) {
+            Ok(pod) => pod.fmt(f),
+            Err(e) => e.fmt(f),
+        }
     }
 }

@@ -1,4 +1,6 @@
-use crate::TypedPod;
+use core::fmt;
+
+use crate::{Reader, TypedPod};
 
 /// A control item inside of a sequence.
 ///
@@ -100,5 +102,19 @@ impl<B> Control<B> {
     #[inline]
     pub fn value(self) -> TypedPod<B> {
         self.value
+    }
+}
+
+impl<'de, B> fmt::Debug for Control<B>
+where
+    B: Reader<'de, u64>,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Control")
+            .field("offset", &self.offset)
+            .field("type", &self.ty)
+            .field("value", &self.value)
+            .finish()
     }
 }

@@ -349,7 +349,7 @@ fn test_format_struct() -> Result<(), Error> {
 
     assert_eq!(
         format!("{pod:?}"),
-        "Struct{Int: 1, Int: 2, Struct: {Bytes: b\"hello world\", Rectangle: {width: 800, height: 600}, Bytes: b\"goodbye world\"}}"
+        "Struct { fields: [1, 2, Struct { fields: [b\"hello world\", Rectangle { width: 800, height: 600 }, b\"goodbye world\"] }] }"
     );
     Ok(())
 }
@@ -372,7 +372,25 @@ fn test_format_object() -> Result<(), Error> {
 
     assert_eq!(
         format!("{pod:?}"),
-        "Object[10, 20]{{key: 1, flags: 0b100}: Int(1), {key: 2, flags: 0b10}: Int(2), {key: 3, flags: 0b1}: Struct{Bytes: b\"hello world\", Rectangle: {width: 800, height: 600}, Bytes: b\"goodbye world\"}}"
+        "Object { \
+            object_type: 10, \
+            object_id: 20, \
+            properties: [\
+                Property { key: 1, flags: 4, value: 1 }, \
+                Property { key: 2, flags: 2, value: 2 }, \
+                Property { \
+                    key: 3, \
+                    flags: 1, \
+                    value: Struct { \
+                        fields: [\
+                            b\"hello world\", \
+                            Rectangle { width: 800, height: 600 }, \
+                            b\"goodbye world\"\
+                        ] \
+                    } \
+                }\
+            ] \
+        }"
     );
     Ok(())
 }
@@ -388,7 +406,10 @@ fn test_format_array() -> Result<(), Error> {
         Ok(())
     })?;
 
-    assert_eq!(format!("{pod:?}"), "Array[Int](1, 2, 3)");
+    assert_eq!(
+        format!("{pod:?}"),
+        "Array { child_type: Int, entries: [1, 2, 3] }"
+    );
     Ok(())
 }
 
@@ -402,9 +423,9 @@ fn test_format_l1_struct() -> Result<(), Error> {
     })?;
 
     let mut st = pod.as_ref().decode_struct()?;
-    assert_eq!(format!("{:?}", st.field()?), "Bytes(b\"a\")");
-    assert_eq!(format!("{:?}", st.field()?), "Bytes(b\"b\")");
-    assert_eq!(format!("{pod:?}"), "Struct{Bytes: b\"a\", Bytes: b\"b\"}");
+    assert_eq!(format!("{:?}", st.field()?), "b\"a\"");
+    assert_eq!(format!("{:?}", st.field()?), "b\"b\"");
+    assert_eq!(format!("{pod:?}"), "Struct { fields: [b\"a\", b\"b\"] }");
     Ok(())
 }
 
@@ -419,7 +440,10 @@ fn test_format_choice() -> Result<(), Error> {
             Ok(())
         })?;
 
-    assert_eq!(format!("{pod:?}"), "Choice[Range, Int](10, 0, 30)");
+    assert_eq!(
+        format!("{pod:?}"),
+        "Choice { type: Range, child_type: Int, entries: [10, 0, 30] }"
+    );
     Ok(())
 }
 
@@ -439,7 +463,7 @@ fn test_format_buggy() -> Result<(), Error> {
     array.as_slice_mut()[2] = u64::MAX; // Corrupt the pod.
 
     let pod = Pod::new(array.as_slice());
-    assert_eq!(format!("{pod:?}"), "Choice{Size overflow}");
+    assert_eq!(format!("{pod:?}"), "SizeOverflow");
     Ok(())
 }
 
