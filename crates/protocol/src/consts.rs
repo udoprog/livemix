@@ -23,3 +23,10 @@ pub const INTERFACE_PORT: &str = "PipeWire:Interface:Port";
 
 /// The type of interface link.
 pub const INTERFACE_LINK: &str = "PipeWire:Interface:Link";
+
+/// The direction of a port.
+#[repr(u32)]
+pub enum Direction {
+    Input = 0,
+    Output = 1,
+}

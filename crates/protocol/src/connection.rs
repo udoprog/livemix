@@ -16,6 +16,7 @@ use pod::Reader;
 use crate::Error;
 use crate::buf::Buf;
 use crate::consts;
+use crate::consts::Direction;
 use crate::error::ErrorKind;
 use crate::op;
 use crate::poll::ChangeInterest;
@@ -129,15 +130,15 @@ impl Connection {
     }
 
     /// Synchronize.
-    pub fn core_sync(&mut self, id: i32) -> Result<i32, Error> {
-        let sync_sequence = self.sync_sequence.cast_signed();
+    pub fn core_sync(&mut self, id: u32) -> Result<u32, Error> {
+        let sync_sequence = self.sync_sequence;
         self.sync_sequence = self.sync_sequence.wrapping_add(1);
 
         let mut pod = Pod::array();
 
         pod.as_mut().encode_struct(|st| {
-            st.field()?.encode(id)?;
-            st.field()?.encode(sync_sequence)?;
+            st.field()?.encode(id.cast_signed())?;
+            st.field()?.encode(sync_sequence.cast_signed())?;
             Ok(())
         })?;
 
@@ -164,24 +165,40 @@ impl Connection {
         &mut self,
         factory_name: &str,
         ty: &str,
-        version: i32,
-        new_id: i32,
+        version: u32,
+        new_id: u32,
     ) -> Result<(), Error> {
         let mut pod = Pod::array();
 
         pod.as_mut().encode_struct(|st| {
             st.field()?.encode_unsized(factory_name)?;
             st.field()?.encode_unsized(ty)?;
-            st.field()?.encode(version)?;
+            st.field()?.encode(version.cast_signed())?;
 
             st.field()?.encode_struct(|props| {
-                props.field()?.encode(1)?;
+                props.field()?.encode(6)?;
+
+                props.field()?.encode("node.description")?;
+                props.field()?.encode("livemix")?;
+
                 props.field()?.encode("node.name")?;
                 props.field()?.encode("livemix")?;
+
+                props.field()?.encode("media.class")?;
+                props.field()?.encode("Audio/Duplex")?;
+
+                props.field()?.encode("media.type")?;
+                props.field()?.encode("Audio")?;
+
+                props.field()?.encode("media.category")?;
+                props.field()?.encode("Duplex")?;
+
+                props.field()?.encode("media.role")?;
+                props.field()?.encode("DSP")?;
                 Ok(())
             })?;
 
-            st.field()?.encode(new_id)?;
+            st.field()?.encode(new_id.cast_signed())?;
             Ok(())
         })?;
 
@@ -207,6 +224,53 @@ impl Connection {
         })?;
 
         self.request(consts::CLIENT_ID, op::CLIENT_UPDATE_PROPERTIES, pod)?;
+        Ok(())
+    }
+
+    /// Update the client.
+    pub fn client_node_get_node(
+        &mut self,
+        id: u32,
+        version: u32,
+        new_id: u32,
+    ) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(version.cast_signed())?;
+            st.field()?.encode(new_id.cast_signed())?;
+            Ok(())
+        })?;
+
+        self.request(id, op::CLIENT_NODE_GET_NODE, pod)?;
+        Ok(())
+    }
+
+    /// Update the client.
+    pub fn client_node_update(&mut self, id: u32) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(0i64)?;
+            st.field()?.encode_none()?;
+            st.field()?.encode_none()?;
+            Ok(())
+        })?;
+
+        self.request(id, op::CLIENT_NODE_UPDATE, pod)?;
+        Ok(())
+    }
+
+    /// Update the client.
+    pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<(), Error> {
+        let mut pod = Pod::array();
+
+        pod.as_mut().encode_struct(|st| {
+            st.field()?.encode(active)?;
+            Ok(())
+        })?;
+
+        self.request(id, op::CLIENT_NODE_SET_ACTIVE, pod)?;
         Ok(())
     }
 

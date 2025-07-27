@@ -491,7 +491,7 @@ where
     pub(crate) fn debug_fmt_with_type(self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let container = matches!(
             self.ty,
-            Type::ARRAY | Type::STRUCT | Type::OBJECT | Type::SEQUENCE | Type::CHOICE
+            Type::ARRAY | Type::STRUCT | Type::OBJECT | Type::SEQUENCE | Type::CHOICE | Type::POD
         );
         write!(f, "{}", self.ty)?;
 
@@ -709,6 +709,7 @@ where
                 write!(f, ")")?;
                 Ok(())
             }
+            Type::POD => tri!(tri!(self.decode_pod()).into_typed()).debug_fmt(f),
             ty => {
                 if let Err(e) = self.skip() {
                     write!(f, "{e}")

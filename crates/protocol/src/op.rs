@@ -2,10 +2,10 @@
 
 /// Get client information updates. This is emitted when binding to a client or
 /// when the client info is updated late
-pub const CLIENT_INFO: u8 = 0;
+pub const CLIENT_INFO_EVENT: u8 = 0;
 
 /// Is used to send an error to a client.
-pub const CLIENT_ERROR: u8 = 1;
+pub const CLIENT_ERROR_EVENT: u8 = 1;
 
 /// Is used to update the properties of a client.
 pub const CLIENT_UPDATE_PROPERTIES: u8 = 2;
@@ -66,9 +66,25 @@ pub const CORE_ADD_MEM_EVENT: u8 = 6;
 /// Notify a client about a new global object.
 pub const REGISTRY_GLOBAL_EVENT: u8 = 0;
 
+/// A global with id was removed.
+pub const REGISTRY_GLOBAL_REMOVE_EVENT: u8 = 1;
+
+/// Get the node object associated with the client-node. This binds to the
+/// server side Node object.
+pub const CLIENT_NODE_GET_NODE: u8 = 1;
+
+/// Update the params and info of the node.
+pub const CLIENT_NODE_UPDATE: u8 = 2;
+
+/// Set the node active or inactive.
+pub const CLIENT_NODE_SET_ACTIVE: u8 = 4;
+
 /// The server will allocate the activation record and eventfd for the node and
 /// transfer this to the client with the Transport event.
 pub const CLIENT_NODE_TRANSPORT_EVENT: u8 = 0;
+
+/// Set a parameter on the Node.
+pub const CLIENT_NODE_SET_PARAM_EVENT: u8 = 1;
 
 /// Set an IO area on the node.
 pub const CLIENT_NODE_SET_IO_EVENT: u8 = 2;
