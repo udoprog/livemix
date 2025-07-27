@@ -42,8 +42,11 @@ pub use self::array::Buf;
 mod writer;
 pub use self::writer::Writer;
 
+mod as_reader;
+pub use self::as_reader::AsReader;
+
 mod reader;
-pub use self::reader::{AsReader, Reader};
+pub use self::reader::Reader;
 
 mod visitor;
 pub use self::visitor::Visitor;

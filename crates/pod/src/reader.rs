@@ -1,63 +1,24 @@
 use core::mem::{self, MaybeUninit};
 use core::slice;
 
-#[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
 use crate::error::ErrorKind;
 use crate::utils::{AlignableWith, BytesInhabited, UninitAlign};
-use crate::visitor::Visitor;
-use crate::{Error, Type};
+use crate::{AsReader, Error, Type, Visitor};
 
 mod sealed {
     use crate::{Buf, Reader};
 
     pub trait Sealed<T> {}
+
     impl<T> Sealed<T> for &[T] {}
     impl<T, const N: usize> Sealed<T> for Buf<T, N> {}
-    impl<'de, R, T> Sealed<T> for &mut R
-    where
-        R: ?Sized + Reader<'de, T>,
-        T: Copy,
-    {
-    }
-}
-
-/// Base trait to convert anything into a reader.
-pub trait AsReader<T>
-where
-    T: Copy,
-{
-    /// A clone of the reader.
-    type Reader<'this>: Reader<'this, T>
-    where
-        Self: 'this;
-
-    /// Borrow the value as a reader.
-    fn as_reader(&self) -> Self::Reader<'_>;
-}
-
-#[cfg(feature = "alloc")]
-impl<T> AsReader<T> for Box<[T]>
-where
-    T: 'static + Copy,
-{
-    type Reader<'this>
-        = &'this [T]
-    where
-        Self: 'this;
-
-    #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
-        self
-    }
+    impl<'de, R, T> Sealed<T> for &mut R where R: ?Sized + Reader<'de, T> {}
 }
 
 /// A type that u32 words can be read from.
 pub trait Reader<'de, T>
 where
     Self: AsReader<T> + self::sealed::Sealed<T>,
-    T: Copy,
 {
     /// The mutable borrow of a reader.
     type Mut<'this>: Reader<'de, T>
@@ -176,26 +137,9 @@ where
     }
 }
 
-impl<'de, R, T> AsReader<T> for &mut R
-where
-    R: ?Sized + Reader<'de, T>,
-    T: Copy,
-{
-    type Reader<'this>
-        = R::Reader<'this>
-    where
-        Self: 'this;
-
-    #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
-        (**self).as_reader()
-    }
-}
-
 impl<'de, R, T> Reader<'de, T> for &mut R
 where
     R: ?Sized + Reader<'de, T>,
-    T: Copy,
 {
     type Mut<'this>
         = R::Mut<'this>
@@ -252,24 +196,9 @@ where
     }
 }
 
-impl<'de, T> AsReader<T> for &'de [T]
-where
-    T: 'de + Copy,
-{
-    type Reader<'this>
-        = &'this [T]
-    where
-        Self: 'this;
-
-    #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
-        *self
-    }
-}
-
 impl<'de, T> Reader<'de, T> for &'de [T]
 where
-    T: 'de + Copy,
+    T: 'static,
 {
     type Mut<'this>
         = &'this mut &'de [T]

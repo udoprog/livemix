@@ -193,7 +193,7 @@ impl<T, const N: usize> Buf<T, N> {
     /// ```
     pub const fn from_slice(words: &[T]) -> Self
     where
-        T: Copy,
+        T: BytesInhabited,
     {
         assert!(words.len() <= N, "Slice size exceeds buffer size");
 
@@ -373,7 +373,7 @@ impl<T, const N: usize> Buf<T, N> {
     #[inline]
     pub fn clear_remaining(&mut self)
     where
-        T: Copy,
+        T: BytesInhabited,
     {
         self.read = 0;
     }
@@ -612,7 +612,7 @@ pub struct Pos {
 
 impl<T, const N: usize> Writer<T> for Buf<T, N>
 where
-    T: Copy,
+    T: BytesInhabited,
 {
     type Mut<'this>
         = &'this mut Buf<T, N>
@@ -736,7 +736,7 @@ where
 
 impl<T, const N: usize> AsReader<T> for Buf<T, N>
 where
-    T: 'static + Copy,
+    T: 'static,
 {
     type Reader<'this> = &'this [T];
 
@@ -748,7 +748,7 @@ where
 
 impl<'de, T, const N: usize> Reader<'de, T> for Buf<T, N>
 where
-    T: 'static + Copy,
+    T: BytesInhabited,
 {
     type Mut<'this>
         = &'this mut Buf<T, N>

@@ -35,9 +35,10 @@ where
 /// Indicates a type which has all bit patterns inhabited.
 pub unsafe trait BytesInhabited
 where
-    Self: Copy,
+    Self: 'static + Copy,
 {
 }
+
 unsafe impl BytesInhabited for i32 {}
 unsafe impl BytesInhabited for u32 {}
 unsafe impl BytesInhabited for i64 {}
