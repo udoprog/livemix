@@ -115,7 +115,7 @@ impl Connection {
     }
 
     /// Get registry.
-    pub fn core_get_registry(&mut self, new_id: i32) -> Result<(), Error> {
+    pub fn core_get_registry(&mut self, new_id: u32) -> Result<(), Error> {
         let mut pod = Pod::array();
 
         pod.as_mut().encode_struct(|st| {
@@ -312,6 +312,7 @@ impl Connection {
         let mut pod = Pod::array();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
+        change_mask |= flags::ClientNodePortUpdate::PARAMS;
         change_mask |= flags::ClientNodePortUpdate::INFO;
 
         let mut port_change_mask = flags::PortChangeMask::NONE;
@@ -325,7 +326,35 @@ impl Connection {
             st.field()?.encode(direction as u32)?;
             st.field()?.encode(port_id)?;
             st.field()?.encode(change_mask)?;
-            st.field()?.encode(0u32)?;
+
+            // Parameters.
+            st.field()?.encode(2u32)?;
+
+            st.field()?
+                .encode_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
+                    obj.property(id::Format::MEDIA_TYPE, 0)?
+                        .encode(id::MediaType::AUDIO)?;
+                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                        .encode(id::MediaSubType::RAW)?;
+                    obj.property(id::Format::AUDIO_FORMAT, 0)?
+                        .encode(id::AudioFormat::S16)?;
+                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(2u32)?;
+                    obj.property(id::Format::AUDIO_RATE, 0)?.encode(44100u32)?;
+                    Ok(())
+                })?;
+
+            st.field()?
+                .encode_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
+                    obj.property(id::Format::MEDIA_TYPE, 0)?
+                        .encode(id::MediaType::AUDIO)?;
+                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                        .encode(id::MediaSubType::RAW)?;
+                    obj.property(id::Format::AUDIO_FORMAT, 0)?
+                        .encode(id::AudioFormat::S16)?;
+                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.encode(2u32)?;
+                    obj.property(id::Format::AUDIO_RATE, 0)?.encode(44100u32)?;
+                    Ok(())
+                })?;
 
             if change_mask & flags::ClientNodePortUpdate::INFO {
                 st.field()?.encode_struct(|st| {
@@ -337,23 +366,32 @@ impl Connection {
                     st.field()?.encode(0u32)?;
 
                     // Properties.
-                    st.field()?.encode(1u32)?;
+                    st.field()?.encode(2u32)?;
                     st.field()?.encode("port.name")?;
                     st.field()?.encode_unsized("livemix_port0")?;
 
+                    st.field()?.encode("format.dsp")?;
+                    st.field()?.encode_unsized("32 bit float mono audio")?;
+
                     // Parameters.
-                    st.field()?.encode(4u32)?;
-                    st.field()?.encode(id::Param::PROP_INFO)?;
-                    st.field()?.encode(flags::Param::NONE)?;
-
-                    st.field()?.encode(id::Param::PROPS)?;
-                    st.field()?.encode(flags::Param::WRITE)?;
-
+                    st.field()?.encode(2u32)?;
                     st.field()?.encode(id::Param::ENUM_FORMAT)?;
                     st.field()?.encode(flags::Param::READ)?;
 
                     st.field()?.encode(id::Param::FORMAT)?;
                     st.field()?.encode(flags::Param::WRITE)?;
+
+                    /*
+                    st.field()?.encode(id::Param::META)?;
+                    st.field()?.encode(flags::Param::READ)?;
+
+                    st.field()?.encode(id::Param::IO)?;
+                    st.field()?.encode(flags::Param::READ)?;
+
+                    st.field()?.encode(id::Param::BUFFERS)?;
+                    st.field()?.encode(flags::Param::NONE)?;
+                    */
+
                     Ok(())
                 })?;
             } else {

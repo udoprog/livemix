@@ -4,8 +4,8 @@ use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, Reader, Type, TypedPod,
-    Visitor, WORD_SIZE, Writer,
+    Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, RawId, Reader, Type,
+    TypedPod, Visitor, WORD_SIZE, Writer,
 };
 
 /// An unlimited pod.
@@ -455,11 +455,16 @@ where
     #[inline]
     pub fn encode_object(
         self,
-        object_type: u32,
-        object_id: u32,
+        object_type: impl RawId,
+        object_id: impl RawId,
         f: impl FnOnce(&mut ObjectEncoder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut encoder = ObjectEncoder::to_writer(self.buf, self.kind, object_type, object_id)?;
+        let mut encoder = ObjectEncoder::to_writer(
+            self.buf,
+            self.kind,
+            object_type.into_id(),
+            object_id.into_id(),
+        )?;
         f(&mut encoder)?;
         encoder.close()?;
         Ok(())

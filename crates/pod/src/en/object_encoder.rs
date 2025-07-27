@@ -1,6 +1,6 @@
 use crate::error::ErrorKind;
 use crate::pod::PodKind;
-use crate::{Error, Pod, Type, WORD_SIZE, Writer};
+use crate::{Error, Pod, RawId, Type, WORD_SIZE, Writer};
 
 /// An encoder for an object.
 pub struct ObjectEncoder<W, K>
@@ -59,8 +59,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property(&mut self, key: u32, flags: u32) -> Result<Pod<W::Mut<'_>>, Error> {
-        self.writer.write([key, flags])?;
+    pub fn property(&mut self, key: impl RawId, flags: u32) -> Result<Pod<W::Mut<'_>>, Error> {
+        self.writer.write([key.into_id(), flags])?;
         Ok(Pod::new(self.writer.borrow_mut()))
     }
 

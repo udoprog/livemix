@@ -153,11 +153,11 @@ pub struct ConnectionState {
     id_to_registry: BTreeMap<u32, usize>,
     factories: BTreeMap<String, usize>,
     globals: GlobalMap,
+    client_nodes: Slab<ClientNodeState>,
+    local_id_to_kind: BTreeMap<u32, Kind>,
     state: State,
     has_header: bool,
     header: Header,
-    client_nodes: Slab<ClientNodeState>,
-    id_to_kind: BTreeMap<u32, Kind>,
     ids: Ids,
     fds: VecDeque<ReceivedFd>,
     ops: VecDeque<Op>,
@@ -179,11 +179,11 @@ impl ConnectionState {
             id_to_registry: BTreeMap::new(),
             factories: BTreeMap::new(),
             globals: GlobalMap::new(),
+            client_nodes: Slab::new(),
+            local_id_to_kind: BTreeMap::new(),
             state: State::ClientHello,
             has_header: false,
             header: Header::default(),
-            client_nodes: Slab::new(),
-            id_to_kind: BTreeMap::new(),
             ids,
             fds: VecDeque::with_capacity(16),
             ops: VecDeque::new(),
@@ -236,9 +236,9 @@ impl ConnectionState {
                 State::CoreBound => {
                     tracing::info!("Getting registry");
 
-                    let new_id = self.ids.alloc().context("ran out of identifiers")?;
-                    c.core_get_registry(new_id as i32)?;
-                    self.id_to_kind.insert(new_id, Kind::Registry);
+                    let local_id = self.ids.alloc().context("ran out of identifiers")?;
+                    c.core_get_registry(local_id)?;
+                    self.local_id_to_kind.insert(local_id, Kind::Registry);
                     c.core_sync(GET_REGISTRY_SYNC)?;
                     self.state = State::Idle;
                 }
@@ -355,7 +355,8 @@ impl ConnectionState {
             activation: None,
         });
 
-        self.id_to_kind.insert(new_id, Kind::ClientNode(index));
+        self.local_id_to_kind
+            .insert(new_id, Kind::ClientNode(index));
         Ok(())
     }
 
@@ -409,7 +410,7 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn handle_dynamic(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let Some(kind) = self.id_to_kind.get(&self.header.id()) else {
+        let Some(kind) = self.local_id_to_kind.get(&self.header.id()) else {
             tracing::warn!(?self.header, "Unknown receiver");
             return Ok(());
         };
@@ -626,7 +627,7 @@ impl ConnectionState {
         if let Some(kind) = self
             .globals
             .by_global(id)
-            .and_then(|local_id| self.id_to_kind.get_mut(&local_id))
+            .and_then(|local_id| self.local_id_to_kind.get_mut(&local_id))
         {
             match *kind {
                 Kind::Registry => {}
@@ -660,23 +661,20 @@ impl ConnectionState {
 
         tracing::info!(?registry, "Removed registry");
 
-        let Some(local_id) = self.globals.remove_by_global(id) else {
-            tracing::warn!(id, "Tried to remove unknown global id");
-            return Ok(());
-        };
+        if let Some(local_id) = self.globals.remove_by_global(id) {
+            self.ids.unset(local_id);
 
-        self.ids.unset(local_id);
+            if let Some(kind) = self.local_id_to_kind.remove(&local_id) {
+                match kind {
+                    Kind::Registry => {}
+                    Kind::ClientNode(index) => {
+                        let Some(..) = self.client_nodes.try_remove(index) else {
+                            tracing::warn!(index, "Tried to remove unknown client node");
+                            return Ok(());
+                        };
 
-        if let Some(kind) = self.id_to_kind.remove(&local_id) {
-            match kind {
-                Kind::Registry => {}
-                Kind::ClientNode(index) => {
-                    let Some(..) = self.client_nodes.try_remove(index) else {
-                        tracing::warn!(index, "Tried to remove unknown client node");
-                        return Ok(());
-                    };
-
-                    tracing::info!(index, "Removed client node");
+                        tracing::info!(index, "Removed client node");
+                    }
                 }
             }
         }

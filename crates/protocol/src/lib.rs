@@ -6,6 +6,8 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub(crate) mod macros;
+
 pub(crate) mod error;
 pub use self::error::Error;
 

@@ -21,6 +21,17 @@ pod::macros::id! {
         TAG = 17,
     }
 
+    #[example = AUDIO]
+    pub struct MediaType {
+        UNKNOWN,
+        AUDIO = 1,
+        VIDEO = 2,
+        IMAGE = 3,
+        BINARY = 4,
+        STREAM = 5,
+        APPLICATION = 6,
+    }
+
     #[example = OPUS]
     pub struct MediaSubType {
         UNKNOWN,
@@ -171,7 +182,7 @@ pod::macros::id! {
 
     #[example = FREQUENCY]
     pub struct Io {
-        INVALID,
+        UNKNOWN,
         /// Area to exchange buffers, `struct spa_io_buffers`.
         BUFFERS = 1,
         /// Expected byte range, `struct spa_io_range` (currently not used in
@@ -196,4 +207,160 @@ pod::macros::id! {
         /// Async area to exchange buffers, `struct spa_io_async_buffers`.
         ASYNC_BUFFERS = 10,
     }
+
+    #[example = MEDIA_TYPE]
+    pub struct Format {
+        UNKNOWN,
+        /// media type (Id enum spa_media_type).
+        MEDIA_TYPE = 1,
+        /// media subtype (Id enum spa_media_subtype).
+        MEDIA_SUB_TYPE = 2,
+        /// audio format, (Id enum spa_audio_format).
+        AUDIO_FORMAT = 0x10001,
+        /// optional flags (Int).
+        AUDIO_FLAGS = 0x10002,
+        /// sample rate (Int).
+        AUDIO_RATE = 0x10003,
+        /// number of audio channels (Int).
+        AUDIO_CHANNELS = 0x10004,
+        /// channel positions (Id enum spa_audio_position).
+        AUDIO_POSITION = 0x10005,
+        /// codec used (IEC958) (Id enum spa_audio_iec958_codec).
+        AUDIO_IEC958_CODEC = 0x10006,
+        /// bit order (Id enum spa_param_bitorder).
+        AUDIO_BITORDER = 0x10007,
+        /// Interleave bytes (Int).
+        AUDIO_INTERLEAVE = 0x10008,
+        /// bit rate (Int).
+        AUDIO_BITRATE = 0x10009,
+        /// audio data block alignment (Int).
+        AUDIO_BLOCK_ALIGN = 0x1000a,
+        /// AAC stream format, (Id enum spa_audio_aac_stream_format).
+        AUDIO_AAC_STREAM_FORMAT = 0x1000b,
+        /// WMA profile (Id enum spa_audio_wma_profile).
+        AUDIO_WMA_PROFILE = 0x1000c,
+        /// AMR band mode (Id enum spa_audio_amr_band_mode).
+        AUDIO_AMR_BAND_MODE = 0x1000d,
+        /// video format (Id enum spa_video_format).
+        VIDEO_FORMAT = 0x20001,
+        /// format modifier (Long) use only with DMA-BUF and omit for other buffer types.
+        VIDEO_MODIFIER = 0x20002,
+        /// size (Rectangle).
+        VIDEO_SIZE = 0x20003,
+        /// frame rate (Fraction).
+        VIDEO_FRAMERATE = 0x20004,
+        /// maximum frame rate (Fraction).
+        VIDEO_MAX_FRAMERATE = 0x20005,
+        /// number of views (Int).
+        VIDEO_VIEWS = 0x20006,
+        /// (Id enum spa_video_interlace_mode).
+        VIDEO_INTERLACE_MODE = 0x20007,
+        /// (Rectangle).
+        VIDEO_PIXEL_ASPECT_RATIO = 0x20008,
+        /// (Id enum spa_video_multiview_mode).
+        VIDEO_MULTIVIEW_MODE = 0x20009,
+        /// (Id enum spa_video_multiview_flags).
+        VIDEO_MULTIVIEW_FLAGS = 0x2000a,
+        /// /Id enum spa_video_chroma_site).
+        VIDEO_CHROMA_SITE = 0x2000b,
+        /// /Id enum spa_video_color_range).
+        VIDEO_COLOR_RANGE = 0x2000c,
+        /// /Id enum spa_video_color_matrix).
+        VIDEO_COLOR_MATRIX = 0x2000d,
+        /// /Id enum spa_video_transfer_function).
+        VIDEO_TRANSFER_FUNCTION = 0x2000e,
+        /// /Id enum spa_video_color_primaries).
+        VIDEO_COLOR_PRIMARIES = 0x2000f,
+        /// (Int).
+        VIDEO_PROFILE = 0x20010,
+        /// (Int).
+        VIDEO_LEVEL = 0x20011,
+        /// (Id enum spa_h264_stream_format).
+        VIDEO_H264_STREAM_FORMAT = 0x20012,
+        /// (Id enum spa_h264_alignment).
+        VIDEO_H264_ALIGNMENT = 0x20013,
+        /// possible control types (flags choice Int, mask of enum spa_control_type).
+        CONTROL_TYPES = 0x60001,
+    }
+
+    #[example = S16]
+    pub struct AudioFormat {
+        UNKNOWN,
+        ENCODED = 1,
+        S8 = 0x101,
+        U8 = 0x102,
+        S16_LE = 0x103,
+        S16_BE = 0x104,
+        U16_LE = 0x105,
+        U16_BE = 0x106,
+        S24_32_LE = 0x107,
+        S24_32_BE = 0x108,
+        U24_32_LE = 0x109,
+        U24_32_BE = 0x10a,
+        S32_LE = 0x10b,
+        S32_BE = 0x10c,
+        U32_LE = 0x10d,
+        U32_BE = 0x10e,
+        S24_LE = 0x10f,
+        S24_BE = 0x110,
+        U24_LE = 0x111,
+        U24_BE = 0x112,
+        S20_LE = 0x113,
+        S20_BE = 0x114,
+        U20_LE = 0x115,
+        U20_BE = 0x116,
+        S18_LE = 0x117,
+        S18_BE = 0x118,
+        U18_LE = 0x119,
+        U18_BE = 0x11a,
+        F32_LE = 0x11b,
+        F32_BE = 0x11c,
+        F64_LE = 0x11d,
+        F64_BE = 0x11e,
+        ULAW = 0x11f,
+        ALAW = 0x120,
+        U8P = 0x201,
+        S16P = 0x202,
+        S24_32P = 0x203,
+        S32P = 0x204,
+        S24P = 0x205,
+        F32P = 0x206,
+        F64P = 0x207,
+        S8P = 0x208,
+    }
+}
+
+impl AudioFormat {
+    /// The default signed 16-bit format (little endian).
+    pub const S16: Self = crate::macros::endian!(Self::S16_LE, Self::S16_BE);
+    pub const U16: Self = crate::macros::endian!(Self::U16_LE, Self::U16_BE);
+    pub const S24_32: Self = crate::macros::endian!(Self::S24_32_LE, Self::S24_32_BE);
+    pub const U24_32: Self = crate::macros::endian!(Self::U24_32_LE, Self::U24_32_BE);
+    pub const S32: Self = crate::macros::endian!(Self::S32_LE, Self::S32_BE);
+    pub const U32: Self = crate::macros::endian!(Self::U32_LE, Self::U32_BE);
+    pub const S24: Self = crate::macros::endian!(Self::S24_LE, Self::S24_BE);
+    pub const U24: Self = crate::macros::endian!(Self::U24_LE, Self::U24_BE);
+    pub const S20: Self = crate::macros::endian!(Self::S20_LE, Self::S20_BE);
+    pub const U20: Self = crate::macros::endian!(Self::U20_LE, Self::U20_BE);
+    pub const S18: Self = crate::macros::endian!(Self::S18_LE, Self::S18_BE);
+    pub const U18: Self = crate::macros::endian!(Self::U18_LE, Self::U18_BE);
+    pub const F32: Self = crate::macros::endian!(Self::F32_LE, Self::F32_BE);
+    pub const F64: Self = crate::macros::endian!(Self::F64_LE, Self::F64_BE);
+    pub const S16_OE: Self = crate::macros::endian!(Self::S16_BE, Self::S16_LE);
+    pub const U16_OE: Self = crate::macros::endian!(Self::U16_BE, Self::U16_LE);
+    pub const S24_32_OE: Self = crate::macros::endian!(Self::S24_32_BE, Self::S24_32_LE);
+    pub const U24_32_OE: Self = crate::macros::endian!(Self::U24_32_BE, Self::U24_32_LE);
+    pub const S32_OE: Self = crate::macros::endian!(Self::S32_BE, Self::S32_LE);
+    pub const U32_OE: Self = crate::macros::endian!(Self::U32_BE, Self::U32_LE);
+    pub const S24_OE: Self = crate::macros::endian!(Self::S24_BE, Self::S24_LE);
+    pub const U24_OE: Self = crate::macros::endian!(Self::U24_BE, Self::U24_LE);
+    pub const S20_OE: Self = crate::macros::endian!(Self::S20_BE, Self::S20_LE);
+    pub const U20_OE: Self = crate::macros::endian!(Self::U20_BE, Self::U20_LE);
+    pub const S18_OE: Self = crate::macros::endian!(Self::S18_BE, Self::S18_LE);
+    pub const U18_OE: Self = crate::macros::endian!(Self::U18_BE, Self::U18_LE);
+    pub const F32_OE: Self = crate::macros::endian!(Self::F32_BE, Self::F32_LE);
+    pub const F64_OE: Self = crate::macros::endian!(Self::F64_BE, Self::F64_LE);
+    pub const DSP_S32: Self = Self::S24_32P;
+    pub const DSP_F32: Self = Self::F32P;
+    pub const DSP_F64: Self = Self::F64P;
 }
