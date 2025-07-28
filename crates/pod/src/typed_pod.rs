@@ -1,19 +1,20 @@
 use core::ffi::CStr;
-use core::{fmt, mem};
+use core::fmt;
+use core::mem;
 
 use crate::bstr::BStr;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
     AsReader, Bitmap, Decode, DecodeUnsized, Encode, Error, Fd, Fraction, Id, Pod, Pointer, Reader,
-    Rectangle, Type, Visitor, WORD_SIZE, Writer,
+    Rectangle, Type, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
 pub struct TypedPod<B> {
-    size: u32,
+    size: usize,
     ty: Type,
     buf: B,
 }
@@ -21,7 +22,7 @@ pub struct TypedPod<B> {
 impl<B> TypedPod<B> {
     /// Construct a new [`TypedPod`] arround the specified buffer `B`.
     #[inline]
-    pub(crate) const fn new(size: u32, ty: Type, buf: B) -> Self {
+    pub(crate) const fn new(size: usize, ty: Type, buf: B) -> Self {
         TypedPod { size, ty, buf }
     }
 
@@ -61,14 +62,17 @@ impl<B> TypedPod<B> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn size(&self) -> u32 {
+    pub const fn size(&self) -> usize {
         self.size
     }
 
     /// Get the size of the padded pod including the header.
     #[inline]
-    pub(crate) fn size_with_header(&self) -> Option<u32> {
-        self.size.next_multiple_of(WORD_SIZE).checked_add(WORD_SIZE)
+    pub(crate) fn size_with_header(&self) -> Option<usize> {
+        const HEADER_SIZE: usize = mem::size_of::<[u32; 2]>();
+        self.size
+            .checked_next_multiple_of(HEADER_SIZE)?
+            .checked_add(HEADER_SIZE)
     }
 }
 
@@ -561,18 +565,18 @@ where
     const TYPE: Type = Type::POD;
 
     #[inline]
-    fn size(&self) -> u32 {
-        self.buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>())
-            .wrapping_add(WORD_SIZE as usize) as u32
+    fn size(&self) -> usize {
+        let len = self.buf.as_reader().bytes_len();
+        len.wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([self.size, self.ty.into_u32()])?;
+        let Ok(size) = u32::try_from(self.size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([size, self.ty.into_u32()])?;
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }

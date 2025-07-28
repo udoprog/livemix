@@ -1,6 +1,8 @@
+use core::mem;
+
 use crate::error::ErrorKind;
 use crate::pod::{ChildPod, PodKind};
-use crate::{ChoiceType, Error, Pod, Type, WORD_SIZE, Writer};
+use crate::{ChoiceType, Error, Pod, Type, Writer};
 
 /// An encoder for a choice.
 pub struct ChoiceEncoder<W, K>
@@ -14,7 +16,7 @@ where
     choice: ChoiceType,
     #[allow(unused)]
     flags: u32,
-    child_size: u32,
+    child_size: usize,
     child_type: Type,
 }
 
@@ -36,14 +38,20 @@ where
 
         // Reserve space for the header of the choice which includes its size
         // that will be determined later.
-        let header = writer.reserve([
-            WORD_SIZE * 2,
-            Type::CHOICE.into_u32(),
-            choice.into_u32(),
-            0,
-            child_size,
-            child_type.into_u32(),
-        ])?;
+        let header = {
+            let Ok(child_size) = u32::try_from(child_size) else {
+                return Err(Error::new(ErrorKind::SizeOverflow));
+            };
+
+            writer.reserve([
+                mem::size_of::<[u32; 4]>() as u32,
+                Type::CHOICE.into_u32(),
+                choice.into_u32(),
+                0,
+                child_size,
+                child_type.into_u32(),
+            ])?
+        };
 
         Ok(Self {
             writer,
@@ -81,15 +89,9 @@ where
 
     #[inline]
     pub(crate) fn close(mut self) -> Result<(), Error> {
-        let Some(size) = self
-            .writer
-            .distance_from(self.header)
-            .and_then(|v| v.checked_sub(WORD_SIZE))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.kind.check(Type::CHOICE, size)?;
+        let size = self
+            .kind
+            .check_size(Type::CHOICE, &self.writer, self.header)?;
 
         self.writer
             .write_at(self.header, [size, Type::CHOICE.into_u32()])?;

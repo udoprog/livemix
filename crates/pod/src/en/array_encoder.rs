@@ -1,6 +1,8 @@
+use core::mem;
+
 use crate::error::ErrorKind;
 use crate::pod::{ChildPod, PodKind};
-use crate::{Error, Pod, Type, WORD_SIZE, Writer};
+use crate::{Error, Pod, Type, Writer};
 
 /// An encoder for an array.
 ///
@@ -42,7 +44,7 @@ where
     writer: W,
     kind: K,
     header: W::Pos,
-    child_size: u32,
+    child_size: usize,
     child_type: Type,
 }
 
@@ -58,9 +60,9 @@ where
         };
 
         let header = writer.reserve([
-            WORD_SIZE,
+            mem::size_of::<[u32; 2]>() as u32,
             Type::ARRAY.into_u32(),
-            child_size,
+            child_size as u32,
             child_type.into_u32(),
         ])?;
 
@@ -77,7 +79,7 @@ where
     pub(crate) fn to_writer_unsized(
         mut writer: W,
         kind: K,
-        child_size: u32,
+        child_size: usize,
         child_type: Type,
     ) -> Result<Self, Error> {
         if let Some(size) = child_type.size() {
@@ -89,12 +91,18 @@ where
             }
         };
 
-        let header = writer.reserve([
-            WORD_SIZE,
-            Type::ARRAY.into_u32(),
-            child_size,
-            child_type.into_u32(),
-        ])?;
+        let header = {
+            let Ok(child_size) = u32::try_from(child_size) else {
+                return Err(Error::new(ErrorKind::SizeOverflow));
+            };
+
+            writer.reserve([
+                mem::size_of::<[u32; 2]>() as u32,
+                Type::ARRAY.into_u32(),
+                child_size,
+                child_type.into_u32(),
+            ])?
+        };
 
         Ok(Self {
             writer,
@@ -130,15 +138,10 @@ where
 
     #[inline]
     pub(crate) fn close(mut self) -> Result<(), Error> {
-        let Some(size) = self
-            .writer
-            .distance_from(self.header)
-            .and_then(|v| v.checked_sub(WORD_SIZE))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
+        let size = self
+            .kind
+            .check_size(Type::ARRAY, &self.writer, self.header)?;
 
-        self.kind.check(Type::ARRAY, size)?;
         self.writer
             .write_at(self.header, [size, Type::ARRAY.into_u32()])?;
         Ok(())

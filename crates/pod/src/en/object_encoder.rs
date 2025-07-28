@@ -1,6 +1,7 @@
-use crate::error::ErrorKind;
+use core::mem;
+
 use crate::pod::PodKind;
-use crate::{Error, Pod, RawId, Type, WORD_SIZE, Writer};
+use crate::{Error, Pod, RawId, Type, Writer};
 
 /// An encoder for an object.
 pub struct ObjectEncoder<W, K>
@@ -30,8 +31,12 @@ where
     ) -> Result<Self, Error> {
         // Reserve space for the header of the struct which includes its size
         // that will be determined later.
-        let header =
-            writer.reserve([WORD_SIZE, Type::OBJECT.into_u32(), object_type, object_id])?;
+        let header = writer.reserve([
+            mem::size_of::<[u32; 2]>() as u32,
+            Type::OBJECT.into_u32(),
+            object_type,
+            object_id,
+        ])?;
 
         Ok(Self {
             writer,
@@ -66,16 +71,9 @@ where
 
     #[inline]
     pub(crate) fn close(mut self) -> Result<(), Error> {
-        // Write the size of the struct at the header position.
-        let Some(size) = self
-            .writer
-            .distance_from(self.header)
-            .and_then(|v| v.checked_sub(WORD_SIZE))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.kind.check(Type::OBJECT, size)?;
+        let size = self
+            .kind
+            .check_size(Type::OBJECT, &self.writer, self.header)?;
 
         self.writer
             .write_at(self.header, [size, Type::OBJECT.into_u32()])?;

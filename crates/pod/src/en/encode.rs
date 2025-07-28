@@ -10,7 +10,7 @@ where
     const TYPE: Type;
 
     /// The size in bytes of the encoded value.
-    fn size(&self) -> u32;
+    fn size(&self) -> usize;
 
     /// Write the content of a type.
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
@@ -32,7 +32,7 @@ impl Encode for bool {
     const TYPE: Type = Type::BOOL;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         4
     }
 
@@ -61,7 +61,7 @@ where
     const TYPE: Type = Type::ID;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         4
     }
 
@@ -87,7 +87,7 @@ impl Encode for i32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         4
     }
 
@@ -117,7 +117,7 @@ impl Encode for u32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         4
     }
 
@@ -143,7 +143,7 @@ impl Encode for i64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         8
     }
 
@@ -173,7 +173,7 @@ impl Encode for u64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         8
     }
 
@@ -199,7 +199,7 @@ impl Encode for f32 {
     const TYPE: Type = Type::FLOAT;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         4
     }
 
@@ -225,7 +225,7 @@ impl Encode for f64 {
     const TYPE: Type = Type::DOUBLE;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         8
     }
 
@@ -251,7 +251,7 @@ impl Encode for Rectangle {
     const TYPE: Type = Type::RECTANGLE;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         8
     }
 
@@ -277,7 +277,7 @@ impl Encode for Fraction {
     const TYPE: Type = Type::FRACTION;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         8
     }
 
@@ -304,8 +304,8 @@ impl<const N: usize> Encode for [u8; N] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn size(&self) -> u32 {
-        N as u32
+    fn size(&self) -> usize {
+        N
     }
 
     #[inline]
@@ -332,7 +332,7 @@ impl Encode for Pointer {
     const TYPE: Type = Type::POINTER;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         16
     }
 
@@ -363,7 +363,7 @@ impl Encode for Fd {
     const TYPE: Type = Type::FD;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         8
     }
 
@@ -394,7 +394,7 @@ where
     const TYPE: Type = T::TYPE;
 
     #[inline]
-    fn size(&self) -> u32 {
+    fn size(&self) -> usize {
         EncodeUnsized::size(*self)
     }
 

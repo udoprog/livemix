@@ -5,12 +5,12 @@ use core::mem;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Control, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
+use crate::{AsReader, Control, Encode, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a sequence.
 pub struct Sequence<B> {
     buf: B,
-    size: u32,
+    size: usize,
     unit: u32,
     pad: u32,
 }
@@ -76,7 +76,7 @@ where
     B: Reader<'de, u64>,
 {
     #[inline]
-    pub fn new(buf: B, size: u32, unit: u32, pad: u32) -> Self {
+    pub fn new(buf: B, size: usize, unit: u32, pad: u32) -> Self {
         Self {
             buf,
             size,
@@ -86,14 +86,14 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut reader: B, size: usize) -> Result<Self, Error> {
         let [unit, pad] = reader.read::<[u32; 2]>()?;
 
         // Remove the size of the object header.
-        let Some(size) = size.checked_sub(WORD_SIZE) else {
+        let Some(size) = size.checked_sub(mem::size_of::<[u32; 2]>()) else {
             return Err(Error::new(ErrorKind::SizeUnderflow {
                 size,
-                sub: WORD_SIZE,
+                sub: mem::size_of::<[u32; 2]>(),
             }));
         };
 
@@ -168,7 +168,7 @@ where
 
         let Some(size_with_header) = pod
             .size_with_header()
-            .and_then(|v| v.checked_add(WORD_SIZE))
+            .and_then(|v| v.checked_add(mem::size_of::<[u32; 2]>()))
         else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
@@ -295,14 +295,9 @@ where
     const TYPE: Type = Type::SEQUENCE;
 
     #[inline]
-    fn size(&self) -> u32 {
-        (self
-            .buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>()) as u32)
-            .wrapping_add(WORD_SIZE)
+    fn size(&self) -> usize {
+        let len = self.buf.as_reader().bytes_len();
+        len.wrapping_add(mem::size_of::<u64>())
     }
 
     #[inline]
@@ -316,6 +311,7 @@ impl<B> fmt::Debug for Sequence<B>
 where
     B: AsReader<u64>,
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Controls<'a, B>(&'a Sequence<B>);
 

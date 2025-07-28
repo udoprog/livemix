@@ -25,7 +25,7 @@ where
 
     /// Read the content of a type.
     #[doc(hidden)]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error>;
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error>;
 }
 
 /// [`Decode`] implementation for `i32`.
@@ -44,7 +44,7 @@ impl<'de> Decode<'de> for bool {
     const TYPE: Type = Type::BOOL;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.read::<[u32; 2]>()?;
         Ok(value != 0)
     }
@@ -69,7 +69,7 @@ where
     const TYPE: Type = Type::ID;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.read()?;
         Ok(Id(I::from_id(value)))
     }
@@ -91,7 +91,7 @@ impl<'de> Decode<'de> for i32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.read::<[u32; 2]>()?;
         Ok(value.cast_signed())
     }
@@ -117,7 +117,7 @@ impl<'de> Decode<'de> for u32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
         Ok(i32::read_content(reader, size)?.cast_unsigned())
     }
 }
@@ -138,7 +138,7 @@ impl<'de> Decode<'de> for i64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         Ok(reader.read::<u64>()?.cast_signed())
     }
 }
@@ -163,7 +163,7 @@ impl<'de> Decode<'de> for u64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
         Ok(i64::read_content(reader, size)?.cast_unsigned())
     }
 }
@@ -184,7 +184,7 @@ impl<'de> Decode<'de> for f32 {
     const TYPE: Type = Type::FLOAT;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [value, _pad] = reader.read()?;
         Ok(f32::from_bits(value))
     }
@@ -206,7 +206,7 @@ impl<'de> Decode<'de> for f64 {
     const TYPE: Type = Type::DOUBLE;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         Ok(f64::from_bits(reader.read::<u64>()?))
     }
 }
@@ -227,7 +227,7 @@ impl<'de> Decode<'de> for Rectangle {
     const TYPE: Type = Type::RECTANGLE;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [width, height] = reader.read()?;
         Ok(Rectangle::new(width, height))
     }
@@ -249,7 +249,7 @@ impl<'de> Decode<'de> for Fraction {
     const TYPE: Type = Type::FRACTION;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [num, denom] = reader.read()?;
         Ok(Fraction::new(num, denom))
     }
@@ -273,7 +273,7 @@ impl<'de> Decode<'de> for CString {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
         CStr::read_content(reader, CStrVisitor, size)
     }
 }
@@ -312,7 +312,7 @@ impl<'de> Decode<'de> for String {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
         str::read_content(reader, StrVisitor, size)
     }
 }
@@ -351,7 +351,7 @@ impl<'de> Decode<'de> for Vec<u8> {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
         <[u8]>::read_content(reader, BytesVisitor, size)
     }
 }
@@ -386,7 +386,7 @@ impl<'de> Decode<'de> for OwnedBitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
-    fn read_content(reader: impl Reader<'de, u64>, size: u32) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
         Bitmap::read_content(reader, BitmapVisitor, size)
     }
 }
@@ -422,7 +422,7 @@ impl<'de> Decode<'de> for Pointer {
     const TYPE: Type = Type::POINTER;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         let [ty, _pad, p1, p2] = reader.read::<[u32; 4]>()?;
 
         let mut bytes = WordBytes::new();
@@ -447,7 +447,7 @@ impl<'de> Decode<'de> for Fd {
     const TYPE: Type = Type::FD;
 
     #[inline]
-    fn read_content(mut reader: impl Reader<'de, u64>, _: u32) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
         Ok(Self::new(reader.read::<u64>()?.cast_signed()))
     }
 }

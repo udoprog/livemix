@@ -27,14 +27,14 @@ where
     fn read_content<V>(
         reader: impl Reader<'de, u64>,
         visitor: V,
-        size: u32,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>;
 
     #[inline]
     #[doc(hidden)]
-    fn read_borrowed(reader: impl Reader<'de, u64>, size: u32) -> Result<&'de Self, Error> {
+    fn read_borrowed(reader: impl Reader<'de, u64>, size: usize) -> Result<&'de Self, Error> {
         struct LocalVisitor;
 
         impl<'de, T> Visitor<'de, T> for LocalVisitor
@@ -73,7 +73,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
         visitor: V,
-        size: u32,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -131,7 +131,7 @@ impl<'de> DecodeUnsized<'de> for str {
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
         visitor: V,
-        size: u32,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -178,7 +178,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
         visitor: V,
-        size: u32,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -206,7 +206,7 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
         visitor: V,
-        size: u32,
+        size: usize,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,

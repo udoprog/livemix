@@ -9,7 +9,7 @@ use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, Str
 use crate::error::ErrorKind;
 use crate::{
     AsReader, Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, RawId, Reader,
-    Type, TypedPod, Visitor, WORD_SIZE, Writer,
+    Type, TypedPod, Visitor, Writer,
 };
 
 /// An unlimited pod.
@@ -20,7 +20,7 @@ pub struct EnvelopePod;
 /// A pod limited for a specific child type and size.
 #[derive(Clone, Copy, Debug)]
 pub struct ChildPod {
-    size: u32,
+    size: usize,
     ty: Type,
 }
 
@@ -43,7 +43,33 @@ pub trait PodKind: Copy + self::sealed::Sealed {
     where
         T: ?Sized + EncodeUnsized;
 
-    fn check(&self, ty: Type, size: u32) -> Result<(), Error>;
+    fn check(&self, ty: Type, size: usize) -> Result<(), Error>;
+
+    #[inline]
+    fn check_size<W>(self, ty: Type, writer: &W, header: W::Pos) -> Result<u32, Error>
+    where
+        W: ?Sized + Writer<u64>,
+    {
+        // This should always hold, since when we reserve space, we always
+        // reserve space for the header, which is 64 bits wide.
+        debug_assert!(writer.distance_from(header) >= mem::size_of::<[u32; 2]>());
+
+        // Calculate the size of the struct at the header position.
+        //
+        // Every header is exactly 64-bits wide and this is not included in the
+        // size of the objects, so we have to subtract it here.
+        let size = writer
+            .distance_from(header)
+            .wrapping_sub(mem::size_of::<[u32; 2]>());
+
+        self.check(ty, size)?;
+
+        let Ok(size) = u32::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        Ok(size)
+    }
 }
 
 impl PodKind for ChildPod {
@@ -68,7 +94,7 @@ impl PodKind for ChildPod {
     }
 
     #[inline]
-    fn check(&self, ty: Type, size: u32) -> Result<(), Error> {
+    fn check(&self, ty: Type, size: usize) -> Result<(), Error> {
         if self.ty != ty {
             return Err(Error::new(ErrorKind::Expected {
                 expected: self.ty,
@@ -95,7 +121,10 @@ impl PodKind for EnvelopePod {
     where
         T: Encode,
     {
-        let size = value.size();
+        let Ok(size) = u32::try_from(value.size()) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         buf.write([size, T::TYPE.into_u32()])?;
         value.write_content(buf)
     }
@@ -105,13 +134,16 @@ impl PodKind for EnvelopePod {
     where
         T: ?Sized + EncodeUnsized,
     {
-        let size = value.size();
+        let Ok(size) = u32::try_from(value.size()) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         buf.write([size, T::TYPE.into_u32()])?;
         value.write_content(buf)
     }
 
     #[inline]
-    fn check(&self, _: Type, _: u32) -> Result<(), Error> {
+    fn check(&self, _: Type, _: usize) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -181,7 +213,7 @@ impl<B> Pod<B> {
 
 impl<B> Pod<B, ChildPod> {
     /// Construct a new child pod.
-    pub(crate) const fn new_child(buf: B, size: u32, ty: Type) -> Self {
+    pub(crate) const fn new_child(buf: B, size: usize, ty: Type) -> Self {
         Pod {
             buf,
             kind: ChildPod { size, ty },
@@ -407,7 +439,7 @@ where
     pub fn push_unsized_array(
         self,
         child_type: Type,
-        child_size: u32,
+        child_size: usize,
         f: impl FnOnce(&mut ArrayEncoder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         let mut array =
@@ -571,15 +603,17 @@ where
 
         f(&mut pod)?;
 
-        let Some(size) = pod
+        let size = pod
             .buf
             .distance_from(header)
-            .and_then(|v| v.checked_sub(WORD_SIZE))
-        else {
+            .wrapping_sub(mem::size_of::<[u32; 2]>());
+
+        self.kind.check(Type::POD, size)?;
+
+        let Ok(size) = u32::try_from(size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        self.kind.check(Type::POD, size)?;
         pod.buf.write_at(header, [size, Type::POD.into_u32()])?;
         Ok(())
     }
@@ -1118,12 +1152,8 @@ where
     const TYPE: Type = Type::POD;
 
     #[inline]
-    fn size(&self) -> u32 {
-        self.buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>()) as u32
+    fn size(&self) -> usize {
+        self.buf.as_reader().bytes_len()
     }
 
     #[inline]

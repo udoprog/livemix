@@ -653,13 +653,10 @@ where
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> Option<u32> {
-        u32::try_from(
-            self.write
-                .checked_sub(pos.write)?
-                .checked_mul(mem::size_of::<T>())?,
-        )
-        .ok()
+    fn distance_from(&self, pos: Self::Pos) -> usize {
+        self.write
+            .wrapping_sub(pos.write)
+            .wrapping_mul(mem::size_of::<T>())
     }
 
     #[inline]
@@ -766,13 +763,8 @@ where
     }
 
     #[inline]
-    fn skip(&mut self, size: u32) -> Result<(), Error> {
-        let size = size.div_ceil(mem::size_of::<T>() as u32);
-
-        let Ok(size) = usize::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+    fn skip(&mut self, size: usize) -> Result<(), Error> {
+        let size = size.div_ceil(mem::size_of::<T>());
         let read = self.read.wrapping_add(size);
 
         if read > self.write || read < self.read {
@@ -784,13 +776,8 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error> {
-        let at = at.div_ceil(mem::size_of::<T>() as u32);
-
-        let Ok(at) = usize::try_from(at) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error> {
+        let at = at.div_ceil(mem::size_of::<T>());
         let read = self.read.wrapping_add(at);
 
         if read > self.write || read < self.read {
@@ -843,15 +830,11 @@ where
     }
 
     #[inline]
-    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
     where
         T: BytesInhabited,
         V: Visitor<'de, [u8]>,
     {
-        let Ok(len) = usize::try_from(len) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
         let req = len.div_ceil(mem::size_of::<T>());
         let read = self.read.wrapping_add(req);
 
@@ -873,6 +856,11 @@ where
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         Buf::as_bytes(self)
+    }
+
+    #[inline]
+    fn bytes_len(&self) -> usize {
+        Buf::remaining_bytes(self)
     }
 
     #[inline]

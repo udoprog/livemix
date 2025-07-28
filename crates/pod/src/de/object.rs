@@ -5,12 +5,12 @@ use core::mem;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Encode, Error, Property, Reader, Type, TypedPod, WORD_SIZE, Writer};
+use crate::{AsReader, Encode, Error, Property, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a struct.
 pub struct Object<B> {
     buf: B,
-    size: u32,
+    size: usize,
     object_type: u32,
     object_id: u32,
 }
@@ -40,7 +40,7 @@ where
     B: Reader<'de, u64>,
 {
     #[inline]
-    fn new(buf: B, size: u32, object_type: u32, object_id: u32) -> Self {
+    fn new(buf: B, size: usize, object_type: u32, object_id: u32) -> Self {
         Self {
             buf,
             size,
@@ -50,19 +50,19 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
-        let [object_type, object_id] = reader.read::<[u32; 2]>()?;
+    pub(crate) fn from_reader(mut buf: B, size: usize) -> Result<Self, Error> {
+        let [object_type, object_id] = buf.read::<[u32; 2]>()?;
 
         // Remove the size of the object header.
-        let Some(size) = size.checked_sub(WORD_SIZE) else {
+        let Some(size) = size.checked_sub(mem::size_of::<[u32; 2]>()) else {
             return Err(Error::new(ErrorKind::SizeUnderflow {
                 size,
-                sub: WORD_SIZE,
+                sub: mem::size_of::<[u32; 2]>(),
             }));
         };
 
         Ok(Self {
-            buf: reader,
+            buf,
             size,
             object_type,
             object_id,
@@ -158,7 +158,7 @@ where
 
         let Some(size_with_header) = pod
             .size_with_header()
-            .and_then(|v| v.checked_add(WORD_SIZE))
+            .and_then(|v| v.checked_add(mem::size_of::<[u32; 2]>()))
         else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
@@ -329,14 +329,9 @@ where
     const TYPE: Type = Type::OBJECT;
 
     #[inline]
-    fn size(&self) -> u32 {
-        (self
-            .buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>()) as u32)
-            .wrapping_add(WORD_SIZE)
+    fn size(&self) -> usize {
+        let len = self.buf.as_reader().bytes_len();
+        len.wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
@@ -350,6 +345,7 @@ impl<'de, B> fmt::Debug for Object<B>
 where
     B: AsReader<u64>,
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Properties<'a, B>(&'a Object<B>);
 

@@ -1,11 +1,12 @@
-use core::{fmt, mem};
+use core::fmt;
+use core::mem;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
+use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for an array.
 ///
@@ -86,9 +87,9 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
 /// ```
 pub struct Array<B> {
     buf: B,
-    child_size: u32,
+    child_size: usize,
     child_type: Type,
-    remaining: u32,
+    remaining: usize,
 }
 
 impl<B> Array<B> {
@@ -119,7 +120,7 @@ impl<B> Array<B> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn len(&self) -> u32 {
+    pub fn len(&self) -> usize {
         self.remaining
     }
 
@@ -154,7 +155,7 @@ where
     B: Reader<'de, u64>,
 {
     #[inline]
-    fn new(buf: B, child_size: u32, child_type: Type, remaining: u32) -> Self {
+    fn new(buf: B, child_size: usize, child_type: Type, remaining: usize) -> Self {
         Self {
             buf,
             child_size,
@@ -164,9 +165,9 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut reader: B, size: usize) -> Result<Self, Error> {
         let (child_size, child_type) = reader.header()?;
-        let remaining = array_remaining(size, child_size, WORD_SIZE)?;
+        let remaining = array_remaining(size, child_size, mem::size_of::<[u32; 2]>())?;
 
         Ok(Self {
             buf: reader,
@@ -347,19 +348,18 @@ where
     const TYPE: Type = Type::ARRAY;
 
     #[inline]
-    fn size(&self) -> u32 {
-        (self
-            .buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>()) as u32)
-            .wrapping_add(WORD_SIZE)
+    fn size(&self) -> usize {
+        let len = self.buf.as_reader().bytes_len();
+        len.wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([self.child_size, self.child_type.into_u32()])?;
+        let Ok(child_size) = u32::try_from(self.child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        writer.write([child_size, self.child_type.into_u32()])?;
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
@@ -368,6 +368,7 @@ impl<B> fmt::Debug for Array<B>
 where
     B: AsReader<u64>,
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Entries<'a, B>(&'a Array<B>);
 

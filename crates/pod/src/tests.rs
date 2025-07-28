@@ -462,7 +462,10 @@ fn test_format_buggy() -> Result<(), Error> {
     array.as_slice_mut()[2] = u64::MAX; // Corrupt the pod.
 
     let pod = Pod::new(array.as_slice());
-    assert_eq!(format!("{pod:?}"), "SizeOverflow");
+    assert_eq!(
+        format!("{pod:?}"),
+        "Choice { type: Range, child_type: Unknown(4294967295), entries: [] }"
+    );
     Ok(())
 }
 

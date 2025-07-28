@@ -1,6 +1,7 @@
-use crate::error::ErrorKind;
+use core::mem;
+
 use crate::pod::PodKind;
-use crate::{Error, Pod, Type, WORD_SIZE, Writer};
+use crate::{Error, Pod, Type, Writer};
 
 /// An encoder for a sequence.
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
@@ -23,7 +24,12 @@ where
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
         // Reserve space for the header of the sequence which includes its size that will be determined later.
-        let header = writer.reserve([WORD_SIZE, Type::SEQUENCE.into_u32(), 0, 0])?;
+        let header = writer.reserve([
+            mem::size_of::<[u32; 2]>() as u32,
+            Type::SEQUENCE.into_u32(),
+            0,
+            0,
+        ])?;
 
         Ok(Self {
             writer,
@@ -58,15 +64,9 @@ where
 
     #[inline]
     pub(crate) fn close(mut self) -> Result<(), Error> {
-        let Some(size) = self
-            .writer
-            .distance_from(self.header)
-            .and_then(|v| v.checked_sub(WORD_SIZE))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.kind.check(Type::SEQUENCE, size)?;
+        let size = self
+            .kind
+            .check_size(Type::SEQUENCE, &self.writer, self.header)?;
 
         self.writer.write_at(
             self.header,

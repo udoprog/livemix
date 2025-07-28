@@ -1,5 +1,4 @@
 use core::fmt;
-use core::mem;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -10,7 +9,7 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 /// A decoder for a struct.
 pub struct Struct<B> {
     buf: B,
-    size: u32,
+    size: usize,
 }
 
 impl<B> Struct<B> {
@@ -26,7 +25,7 @@ where
     B: Reader<'de, u64>,
 {
     #[inline]
-    pub(crate) fn new(buf: B, size: u32) -> Self {
+    pub(crate) fn new(buf: B, size: usize) -> Self {
         Self { buf, size }
     }
 
@@ -218,12 +217,8 @@ where
     const TYPE: Type = Type::STRUCT;
 
     #[inline]
-    fn size(&self) -> u32 {
-        self.buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>()) as u32
+    fn size(&self) -> usize {
+        self.buf.as_reader().bytes_len()
     }
 
     #[inline]
@@ -236,6 +231,7 @@ impl<B> fmt::Debug for Struct<B>
 where
     B: AsReader<u64>,
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Fields<'a, B>(&'a Struct<B>);
 

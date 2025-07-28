@@ -4,8 +4,8 @@ use core::mem;
 use core::mem::MaybeUninit;
 use core::slice;
 
+use crate::Error;
 use crate::error::ErrorKind;
-use crate::{Error, WORD_SIZE};
 
 /// Trait implemented for types which are word-sized and can inhabit all bit
 /// patterns.
@@ -195,7 +195,11 @@ impl WordBytes {
     }
 }
 
-pub(crate) fn array_remaining(size: u32, child_size: u32, header_size: u32) -> Result<u32, Error> {
+pub(crate) fn array_remaining(
+    size: usize,
+    child_size: usize,
+    header_size: usize,
+) -> Result<usize, Error> {
     let Some(size) = size.checked_sub(header_size) else {
         return Err(Error::new(ErrorKind::SizeOverflow));
     };
@@ -205,7 +209,9 @@ pub(crate) fn array_remaining(size: u32, child_size: u32, header_size: u32) -> R
             break 'out 0;
         }
 
-        let Some(padded_child_size) = child_size.checked_next_multiple_of(WORD_SIZE) else {
+        let Some(padded_child_size) =
+            child_size.checked_next_multiple_of(mem::size_of::<[u32; 2]>())
+        else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 

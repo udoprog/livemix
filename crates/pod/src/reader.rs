@@ -52,10 +52,10 @@ where
     fn remaining_bytes(&self) -> usize;
 
     /// Skip the given number of bytes.
-    fn skip(&mut self, size: u32) -> Result<(), Error>;
+    fn skip(&mut self, size: usize) -> Result<(), Error>;
 
     /// Split off the head of the current buffer.
-    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error>;
+    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
@@ -64,7 +64,7 @@ where
     fn read_words_uninit(&mut self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
 
     /// Read the given number of bytes from the input.
-    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
     where
         T: BytesInhabited,
         V: Visitor<'de, [u8]>;
@@ -85,6 +85,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     fn as_bytes(&self) -> &[u8];
+
+    /// Returns the length of the bytes in the buffer.
+    fn bytes_len(&self) -> usize;
 
     /// Returns the slice of remaining data to be read.
     ///
@@ -127,12 +130,17 @@ where
     }
 
     #[inline]
-    fn header(&mut self) -> Result<(u32, Type), Error>
+    fn header(&mut self) -> Result<(usize, Type), Error>
     where
         [u32; 2]: AlignableWith<T>,
     {
         let [size, ty] = self.read::<[u32; 2]>()?;
         let ty = Type::new(ty);
+
+        let Ok(size) = usize::try_from(size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         Ok((size, ty))
     }
 }
@@ -157,12 +165,12 @@ where
     }
 
     #[inline]
-    fn skip(&mut self, size: u32) -> Result<(), Error> {
+    fn skip(&mut self, size: usize) -> Result<(), Error> {
         (**self).skip(size)
     }
 
     #[inline]
-    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error> {
+    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error> {
         (**self).split(at)
     }
 
@@ -177,7 +185,7 @@ where
     }
 
     #[inline]
-    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
     where
         T: BytesInhabited,
         V: Visitor<'de, [u8]>,
@@ -188,6 +196,11 @@ where
     #[inline]
     fn as_bytes(&self) -> &[u8] {
         (**self).as_bytes()
+    }
+
+    #[inline]
+    fn bytes_len(&self) -> usize {
+        (**self).bytes_len()
     }
 
     #[inline]
@@ -216,12 +229,8 @@ where
     }
 
     #[inline]
-    fn skip(&mut self, size: u32) -> Result<(), Error> {
-        let size = size.div_ceil(mem::size_of::<T>() as u32);
-
-        let Ok(size) = usize::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
+    fn skip(&mut self, size: usize) -> Result<(), Error> {
+        let size = size.div_ceil(mem::size_of::<T>());
 
         let Some((_, tail)) = self.split_at_checked(size) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
@@ -232,11 +241,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: u32) -> Result<Self::Reader<'_>, Error> {
-        let Ok(at) = usize::try_from(at) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error> {
         let at = at.div_ceil(mem::size_of::<T>());
 
         let Some((head, tail)) = self.split_at_checked(at) else {
@@ -281,14 +286,10 @@ where
     }
 
     #[inline]
-    fn read_bytes<V>(&mut self, len: u32, visitor: V) -> Result<V::Ok, Error>
+    fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, [u8]>,
     {
-        let Ok(len) = usize::try_from(len) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
         let req = len.div_ceil(mem::size_of::<T>());
 
         let Some((head, tail)) = self.split_at_checked(req) else {
@@ -306,12 +307,12 @@ where
     fn as_bytes(&self) -> &[u8] {
         // SAFETY: The slice is guaranteed to be valid since it was created from
         // a slice of words.
-        unsafe {
-            slice::from_raw_parts(
-                self.as_ptr().cast::<u8>(),
-                self.len().wrapping_mul(mem::size_of::<T>()),
-            )
-        }
+        unsafe { slice::from_raw_parts(self.as_ptr().cast::<u8>(), self.bytes_len()) }
+    }
+
+    #[inline]
+    fn bytes_len(&self) -> usize {
+        self.len().wrapping_mul(mem::size_of::<T>())
     }
 
     #[inline]

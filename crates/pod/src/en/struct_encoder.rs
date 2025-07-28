@@ -1,6 +1,5 @@
-use crate::error::ErrorKind;
 use crate::pod::PodKind;
-use crate::{Error, Pod, Type, WORD_SIZE, Writer};
+use crate::{Error, Pod, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -53,17 +52,9 @@ where
 
     #[inline]
     pub(crate) fn close(mut self) -> Result<(), Error> {
-        // Write the size of the struct at the header position.
-        let Some(size) = self
-            .writer
-            .distance_from(self.header)
-            .and_then(|v| v.checked_sub(WORD_SIZE))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        self.kind.check(Type::STRUCT, size)?;
-
+        let size = self
+            .kind
+            .check_size(Type::STRUCT, &self.writer, self.header)?;
         self.writer
             .write_at(self.header, [size, Type::STRUCT.into_u32()])?;
         Ok(())

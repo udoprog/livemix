@@ -27,7 +27,7 @@ where
 
     /// The size in bytes of the unsized value.
     #[doc(hidden)]
-    fn size(&self) -> u32;
+    fn size(&self) -> usize;
 
     #[doc(hidden)]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
@@ -50,8 +50,8 @@ impl EncodeUnsized for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn size(&self) -> u32 {
-        self.len() as u32
+    fn size(&self) -> usize {
+        self.len()
     }
 
     #[inline]
@@ -78,8 +78,8 @@ impl EncodeUnsized for CStr {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> u32 {
-        self.to_bytes_with_nul().len() as u32
+    fn size(&self) -> usize {
+        self.to_bytes_with_nul().len()
     }
 
     #[inline]
@@ -106,17 +106,19 @@ impl EncodeUnsized for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> u32 {
-        str::len(self).wrapping_add(1) as u32
+    fn size(&self) -> usize {
+        str::len(self).wrapping_add(1)
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        if self.as_bytes().contains(&0) {
+        let bytes = self.as_bytes();
+
+        if bytes.contains(&0) {
             return Err(Error::new(ErrorKind::NullContainingString));
         }
 
-        writer.write_bytes(self.as_bytes(), 1)?;
+        writer.write_bytes(bytes, 1)?;
         Ok(())
     }
 }
@@ -138,8 +140,8 @@ impl EncodeUnsized for Bitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
-    fn size(&self) -> u32 {
-        Bitmap::as_bytes(self).len() as u32
+    fn size(&self) -> usize {
+        Bitmap::as_bytes(self).len()
     }
 
     #[inline]

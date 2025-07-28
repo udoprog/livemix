@@ -29,7 +29,7 @@ pub(crate) enum ErrorKind {
     StructUnderflow,
     ObjectUnderflow,
     SizeOverflow,
-    SizeUnderflow { size: u32, sub: u32 },
+    SizeUnderflow { size: usize, sub: usize },
     BufferOverflow,
     BufferUnderflow,
     NonTerminatedString,
@@ -39,7 +39,7 @@ pub(crate) enum ErrorKind {
     UnsizedTypeInArray { ty: Type },
     Expected { expected: Type, actual: Type },
     ReservedSizeMismatch { expected: usize, actual: usize },
-    ChildSizeMismatch { expected: u32, actual: u32 },
+    ChildSizeMismatch { expected: usize, actual: usize },
 }
 
 #[cfg(test)]

@@ -31,7 +31,7 @@ macro_rules! declare {
 
             /// Get the size of the type.
             #[inline]
-            pub(crate) fn size(&self) -> Option<u32> {
+            pub(crate) fn size(&self) -> Option<usize> {
                 match *self {
                     $(Self::$ident => $size,)*
                     _ => None,

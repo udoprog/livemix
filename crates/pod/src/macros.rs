@@ -41,7 +41,7 @@ macro_rules! __id {
                 const TYPE: $crate::Type = $crate::Type::ID;
 
                 #[inline]
-                fn size(&self) -> u32 {
+                fn size(&self) -> usize {
                     4
                 }
 
@@ -91,7 +91,7 @@ macro_rules! __id {
                 const TYPE: $crate::Type = $crate::Type::ID;
 
                 #[inline]
-                fn read_content(reader: impl $crate::Reader<'de, u64>, len: u32) -> Result<Self, $crate::Error> {
+                fn read_content(reader: impl $crate::Reader<'de, u64>, len: usize) -> Result<Self, $crate::Error> {
                     let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, len)?;
                     Ok(id)
                 }
@@ -233,7 +233,7 @@ macro_rules! __flags {
                 const TYPE: $crate::Type = <$repr as $crate::Encode>::TYPE;
 
                 #[inline]
-                fn size(&self) -> u32 {
+                fn size(&self) -> usize {
                     <$repr as $crate::Encode>::size(&self.0)
                 }
 
@@ -283,7 +283,7 @@ macro_rules! __flags {
                 const TYPE: $crate::Type = <$repr as $crate::Decode<'de>>::TYPE;
 
                 #[inline]
-                fn read_content(reader: impl $crate::Reader<'de, u64>, len: u32) -> Result<Self, $crate::Error> {
+                fn read_content(reader: impl $crate::Reader<'de, u64>, len: usize) -> Result<Self, $crate::Error> {
                     Ok(Self(<$repr as $crate::Decode<'de>>::read_content(reader, len)?))
                 }
             }

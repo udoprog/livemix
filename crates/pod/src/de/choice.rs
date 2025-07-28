@@ -1,11 +1,12 @@
-use core::{fmt, mem};
+use core::fmt;
+use core::mem;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, ChoiceType, Encode, Error, Reader, Type, TypedPod, WORD_SIZE, Writer};
+use crate::{AsReader, ChoiceType, Encode, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a choice.
 ///
@@ -41,9 +42,9 @@ pub struct Choice<B> {
     buf: B,
     choice_type: ChoiceType,
     flags: u32,
-    child_size: u32,
+    child_size: usize,
     child_type: Type,
-    remaining: u32,
+    remaining: usize,
 }
 
 impl<B> Choice<B> {
@@ -126,7 +127,7 @@ impl<B> Choice<B> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn child_size(&self) -> u32 {
+    pub const fn child_size(&self) -> usize {
         self.child_size
     }
 
@@ -146,9 +147,9 @@ where
         buf: B,
         choice_type: ChoiceType,
         flags: u32,
-        child_size: u32,
+        child_size: usize,
         child_type: Type,
-        remaining: u32,
+        remaining: usize,
     ) -> Self {
         Self {
             buf,
@@ -161,11 +162,16 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: u32) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut reader: B, size: usize) -> Result<Self, Error> {
         let [choice_type, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
+
+        let Ok(child_size) = usize::try_from(child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         let choice_type = ChoiceType::from_u32(choice_type);
         let child_type = Type::new(child_type);
-        let remaining = array_remaining(size, child_size, WORD_SIZE * 2)?;
+        let remaining = array_remaining(size, child_size, mem::size_of::<[u32; 4]>())?;
 
         Ok(Self {
             buf: reader,
@@ -196,7 +202,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn len(&self) -> u32 {
+    pub const fn len(&self) -> usize {
         self.remaining
     }
 
@@ -401,22 +407,21 @@ where
     const TYPE: Type = Type::CHOICE;
 
     #[inline]
-    fn size(&self) -> u32 {
-        (self
-            .buf
-            .as_reader()
-            .as_slice()
-            .len()
-            .wrapping_mul(mem::size_of::<u64>()) as u32)
-            .wrapping_add(WORD_SIZE * 2)
+    fn size(&self) -> usize {
+        let len = self.buf.as_reader().bytes_len();
+        len.wrapping_add(mem::size_of::<[u32; 4]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        let Ok(child_size) = u32::try_from(self.child_size) else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
         writer.write([
             self.choice_type.into_u32(),
             self.flags,
-            self.child_size,
+            child_size,
             self.child_type.into_u32(),
         ])?;
 
@@ -428,6 +433,7 @@ impl<B> fmt::Debug for Choice<B>
 where
     B: AsReader<u64>,
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         struct Entries<'a, B>(&'a Choice<B>);
 

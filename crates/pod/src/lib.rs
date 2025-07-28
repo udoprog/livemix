@@ -11,8 +11,6 @@ mod tests;
 
 pub mod macros;
 
-pub(crate) const WORD_SIZE: u32 = core::mem::size_of::<u64>() as u32;
-
 pub(crate) mod bstr;
 
 pub mod pod;
