@@ -26,8 +26,8 @@ where
     #[doc(hidden)]
     fn read_content<V>(
         reader: impl Reader<'de, u64>,
-        visitor: V,
         size: usize,
+        visitor: V,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>;
@@ -49,7 +49,7 @@ where
             }
         }
 
-        Self::read_content(reader, LocalVisitor, size)
+        Self::read_content(reader, size, LocalVisitor)
     }
 }
 
@@ -72,8 +72,8 @@ impl<'de> DecodeUnsized<'de> for CStr {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
-        visitor: V,
         size: usize,
+        visitor: V,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -130,8 +130,8 @@ impl<'de> DecodeUnsized<'de> for str {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
-        visitor: V,
         size: usize,
+        visitor: V,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -177,8 +177,8 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
-        visitor: V,
         size: usize,
+        visitor: V,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,
@@ -205,8 +205,8 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     #[inline]
     fn read_content<V>(
         mut reader: impl Reader<'de, u64>,
-        visitor: V,
         size: usize,
+        visitor: V,
     ) -> Result<V::Ok, Error>
     where
         V: Visitor<'de, Self>,

@@ -1,5 +1,8 @@
 use core::ffi::CStr;
 
+#[cfg(feature = "alloc")]
+use alloc::string::String;
+
 use crate::error::ErrorKind;
 use crate::{Bitmap, Error, Type, Writer};
 
@@ -128,6 +131,42 @@ impl EncodeUnsized for str {
 }
 
 crate::macros::encode_into_unsized!(str);
+
+/// Encode an owned [`String`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+///
+/// pod.as_mut().push_unsized(&String::from("hello world"))?;
+/// pod.as_mut().push_unsized(&String::from("this is right"))?;
+///
+/// let mut pod = pod.as_ref();
+/// assert_eq!(pod.as_read_mut().next::<String>()?, "hello world");
+/// assert_eq!(pod.as_read_mut().next::<String>()?, "this is right");
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[cfg(feature = "alloc")]
+impl EncodeUnsized for String {
+    const TYPE: Type = Type::STRING;
+
+    #[inline]
+    fn size(&self) -> usize {
+        // A string cannot be longer than `isize::MAX`, so we can always add 1
+        // to it to get a correct usize.
+        str::len(self).wrapping_add(1)
+    }
+
+    #[inline]
+    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        str::write_content(self, writer)
+    }
+}
+
+crate::macros::encode_into_unsized!(String);
 
 /// [`EncodeUnsized`] implementation for an unsized [`Bitmap`].
 ///

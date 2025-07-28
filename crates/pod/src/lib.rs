@@ -28,8 +28,14 @@ pub mod utils;
 mod id;
 pub use self::id::{Id, RawId};
 
+mod encode_into;
+pub use self::encode_into::EncodeInto;
+
+mod decode_from;
+pub use self::decode_from::DecodeFrom;
+
 mod en;
-pub use self::en::{Encode, EncodeInto, EncodeUnsized};
+pub use self::en::{Encode, EncodeUnsized};
 
 mod de;
 pub use self::de::{Array, Choice, Decode, DecodeUnsized, Object, Sequence, Struct};

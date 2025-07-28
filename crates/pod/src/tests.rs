@@ -482,3 +482,24 @@ fn test_array_drop() -> Result<(), Error> {
     array.push(String::from("baz"))?;
     Ok(())
 }
+
+#[test]
+fn test_struct_decoding() -> Result<(), Error> {
+    let mut pod = Pod::array();
+    pod.as_mut().push_struct(|st| st.encode((1, 2, 3)))?;
+
+    let mut st = pod.as_ref().next_struct()?;
+    assert_eq!(st.decode::<(i32, i32, i32)>()?, (1, 2, 3));
+    assert!(st.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_struct_unit() -> Result<(), Error> {
+    let mut pod = Pod::array();
+    pod.as_mut().push_struct(|st| st.encode(()))?;
+
+    let st = pod.as_ref().next_struct()?;
+    assert!(st.is_empty());
+    Ok(())
+}

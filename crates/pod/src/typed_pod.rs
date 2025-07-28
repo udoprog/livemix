@@ -185,7 +185,7 @@ where
             }));
         }
 
-        T::read_content(self.buf, visitor, self.size)
+        T::read_content(self.buf, self.size, visitor)
     }
 
     /// Read the next unsized value into the pod.

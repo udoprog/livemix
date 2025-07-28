@@ -1,6 +1,3 @@
-mod encode_into;
-pub use self::encode_into::EncodeInto;
-
 mod encode_unsized;
 pub use self::encode_unsized::EncodeUnsized;
 

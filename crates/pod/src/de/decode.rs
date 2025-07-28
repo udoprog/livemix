@@ -11,8 +11,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 #[cfg(feature = "alloc")]
-use crate::{Bitmap, DecodeUnsized, OwnedBitmap, Visitor};
-use crate::{Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type, utils::WordBytes};
+use crate::{Bitmap, DecodeUnsized, OwnedBitmap};
+use crate::{
+    Buf, Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type, error::ErrorKind,
+    utils::WordBytes,
+};
 
 /// A trait for types that can be decoded.
 pub trait Decode<'de>
@@ -50,6 +53,8 @@ impl<'de> Decode<'de> for bool {
     }
 }
 
+crate::macros::decode_from_sized!(bool);
+
 /// [`Decode`] implementation for an [`RawId`] type.
 ///
 /// # Examples
@@ -75,6 +80,8 @@ where
     }
 }
 
+crate::macros::decode_from_sized!(impl [I] Id<I> where I: RawId);
+
 /// [`Decode`] implementation for `i32`.
 ///
 /// # Examples
@@ -96,6 +103,8 @@ impl<'de> Decode<'de> for i32 {
         Ok(value.cast_signed())
     }
 }
+
+crate::macros::decode_from_sized!(i32);
 
 /// [`Decode`] implementation for `u32`.
 ///
@@ -122,6 +131,8 @@ impl<'de> Decode<'de> for u32 {
     }
 }
 
+crate::macros::decode_from_sized!(u32);
+
 /// [`Decode`] implementation for `i64`.
 ///
 /// # Examples
@@ -142,6 +153,8 @@ impl<'de> Decode<'de> for i64 {
         Ok(reader.read::<u64>()?.cast_signed())
     }
 }
+
+crate::macros::decode_from_sized!(i64);
 
 /// [`Decode`] implementation for `u64`.
 ///
@@ -168,6 +181,8 @@ impl<'de> Decode<'de> for u64 {
     }
 }
 
+crate::macros::decode_from_sized!(u64);
+
 /// [`Decode`] implementation for `f32`.
 ///
 /// # Examples
@@ -190,6 +205,8 @@ impl<'de> Decode<'de> for f32 {
     }
 }
 
+crate::macros::decode_from_sized!(f32);
+
 /// [`Decode`] implementation for `f64`.
 ///
 /// # Examples
@@ -210,6 +227,8 @@ impl<'de> Decode<'de> for f64 {
         Ok(f64::from_bits(reader.read::<u64>()?))
     }
 }
+
+crate::macros::decode_from_sized!(f64);
 
 /// [`Decode`] implementation for [`Rectangle`].
 ///
@@ -233,6 +252,8 @@ impl<'de> Decode<'de> for Rectangle {
     }
 }
 
+crate::macros::decode_from_sized!(Rectangle);
+
 /// [`Decode`] implementation for a [`Fraction`].
 ///
 /// # Examples
@@ -255,6 +276,39 @@ impl<'de> Decode<'de> for Fraction {
     }
 }
 
+crate::macros::decode_from_sized!(Fraction);
+
+/// [`Encode`] a an array of bytes `[u8; N]`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Pod, Fraction};
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(*b"hello world")?;
+/// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de, const N: usize> Decode<'de> for [u8; N] {
+    const TYPE: Type = Type::BYTES;
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
+        let mut buf = Buf::<u8, N>::new();
+
+        <[u8]>::read_content(reader, N, |data: &[u8]| buf.extend_from_slice(data))??;
+
+        let Some(array) = buf.into_inner() else {
+            return Err(Error::new(ErrorKind::InvalidArrayLength));
+        };
+
+        Ok(array)
+    }
+}
+
+crate::macros::decode_from_sized!(impl [const N: usize] [u8; N]);
+
 /// Decode an owned c-string.
 ///
 /// # Examples
@@ -274,22 +328,13 @@ impl<'de> Decode<'de> for CString {
 
     #[inline]
     fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
-        CStr::read_content(reader, CStrVisitor, size)
+        CStr::read_content(reader, size, CStr::to_owned)
     }
 }
 
 #[cfg(feature = "alloc")]
-struct CStrVisitor;
-
-#[cfg(feature = "alloc")]
-impl<'de> Visitor<'de, CStr> for CStrVisitor {
-    type Ok = CString;
-
-    #[inline]
-    fn visit_ref(self, value: &CStr) -> Result<Self::Ok, Error> {
-        Ok(value.to_owned())
-    }
-}
+crate::macros::decode_from_sized!(CString);
+crate::macros::decode_from_borrowed!(CStr);
 
 /// Decode an owned [`String`].
 ///
@@ -314,22 +359,13 @@ impl<'de> Decode<'de> for String {
 
     #[inline]
     fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
-        str::read_content(reader, StrVisitor, size)
+        str::read_content(reader, size, str::to_owned)
     }
 }
 
 #[cfg(feature = "alloc")]
-struct StrVisitor;
-
-#[cfg(feature = "alloc")]
-impl<'de> Visitor<'de, str> for StrVisitor {
-    type Ok = String;
-
-    #[inline]
-    fn visit_ref(self, value: &str) -> Result<Self::Ok, Error> {
-        Ok(value.to_owned())
-    }
-}
+crate::macros::decode_from_sized!(String);
+crate::macros::decode_from_borrowed!(str);
 
 /// Decode an owned vector of bytes [`Vec<u8>`].
 ///
@@ -354,22 +390,13 @@ impl<'de> Decode<'de> for Vec<u8> {
 
     #[inline]
     fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
-        <[u8]>::read_content(reader, BytesVisitor, size)
+        <[u8]>::read_content(reader, size, <[u8]>::to_vec)
     }
 }
 
 #[cfg(feature = "alloc")]
-struct BytesVisitor;
-
-#[cfg(feature = "alloc")]
-impl<'de> Visitor<'de, [u8]> for BytesVisitor {
-    type Ok = Vec<u8>;
-
-    #[inline]
-    fn visit_ref(self, value: &[u8]) -> Result<Self::Ok, Error> {
-        Ok(value.to_owned())
-    }
-}
+crate::macros::decode_from_sized!(Vec<u8>);
+crate::macros::decode_from_borrowed!([u8]);
 
 /// Decode an owned [`OwnedBitmap`].
 ///
@@ -389,22 +416,13 @@ impl<'de> Decode<'de> for OwnedBitmap {
 
     #[inline]
     fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
-        Bitmap::read_content(reader, BitmapVisitor, size)
+        Bitmap::read_content(reader, size, Bitmap::to_owned)
     }
 }
 
 #[cfg(feature = "alloc")]
-struct BitmapVisitor;
-
-#[cfg(feature = "alloc")]
-impl<'de> Visitor<'de, Bitmap> for BitmapVisitor {
-    type Ok = OwnedBitmap;
-
-    #[inline]
-    fn visit_ref(self, value: &Bitmap) -> Result<Self::Ok, Error> {
-        Ok(value.to_owned())
-    }
-}
+crate::macros::decode_from_sized!(OwnedBitmap);
+crate::macros::decode_from_borrowed!(Bitmap);
 
 /// [`Decode`] implementation for [`Pointer`].
 ///
@@ -433,6 +451,9 @@ impl<'de> Decode<'de> for Pointer {
     }
 }
 
+#[cfg(feature = "alloc")]
+crate::macros::decode_from_sized!(Pointer);
+
 /// [`Decode`] implementation for [`Fd`].
 ///
 /// # Examples
@@ -453,3 +474,6 @@ impl<'de> Decode<'de> for Fd {
         Ok(Self::new(reader.read::<u64>()?.cast_signed()))
     }
 }
+
+#[cfg(feature = "alloc")]
+crate::macros::decode_from_sized!(Fd);

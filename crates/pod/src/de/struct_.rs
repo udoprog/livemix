@@ -4,7 +4,9 @@ use core::fmt;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
+use crate::{
+    AsReader, DecodeFrom, EncodeUnsized, Error, Pod, PodKind, Reader, Type, TypedPod, Writer,
+};
 
 /// A decoder for a struct.
 pub struct Struct<B> {
@@ -54,8 +56,52 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.size == 0
+    }
+
+    /// Decode from the struct using the [`DecodeFrom`] trait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_struct(|st| {
+    ///     st.field().push(1i32)?;
+    ///     st.field().push(2i32)?;
+    ///     st.field().push(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let mut st = pod.as_ref().next_struct()?;
+    ///
+    /// assert!(!st.is_empty());
+    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn decode<T>(&mut self) -> Result<T, Error>
+    where
+        T: DecodeFrom<'de>,
+    {
+        let pos = self.buf.pos();
+        let value = T::decode_from(Pod::new(self.buf.borrow_mut()))?;
+        let distance = self.buf.distance_from(pos);
+
+        let Some(size) = self.size.checked_sub(distance) else {
+            return Err(Error::new(ErrorKind::SizeUnderflow {
+                size: self.size,
+                sub: distance,
+            }));
+        };
+
+        self.size = size;
+        Ok(value)
     }
 
     /// Decode the next field in the struct.
@@ -145,6 +191,14 @@ where
             size: self.size,
         }
     }
+
+    #[inline]
+    fn into_slice(self) -> Struct<&'de [u64]> {
+        Struct {
+            buf: self.buf.as_slice(),
+            size: self.size,
+        }
+    }
 }
 
 impl<B> Struct<B>
@@ -231,6 +285,13 @@ where
 }
 
 crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader<u64>);
+
+impl<'de> DecodeFrom<'de> for Struct<&'de [u64]> {
+    #[inline]
+    fn decode_from(pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error> {
+        Ok(pod.next_struct()?.into_slice())
+    }
+}
 
 impl<B> fmt::Debug for Struct<B>
 where

@@ -39,6 +39,10 @@ where
 {
 }
 
+unsafe impl BytesInhabited for u8 {}
+unsafe impl BytesInhabited for i8 {}
+unsafe impl BytesInhabited for u16 {}
+unsafe impl BytesInhabited for i16 {}
 unsafe impl BytesInhabited for i32 {}
 unsafe impl BytesInhabited for u32 {}
 unsafe impl BytesInhabited for i64 {}

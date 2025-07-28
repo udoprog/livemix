@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use core::mem::{self, MaybeUninit};
 use core::slice;
 
@@ -28,8 +29,17 @@ where
     where
         Self: 'this;
 
+    /// The position type used by the reader.
+    type Pos: 'de + Copy;
+
     /// Borrow the current reader mutably.
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
+
+    /// Get the current position in the reader.
+    fn pos(&self) -> Self::Pos;
+
+    /// Get the position of the reader relative to the queried position.
+    fn distance_from(&self, pos: Self::Pos) -> usize;
 
     /// Returns the size of the remaining buffer in bytes.
     ///
@@ -105,11 +115,11 @@ where
     /// assert_eq!(buf.as_slice(), &[42]);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    fn as_slice(&self) -> &[T];
+    fn as_slice(&self) -> &'de [T];
 
     /// Read an array of words.
     #[inline]
-    fn peek<U>(&mut self) -> Result<U, Error>
+    fn peek<U>(&self) -> Result<U, Error>
     where
         U: AlignableWith<T>,
     {
@@ -158,9 +168,21 @@ where
     where
         Self: 'this;
 
+    type Pos = R::Pos;
+
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         (**self).borrow_mut()
+    }
+
+    #[inline]
+    fn pos(&self) -> Self::Pos {
+        (**self).pos()
+    }
+
+    #[inline]
+    fn distance_from(&self, pos: Self::Pos) -> usize {
+        (**self).distance_from(pos)
     }
 
     #[inline]
@@ -208,10 +230,25 @@ where
     }
 
     #[inline]
-    fn as_slice(&self) -> &[T] {
+    fn as_slice(&self) -> &'de [T] {
         (**self).as_slice()
     }
 }
+
+/// A stored slice position.
+pub struct SlicePos<'de, T> {
+    ptr: *const T,
+    _marker: core::marker::PhantomData<&'de T>,
+}
+
+impl<T> Clone for SlicePos<'_, T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for SlicePos<'_, T> {}
 
 impl<'de, T> Reader<'de, T> for &'de [T]
 where
@@ -225,9 +262,27 @@ where
     where
         Self: 'this;
 
+    type Pos = SlicePos<'de, T>;
+
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
         self
+    }
+
+    #[inline]
+    fn pos(&self) -> Self::Pos {
+        SlicePos {
+            ptr: self.as_ptr(),
+            _marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    fn distance_from(&self, pos: Self::Pos) -> usize {
+        // SAFETY: In principle, the stored position includes the lifetime of
+        // `'de` which should prevent the buffer from being invalidated.
+        let offset = unsafe { self.as_ptr().offset_from_unsigned(pos.ptr) };
+        offset.wrapping_mul(mem::size_of::<T>())
     }
 
     #[inline]
@@ -319,7 +374,7 @@ where
     }
 
     #[inline]
-    fn as_slice(&self) -> &[T] {
+    fn as_slice(&self) -> &'de [T] {
         self
     }
 }

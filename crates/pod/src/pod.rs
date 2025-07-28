@@ -4,6 +4,7 @@ use core::mem;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
+use crate::DecodeFrom;
 use crate::Encode;
 use crate::EncodeInto;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
@@ -270,26 +271,21 @@ where
 {
     /// Conveniently encode a value into the pod.
     ///
-    /// This supports APIs for building structs by providing a tuple as an
-    /// argument, or an array by providing an array as a value.
-    ///
     /// # Examples
     ///
     /// ```
     /// use pod::Pod;
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode((10i32, "hello world", [1u32, 2u32]))?;
+    /// pod.as_mut().push_struct(|st| st.encode((10i32, "hello world", [1u32, 2u32])))?;
     ///
     /// let mut pod = pod.as_ref();
     /// let mut st = pod.next_struct()?;
     ///
     /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
     /// assert_eq!(st.field()?.next_borrowed::<str>()?, "hello world");
-    ///
-    /// let mut array = st.field()?.next_array()?;
-    /// assert_eq!(array.next().unwrap().next::<u32>()?, 1);
-    /// assert_eq!(array.next().unwrap().next::<u32>()?, 2);
+    /// assert_eq!(st.field()?.next::<u32>()?, 1);
+    /// assert_eq!(st.field()?.next::<u32>()?, 2);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -691,6 +687,31 @@ where
         self.into_typed()?.skip()
     }
 
+    /// Conveniently decode a value from the pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode((10i32, "hello world", [1u32, 2u32]))?;
+    ///
+    /// let (a, s, [c, d]) = pod.as_ref().decode::<(i32, String, [u32; 2])>()?;
+    ///
+    /// assert_eq!(a, 10i32);
+    /// assert_eq!(s, "hello world");
+    /// assert_eq!(c, 1u32);
+    /// assert_eq!(d, 2u32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn decode<T>(self) -> Result<T, Error>
+    where
+        T: DecodeFrom<'de>,
+    {
+        T::decode_from(self)
+    }
+
     /// Encode a value from the pod.
     ///
     /// # Examples
@@ -779,8 +800,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_option(self) -> Result<Option<TypedPod<B>>, Error> {
-        self.into_typed()?.next_option()
+    pub fn next_option(self) -> Result<Option<Self>, Error> {
+        let [_, ty] = self.buf.peek::<[u32; 2]>()?;
+
+        match Type::new(ty) {
+            Type::NONE => Ok(None),
+            _ => Ok(Some(self)),
+        }
     }
 
     /// Read the next array.

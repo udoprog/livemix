@@ -35,6 +35,7 @@ pub(crate) enum ErrorKind {
     NullContainingString,
     NotUtf8,
     NotSupportedRef,
+    InvalidArrayLength,
     UnsizedTypeInArray { ty: Type },
     Expected { expected: Type, actual: Type },
     ReservedSizeMismatch { expected: usize, actual: usize },
@@ -77,6 +78,7 @@ impl fmt::Display for Error {
             ),
             ErrorKind::NotUtf8 => write!(f, "String does not contain valid UTF-8"),
             ErrorKind::NotSupportedRef => write!(f, "Decoding into reference is not supported"),
+            ErrorKind::InvalidArrayLength => write!(f, "Invalid array length"),
             ErrorKind::UnsizedTypeInArray { ty } => write!(
                 f,
                 "Unsized type {ty:?} in array, use push_unsized_array instead"

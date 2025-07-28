@@ -112,12 +112,7 @@ impl Client {
 
             st.field().push_struct(|props| {
                 props.field().push(PROPS.len() as u32)?;
-
-                for &(key, value) in PROPS {
-                    props.field().push_unsized(key)?;
-                    props.field().push_unsized(value)?;
-                }
-
+                props.encode(PROPS)?;
                 Ok(())
             })?;
 
@@ -139,12 +134,7 @@ impl Client {
         pod.as_mut().push_struct(|st| {
             st.field().push_struct(|props| {
                 props.field().push(PROPS.len() as u32)?;
-
-                for &(key, value) in PROPS {
-                    props.field().push_unsized(key)?;
-                    props.field().push_unsized(value)?;
-                }
-
+                props.encode(PROPS)?;
                 Ok(())
             })
         })?;
@@ -175,6 +165,15 @@ impl Client {
         max_input_ports: u32,
         max_output_ports: u32,
     ) -> Result<()> {
+        const PARAMS: &[(id::Param, flags::Param)] = &[
+            (id::Param::PROP_INFO, flags::Param::NONE),
+            (id::Param::PROPS, flags::Param::WRITE),
+            (id::Param::ENUM_FORMAT, flags::Param::READ),
+            (id::Param::FORMAT, flags::Param::WRITE),
+        ];
+
+        const PROPS: &[(&str, &str)] = &[("node.name", "livemix")];
+
         let mut pod = Pod::array();
 
         let mut change_mask = flags::ClientNodeUpdate::NONE;
@@ -225,22 +224,11 @@ impl Client {
                     st.field().push(node_change_mask)?;
                     st.field().push(node_flags)?;
 
-                    st.field().push(1u32)?;
-                    st.field().push_unsized("node.name")?;
-                    st.field().push_unsized("livemix2")?;
+                    st.field().push(PROPS.len() as u32)?;
+                    st.encode(PROPS)?;
 
-                    st.field().push(4u32)?;
-                    st.field().push(id::Param::PROP_INFO)?;
-                    st.field().push(flags::Param::NONE)?;
-
-                    st.field().push(id::Param::PROPS)?;
-                    st.field().push(flags::Param::WRITE)?;
-
-                    st.field().push(id::Param::ENUM_FORMAT)?;
-                    st.field().push(flags::Param::READ)?;
-
-                    st.field().push(id::Param::FORMAT)?;
-                    st.field().push(flags::Param::WRITE)?;
+                    st.field().push(PARAMS.len() as u32)?;
+                    st.encode(PARAMS)?;
                     Ok(())
                 })?;
             } else {

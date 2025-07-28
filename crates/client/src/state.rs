@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::os::fd::OwnedFd;
 
 use anyhow::{Context, Result, bail};
-use pod::{Fd, Id, Object, Pod};
+use pod::{Fd, Id, Object, Pod, Struct};
 use protocol::consts;
 use protocol::id;
 use protocol::ids::Ids;
@@ -519,9 +519,7 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_done_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<u32>()?;
-        let seq = st.field()?.next::<u32>()?;
+        let (id, seq) = pod.next_struct()?.decode::<(u32, u32)>()?;
 
         match id {
             GET_REGISTRY_SYNC => {
@@ -629,27 +627,23 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn registry_global(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.next_struct()?;
+        let (id, permissions, ty, version, mut props) =
+            pod.decode::<Struct<_>>()?
+                .decode::<(_, _, _, _, Struct<_>)>()?;
 
-        let id = st.field()?.next::<u32>()?;
+        let n_items = props.decode::<u32>()?;
 
         let index = self.registries.vacant_key();
-
         let mut registry = RegistryState::default();
 
         registry.id = id;
-        registry.permissions = st.field()?.next::<i32>()?;
-        registry.ty = st.field()?.next::<String>()?;
-        registry.version = st.field()?.next::<u32>()?;
-
-        let mut props = st.field()?.next_struct()?;
-
-        let n_items = props.field()?.next::<i32>()?;
+        registry.permissions = permissions;
+        registry.ty = ty;
+        registry.version = version;
 
         for _ in 0..n_items {
-            let key = props.field()?.next_unsized::<str, _>(str::to_owned)?;
-            let value = props.field()?.next_unsized::<str, _>(str::to_owned)?;
-            registry.properties.insert(key, value);
+            let (key, value) = props.decode::<(&str, &str)>()?;
+            registry.properties.insert(key.to_owned(), value.to_owned());
         }
 
         if registry.ty == consts::INTERFACE_FACTORY {

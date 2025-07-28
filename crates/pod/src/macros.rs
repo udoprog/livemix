@@ -391,6 +391,13 @@ macro_rules! __flags {
                 }
             }
 
+            impl<'de> $crate::DecodeFrom<'de> for $ty {
+                #[inline]
+                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de, u64>, impl $crate::PodKind>) -> Result<Self, $crate::Error> {
+                    pod.next()
+                }
+            }
+
             #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
             ///
             /// # Examples
@@ -583,6 +590,45 @@ macro_rules! __encode_into_sized {
 }
 
 pub(crate) use __encode_into_sized as encode_into_sized;
+
+macro_rules! __decode_from_sized {
+    (impl [$($tt:tt)*] $ty:ty $(where $($where:tt)*)?) => {
+        impl<'de, $($tt)*> $crate::DecodeFrom<'de> for $ty
+        $(where $($where)*)*
+        {
+            #[inline]
+            fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de, u64>, impl $crate::PodKind>) -> Result<Self, $crate::Error> {
+                pod.next()
+            }
+        }
+    };
+
+    ($ty:ty) => {
+        impl<'de> $crate::DecodeFrom<'de> for $ty {
+            #[inline]
+            fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de, u64>, impl $crate::PodKind>) -> Result<Self, $crate::Error> {
+                pod.next()
+            }
+        }
+    };
+}
+
+pub(crate) use __decode_from_sized as decode_from_sized;
+
+macro_rules! __decode_from_borrowed {
+    ($ty:ty) => {
+        impl<'de> $crate::DecodeFrom<'de> for &'de $ty {
+            #[inline]
+            fn decode_from(
+                pod: $crate::Pod<impl $crate::Reader<'de, u64>, impl $crate::PodKind>,
+            ) -> Result<Self, $crate::Error> {
+                pod.next_borrowed()
+            }
+        }
+    };
+}
+
+pub(crate) use __decode_from_borrowed as decode_from_borrowed;
 
 macro_rules! __encode_into_unsized {
     (impl [$($tt:tt)*] $ty:ty $(where $t_key:ident: $($t_bound:tt)*)?) => {

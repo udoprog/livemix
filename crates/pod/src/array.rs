@@ -93,6 +93,36 @@ impl<T, const N: usize> Buf<T, N> {
         Ok(())
     }
 
+    /// Extend the buffer with a slice of values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Buf;
+    /// ```
+    pub fn extend_from_slice(&mut self, slice: &[T]) -> Result<(), Error>
+    where
+        T: BytesInhabited,
+    {
+        let len = self.len.wrapping_add(slice.len());
+
+        if len > N {
+            return Err(Error::new(ErrorKind::BufferOverflow));
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data
+                .as_mut_ptr()
+                .add(self.len)
+                .cast::<T>()
+                .copy_from_nonoverlapping(slice.as_ptr(), slice.len());
+        }
+
+        self.len = len;
+        Ok(())
+    }
+
     /// Push a value from the array.
     ///
     /// # Examples
@@ -361,6 +391,19 @@ impl<T, const N: usize> Buf<T, N> {
         // SAFETY: The buffer is guaranteed to be initialized from the
         // `self.read..self.write` range.
         unsafe { slice::from_raw_parts_mut(self.data.as_mut_ptr().cast(), self.len) }
+    }
+
+    /// Try to coerce into an initialized inner array, checking if it has been
+    /// initialized first.
+    pub(crate) fn into_inner(self) -> Option<[T; N]> {
+        if self.len == N {
+            let this = ManuallyDrop::new(self);
+
+            // SAFETY: The buffer is guaranteed to be initialized.
+            Some(unsafe { ptr::read(&this.data as *const _ as *const [T; N]) })
+        } else {
+            None
+        }
     }
 }
 

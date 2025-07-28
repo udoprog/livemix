@@ -1,4 +1,4 @@
-use crate::{Error, Pod, PodKind, Type, Writer};
+use crate::{EncodeInto, Error, Pod, PodKind, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -28,6 +28,28 @@ where
         })
     }
 
+    /// Apply the given [`EncodeInto`] implementation to the contents of this
+    /// struct.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_struct(|st| st.encode((1, 2, 3)))?;
+    ///
+    /// let mut pod = pod.as_ref();
+    /// let mut st = pod.next_struct()?;
+    /// assert_eq!(st.decode::<(i32, i32, i32)>()?, (1, 2, 3));
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn encode(&mut self, value: impl EncodeInto) -> Result<(), Error> {
+        value.encode_into(Pod::new(self.writer.borrow_mut()))
+    }
+
     /// Add a field into the struct.
     ///
     /// # Examples
@@ -54,6 +76,7 @@ where
         let size = self
             .kind
             .check_size(Type::STRUCT, &self.writer, self.header)?;
+
         self.writer
             .write_at(self.header, [size, Type::STRUCT.into_u32()])?;
         Ok(())
