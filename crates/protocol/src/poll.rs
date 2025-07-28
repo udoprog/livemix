@@ -20,6 +20,7 @@ impl Token {
 }
 
 /// An update to an interest.
+#[derive(Debug)]
 #[must_use = "Not applying an interest update might lead to the process being stalled"]
 pub enum ChangeInterest {
     /// The interest has changed.

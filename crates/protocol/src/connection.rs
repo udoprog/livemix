@@ -14,11 +14,7 @@ use pod::AsReader;
 use pod::Pod;
 use pod::Reader;
 
-use crate::consts;
 use crate::error::ErrorKind;
-use crate::flags;
-use crate::id;
-use crate::op;
 use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
 use crate::{DynamicBuf, Error};
@@ -26,7 +22,6 @@ use crate::{DynamicBuf, Error};
 const ENVIRONS: &[&str] = &["PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR", "USERPROFILE"];
 const SOCKET: &str = "pipewire-0";
 
-const VERSION: i32 = 3;
 const MAX_SEND_SIZE: usize = 4096;
 
 impl AsRawFd for Connection {
@@ -37,10 +32,10 @@ impl AsRawFd for Connection {
 }
 
 /// A connection to a local pipewire server.
+#[derive(Debug)]
 pub struct Connection {
     socket: UnixStream,
     message_sequence: u32,
-    sync_sequence: u32,
     outgoing: DynamicBuf,
     interest: Interest,
     modified: ChangeInterest,
@@ -77,7 +72,6 @@ impl Connection {
         Ok(Self {
             socket,
             message_sequence: 0,
-            sync_sequence: 1,
             outgoing: DynamicBuf::new(),
             interest: Interest::READ,
             modified: ChangeInterest::Unchanged,
@@ -103,349 +97,6 @@ impl Connection {
     #[inline]
     pub fn modified(&mut self) -> ChangeInterest {
         self.modified.take()
-    }
-
-    /// Send client hello.
-    pub fn core_hello(&mut self) -> Result<(), Error> {
-        let mut pod = Pod::array();
-        pod.as_mut().push_struct(|st| st.field()?.push(VERSION))?;
-
-        self.request(consts::CORE_ID, op::CORE_HELLO, pod)?;
-        Ok(())
-    }
-
-    /// Get registry.
-    pub fn core_get_registry(&mut self, new_id: u32) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(consts::REGISTRY_VERSION as i32)?;
-            st.field()?.push(new_id)?;
-            Ok(())
-        })?;
-
-        self.request(consts::CORE_ID, op::CORE_GET_REGISTRY, pod)?;
-        Ok(())
-    }
-
-    /// Synchronize.
-    pub fn core_sync(&mut self, id: u32) -> Result<u32, Error> {
-        let sync_sequence = self.sync_sequence;
-        self.sync_sequence = self.sync_sequence.wrapping_add(1);
-
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(id)?;
-            st.field()?.push(sync_sequence)?;
-            Ok(())
-        })?;
-
-        self.request(consts::CORE_ID, op::CORE_SYNC, pod)?;
-        Ok(sync_sequence)
-    }
-
-    /// Send a pong response to a ping.
-    pub fn core_pong(&mut self, id: u32, seq: u32) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(id)?;
-            st.field()?.push(seq)?;
-            Ok(())
-        })?;
-
-        self.request(consts::CORE_ID, op::CORE_PONG, pod)?;
-        Ok(())
-    }
-
-    /// Create an object.
-    pub fn core_create_object(
-        &mut self,
-        factory_name: &str,
-        ty: &str,
-        version: u32,
-        new_id: u32,
-    ) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push_unsized(factory_name)?;
-            st.field()?.push_unsized(ty)?;
-            st.field()?.push(version)?;
-
-            st.field()?.push_struct(|props| {
-                props.field()?.push(6)?;
-
-                props.field()?.push("node.description")?;
-                props.field()?.push("livemix")?;
-
-                props.field()?.push("node.name")?;
-                props.field()?.push("livemix")?;
-
-                props.field()?.push("media.class")?;
-                props.field()?.push("Audio/Duplex")?;
-
-                props.field()?.push("media.type")?;
-                props.field()?.push("Audio")?;
-
-                props.field()?.push("media.category")?;
-                props.field()?.push("Duplex")?;
-
-                props.field()?.push("media.role")?;
-                props.field()?.push("DSP")?;
-                Ok(())
-            })?;
-
-            st.field()?.push(new_id)?;
-            Ok(())
-        })?;
-
-        self.request(consts::CORE_ID, op::CORE_CREATE_OBJECT, pod)?;
-        Ok(())
-    }
-
-    /// Update client properties.
-    pub fn client_update_properties(&mut self) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push_struct(|st| {
-                st.field()?.push(2)?;
-
-                st.field()?.push("application.name")?;
-                st.field()?.push("livemix")?;
-
-                st.field()?.push("node.name")?;
-                st.field()?.push("livemix")?;
-                Ok(())
-            })
-        })?;
-
-        self.request(consts::CLIENT_ID, op::CLIENT_UPDATE_PROPERTIES, pod)?;
-        Ok(())
-    }
-
-    /// Update the client.
-    pub fn client_node_get_node(
-        &mut self,
-        id: u32,
-        version: u32,
-        new_id: u32,
-    ) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(version)?;
-            st.field()?.push(new_id)?;
-            Ok(())
-        })?;
-
-        self.request(id, op::CLIENT_NODE_GET_NODE, pod)?;
-        Ok(())
-    }
-
-    /// Update client node.
-    pub fn client_node_update(
-        &mut self,
-        id: u32,
-        max_input_ports: u32,
-        max_output_ports: u32,
-    ) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        let mut change_mask = flags::ClientNodeUpdate::NONE;
-        change_mask |= flags::ClientNodeUpdate::PARAMS;
-        change_mask |= flags::ClientNodeUpdate::INFO;
-
-        let mut node_change_mask = flags::NodeChangeMask::FLAGS;
-        node_change_mask |= flags::NodeChangeMask::PROPS;
-        node_change_mask |= flags::NodeChangeMask::PARAMS;
-
-        let node_flags = flags::Node::IN_DYNAMIC_PORTS | flags::Node::OUT_DYNAMIC_PORTS;
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(change_mask)?;
-
-            st.field()?.push(2)?;
-
-            st.field()?
-                .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
-
-            st.field()?
-                .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
-
-            if change_mask & flags::ClientNodeUpdate::INFO {
-                st.field()?.push_struct(|st| {
-                    st.field()?.push(max_input_ports)?;
-                    st.field()?.push(max_output_ports)?;
-                    st.field()?.push(node_change_mask)?;
-                    st.field()?.push(node_flags)?;
-
-                    st.field()?.push(1u32)?;
-                    st.field()?.push("node.name")?;
-                    st.field()?.push_unsized("livemix2")?;
-
-                    st.field()?.push(4u32)?;
-                    st.field()?.push(id::Param::PROP_INFO)?;
-                    st.field()?.push(flags::Param::NONE)?;
-
-                    st.field()?.push(id::Param::PROPS)?;
-                    st.field()?.push(flags::Param::WRITE)?;
-
-                    st.field()?.push(id::Param::ENUM_FORMAT)?;
-                    st.field()?.push(flags::Param::READ)?;
-
-                    st.field()?.push(id::Param::FORMAT)?;
-                    st.field()?.push(flags::Param::WRITE)?;
-                    Ok(())
-                })?;
-            } else {
-                st.field()?.push_none()?;
-            }
-
-            Ok(())
-        })?;
-
-        self.request(id, op::CLIENT_NODE_UPDATE, pod)?;
-        Ok(())
-    }
-
-    /// Update client node port.
-    #[tracing::instrument(skip(self))]
-    pub fn client_node_port_update(
-        &mut self,
-        id: u32,
-        direction: consts::Direction,
-        port_id: u32,
-        name: &str,
-    ) -> Result<(), Error> {
-        tracing::info!("port update");
-
-        let mut pod = Pod::array();
-
-        let mut change_mask = flags::ClientNodePortUpdate::NONE;
-        change_mask |= flags::ClientNodePortUpdate::PARAMS;
-        change_mask |= flags::ClientNodePortUpdate::INFO;
-
-        let mut port_change_mask = flags::PortChangeMask::NONE;
-        port_change_mask |= flags::PortChangeMask::FLAGS;
-        port_change_mask |= flags::PortChangeMask::PROPS;
-        port_change_mask |= flags::PortChangeMask::PARAMS;
-
-        let port_flags = flags::Port::NONE;
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(direction)?;
-            st.field()?.push(port_id)?;
-            st.field()?.push(change_mask)?;
-
-            // Parameters.
-            st.field()?.push(2u32)?;
-
-            st.field()?
-                .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
-
-            st.field()?
-                .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
-
-            if change_mask & flags::ClientNodePortUpdate::INFO {
-                st.field()?.push_struct(|st| {
-                    st.field()?.push(port_change_mask)?;
-                    st.field()?.push(port_flags)?;
-
-                    // Rate num / denom
-                    st.field()?.push(0u32)?;
-                    st.field()?.push(0u32)?;
-
-                    // Properties.
-                    st.field()?.push(2u32)?;
-                    st.field()?.push("port.name")?;
-                    st.field()?.push_unsized(name)?;
-
-                    st.field()?.push("format.dsp")?;
-                    st.field()?.push_unsized("32 bit float mono audio")?;
-
-                    // Parameters.
-                    st.field()?.push(5u32)?;
-                    st.field()?.push(id::Param::ENUM_FORMAT)?;
-                    st.field()?.push(flags::Param::READ)?;
-
-                    st.field()?.push(id::Param::FORMAT)?;
-                    st.field()?.push(flags::Param::WRITE)?;
-
-                    st.field()?.push(id::Param::META)?;
-                    st.field()?.push(flags::Param::READ)?;
-
-                    st.field()?.push(id::Param::IO)?;
-                    st.field()?.push(flags::Param::READ)?;
-
-                    st.field()?.push(id::Param::BUFFERS)?;
-                    st.field()?.push(flags::Param::NONE)?;
-                    Ok(())
-                })?;
-            } else {
-                st.field()?.push_none()?;
-            }
-
-            Ok(())
-        })?;
-
-        self.request(id, op::CLIENT_NODE_PORT_UPDATE, pod)?;
-        Ok(())
-    }
-
-    /// Update the client.
-    pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<(), Error> {
-        let mut pod = Pod::array();
-
-        pod.as_mut().push_struct(|st| {
-            st.field()?.push(active)?;
-            Ok(())
-        })?;
-
-        self.request(id, op::CLIENT_NODE_SET_ACTIVE, pod)?;
-        Ok(())
     }
 
     /// Send data to the server.
@@ -640,8 +291,10 @@ impl Connection {
         }
     }
 
-    /// Serialize an outgoing message.
-    fn request<'de>(&mut self, id: u32, op: u8, pod: Pod<impl AsReader<u64>>) -> Result<(), Error> {
+    /// Send an outgoing request.
+    ///
+    /// This will write the request to the outgoing buffer.
+    pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsReader<u64>>) -> Result<(), Error> {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
 
@@ -649,7 +302,10 @@ impl Connection {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let Some(header) = Header::new(id, op, size, self.message_sequence, 0) else {
+        let message_sequence = self.message_sequence;
+        self.message_sequence = self.message_sequence.wrapping_add(1);
+
+        let Some(header) = Header::new(id, op, size, message_sequence, 0) else {
             return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
         };
 
@@ -657,10 +313,9 @@ impl Connection {
 
         self.outgoing.write(header);
         self.outgoing.extend_from_words(buf.as_slice());
-        self.message_sequence = self.message_sequence.wrapping_add(1);
         self.modified |= self.interest.set(Interest::WRITE);
 
-        tracing::trace!(?header, ?remaining_before, remaining = ?self.outgoing.remaining(), "Sending");
+        tracing::info!(?header, ?remaining_before, remaining = ?self.outgoing.remaining(), "Sending");
         Ok(())
     }
 }

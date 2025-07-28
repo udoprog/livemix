@@ -25,15 +25,15 @@ fn main() -> Result<()> {
     poll.add(&ev, EVENT, Interest::READ)?;
 
     let mut events = pod::Buf::<PollEvent, 4>::new();
-    let mut state = client::ConnectionState::new();
+    let mut state = client::State::new(c);
 
     let mut fds = [0; 16];
 
     loop {
-        state.run(&mut c, &mut recv)?;
+        state.run(&mut recv)?;
 
-        if let ChangeInterest::Changed(interest) = c.modified() {
-            poll.modify(&c, CONNECTION, interest)?;
+        if let ChangeInterest::Changed(interest) = state.connection_mut().modified() {
+            poll.modify(state.connection_mut(), CONNECTION, interest)?;
         }
 
         poll.poll(&mut events)?;
@@ -42,7 +42,8 @@ fn main() -> Result<()> {
             match e.token {
                 CONNECTION => {
                     if e.interest.is_read() {
-                        let n_fds = c
+                        let n_fds = state
+                            .connection_mut()
                             .recv_with_fds(&mut recv, &mut fds[..])
                             .context("Failed to receive file descriptors")?;
 
@@ -56,7 +57,7 @@ fn main() -> Result<()> {
                     }
 
                     if e.interest.is_write() {
-                        c.send()?;
+                        state.connection_mut().send()?;
                     }
                 }
                 EVENT => {

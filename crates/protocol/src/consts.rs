@@ -1,5 +1,8 @@
 //! Well-known node identifiers used in the protocol.
 
+/// The current version of the native protocol.
+pub const VERSION: u32 = 3;
+
 /// The fixed identifier for the core id.
 pub const CORE_ID: u32 = 0;
 

@@ -1,4 +1,5 @@
 use core::alloc::Layout;
+use core::fmt;
 use core::mem;
 use core::ptr;
 use core::slice;
@@ -309,5 +310,12 @@ where
             self.read = 0;
             self.write = 0;
         }
+    }
+}
+
+impl fmt::Debug for DynamicBuf {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.as_bytes()).finish()
     }
 }
