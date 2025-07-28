@@ -735,10 +735,10 @@ impl<T, const N: usize> AsReader<T> for Buf<T, N>
 where
     T: 'static,
 {
-    type Reader<'this> = &'this [T];
+    type AsReader<'this> = &'this [T];
 
     #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
+    fn as_reader(&self) -> Self::AsReader<'_> {
         self.as_slice()
     }
 }
@@ -776,7 +776,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error> {
+    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error> {
         let at = at.div_ceil(mem::size_of::<T>());
         let read = self.read.wrapping_add(at);
 

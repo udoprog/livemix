@@ -180,7 +180,7 @@ impl Pod<Buf<u64>> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push(10i32)?;
-    /// assert_eq!(pod.decode::<i32>()?, 10i32);
+    /// assert_eq!(pod.next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -581,12 +581,12 @@ where
     ///     })
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.decode_pod()?;
-    /// let mut st = pod.decode_struct()?;
+    /// let pod = pod.as_ref().into_typed()?.next_pod()?;
+    /// let mut st = pod.next_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -646,10 +646,10 @@ where
     /// })?;
     ///
     /// let pod = pod.as_ref();
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     /// assert!(!array.is_empty());
     /// array.item()?.skip()?;
-    /// assert_eq!(array.item()?.decode::<i32>()?, 20i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -667,15 +667,15 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
-    /// assert_eq!(pod.decode::<i32>()?, 10i32);
+    /// assert_eq!(pod.next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode<T>(self) -> Result<T, Error>
+    pub fn next<T>(self) -> Result<T, Error>
     where
         T: Decode<'de>,
     {
-        self.into_typed()?.decode::<T>()
+        self.into_typed()?.next::<T>()
     }
 
     /// Decode an unsized value into the pod.
@@ -689,16 +689,16 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref();
-    /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
+    pub fn next_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
     {
-        self.into_typed()?.decode_unsized(visitor)
+        self.into_typed()?.next_unsized(visitor)
     }
 
     /// Decode an unsized value into the pod.
@@ -712,21 +712,21 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref();
-    /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_borrowed<T>(self) -> Result<&'de T, Error>
+    pub fn next_borrowed<T>(self) -> Result<&'de T, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
-        self.into_typed()?.decode_borrowed()
+        self.into_typed()?.next_borrowed()
     }
 
     /// Decode an optional value.
     ///
-    /// This returns `None` if the encoded value is `None`, otherwise a pod
-    /// for the value is returned.
+    /// This returns `None` if the encoded value is `None`, otherwise a pod for
+    /// the value is returned.
     ///
     /// # Examples
     ///
@@ -736,21 +736,21 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_none()?;
     ///
-    /// assert!(pod.decode_option()?.is_none());
+    /// assert!(pod.next_option()?.is_none());
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push(true)?;
     ///
-    /// let Some(mut pod) = pod.decode_option()? else {
+    /// let Some(mut pod) = pod.next_option()? else {
     ///     panic!("expected some value");
     /// };
     ///
-    /// assert!(pod.decode::<bool>()?);
+    /// assert!(pod.next::<bool>()?);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_option(self) -> Result<Option<TypedPod<B>>, Error> {
-        self.into_typed()?.decode_option()
+    pub fn next_option(self) -> Result<Option<TypedPod<B>>, Error> {
+        self.into_typed()?.next_option()
     }
 
     /// Decode an array.
@@ -769,14 +769,14 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     ///
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
     ///
-    /// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 1i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 2i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 3i32);
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);
@@ -791,15 +791,15 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(self) -> Result<Array<B>, Error> {
-        self.into_typed()?.decode_array()
+    pub fn next_array(self) -> Result<Array<B>, Error> {
+        self.into_typed()?.next_array()
     }
 
     /// Decode a struct.
@@ -817,11 +817,11 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.decode_struct()?;
+    /// let mut st = pod.next_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -834,13 +834,13 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_struct(|_| Ok(()))?;
     ///
-    /// let st = pod.decode_struct()?;
+    /// let st = pod.next_struct()?;
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_struct(self) -> Result<Struct<B>, Error> {
-        self.into_typed()?.decode_struct()
+    pub fn next_struct(self) -> Result<Struct<B>, Error> {
+        self.into_typed()?.next_struct()
     }
 
     /// Decode an object.
@@ -858,23 +858,23 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.decode_object()?;
+    /// let mut obj = pod.next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 10);
-    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 20);
-    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 30);
-    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -888,13 +888,13 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |_| Ok(()))?;
     ///
-    /// let obj = pod.decode_object()?;
+    /// let obj = pod.next_object()?;
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_object(self) -> Result<Object<B>, Error> {
-        self.into_typed()?.decode_object()
+    pub fn next_object(self) -> Result<Object<B>, Error> {
+        self.into_typed()?.next_object()
     }
 
     /// Decode a sequence.
@@ -912,23 +912,23 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.decode_sequence()?;
+    /// let mut seq = pod.next_sequence()?;
     /// assert!(!seq.is_empty());
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 1);
     /// assert_eq!(c.ty(), 10);
-    /// assert_eq!(c.value().decode::<i32>()?, 1);
+    /// assert_eq!(c.value().next::<i32>()?, 1);
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 2);
     /// assert_eq!(c.ty(), 20);
-    /// assert_eq!(c.value().decode::<i32>()?, 2);
+    /// assert_eq!(c.value().next::<i32>()?, 2);
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 3);
     /// assert_eq!(c.ty(), 30);
-    /// assert_eq!(c.value().decode::<i32>()?, 3);
+    /// assert_eq!(c.value().next::<i32>()?, 3);
     ///
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -942,13 +942,13 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().encode_sequence(|_| Ok(()))?;
     ///
-    /// let seq = pod.decode_sequence()?;
+    /// let seq = pod.next_sequence()?;
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_sequence(self) -> Result<Sequence<B>, Error> {
-        self.into_typed()?.decode_sequence()
+    pub fn next_sequence(self) -> Result<Sequence<B>, Error> {
+        self.into_typed()?.next_sequence()
     }
 
     /// Decode a choice.
@@ -966,11 +966,11 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.decode_choice()?;
+    /// let mut choice = pod.next_choice()?;
     /// assert!(!choice.is_empty());
-    /// assert_eq!(choice.entry()?.decode::<i32>()?, 10);
-    /// assert_eq!(choice.entry()?.decode::<i32>()?, 0);
-    /// assert_eq!(choice.entry()?.decode::<i32>()?, 30);
+    /// assert_eq!(choice.entry()?.next::<i32>()?, 10);
+    /// assert_eq!(choice.entry()?.next::<i32>()?, 0);
+    /// assert_eq!(choice.entry()?.next::<i32>()?, 30);
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -983,13 +983,13 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |_| Ok(()))?;
     ///
-    /// let mut choice = pod.decode_choice()?;
+    /// let mut choice = pod.next_choice()?;
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_choice(self) -> Result<Choice<B>, Error> {
-        self.into_typed()?.decode_choice()
+    pub fn next_choice(self) -> Result<Choice<B>, Error> {
+        self.into_typed()?.next_choice()
     }
 
     /// Decode a nested pod.
@@ -1009,18 +1009,18 @@ where
     ///     })
     /// })?;
     ///
-    /// let pod = pod.as_ref().decode_pod()?;
-    /// let mut st = pod.decode_struct()?;
+    /// let pod = pod.as_ref().next_pod()?;
+    /// let mut st = pod.next_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_pod(self) -> Result<Pod<B>, Error> {
-        self.into_typed()?.decode_pod()
+    pub fn next_pod(self) -> Result<Pod<B>, Error> {
+        self.into_typed()?.next_pod()
     }
 
     /// Convert the [`Pod`] into a [`TypedPod`] taking ownership of the current
@@ -1065,7 +1065,7 @@ where
     ///
     /// let pod = pod.to_owned();
     ///
-    /// assert_eq!(pod.as_ref().decode::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
@@ -1080,7 +1080,7 @@ where
 impl<B, K> Pod<B, K>
 where
     B: AsReader<u64>,
-    K: PodKind,
+    K: Copy,
 {
     /// Coerce an owned pod into a borrowed pod which can be used for reading.
     ///
@@ -1094,11 +1094,11 @@ where
     ///
     /// let pod = pod.to_owned();
     ///
-    /// assert_eq!(pod.as_ref().decode::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Pod<B::Reader<'_>, K> {
+    pub fn as_ref(&self) -> Pod<B::AsReader<'_>, K> {
         Pod {
             buf: self.buf.as_reader(),
             kind: self.kind,
@@ -1124,23 +1124,23 @@ where
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(pod)?;
 ///
-/// let mut obj = pod2.decode_pod()?.decode_object()?;
+/// let mut obj = pod2.next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
 /// assert_eq!(p.flags(), 10);
-/// assert_eq!(p.value().decode::<i32>()?, 1);
+/// assert_eq!(p.value().next::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
 /// assert_eq!(p.flags(), 20);
-/// assert_eq!(p.value().decode::<i32>()?, 2);
+/// assert_eq!(p.value().next::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
 /// assert_eq!(p.flags(), 30);
-/// assert_eq!(p.value().decode::<i32>()?, 3);
+/// assert_eq!(p.value().next::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())

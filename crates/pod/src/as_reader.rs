@@ -36,12 +36,12 @@ where
     Self: self::sealed::Sealed<T>,
 {
     /// A clone of the reader.
-    type Reader<'this>: Reader<'this, T>
+    type AsReader<'this>: Reader<'this, T>
     where
         Self: 'this;
 
     /// Borrow the value as a reader.
-    fn as_reader(&self) -> Self::Reader<'_>;
+    fn as_reader(&self) -> Self::AsReader<'_>;
 }
 
 #[cfg(feature = "alloc")]
@@ -49,13 +49,13 @@ impl<T> AsReader<T> for Box<[T]>
 where
     T: 'static,
 {
-    type Reader<'this>
+    type AsReader<'this>
         = &'this [T]
     where
         Self: 'this;
 
     #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
+    fn as_reader(&self) -> Self::AsReader<'_> {
         self
     }
 }
@@ -65,13 +65,13 @@ impl<T> AsReader<T> for Vec<T>
 where
     T: 'static,
 {
-    type Reader<'this>
+    type AsReader<'this>
         = &'this [T]
     where
         Self: 'this;
 
     #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
+    fn as_reader(&self) -> Self::AsReader<'_> {
         self
     }
 }
@@ -80,13 +80,13 @@ impl<T> AsReader<T> for [T]
 where
     T: 'static,
 {
-    type Reader<'this>
+    type AsReader<'this>
         = &'this [T]
     where
         Self: 'this;
 
     #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
+    fn as_reader(&self) -> Self::AsReader<'_> {
         self
     }
 }
@@ -95,13 +95,13 @@ impl<R, T> AsReader<T> for &mut R
 where
     R: ?Sized + AsReader<T>,
 {
-    type Reader<'this>
-        = R::Reader<'this>
+    type AsReader<'this>
+        = R::AsReader<'this>
     where
         Self: 'this;
 
     #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
+    fn as_reader(&self) -> Self::AsReader<'_> {
         (**self).as_reader()
     }
 }
@@ -110,13 +110,13 @@ impl<R, T> AsReader<T> for &R
 where
     R: ?Sized + AsReader<T>,
 {
-    type Reader<'this>
-        = R::Reader<'this>
+    type AsReader<'this>
+        = R::AsReader<'this>
     where
         Self: 'this;
 
     #[inline]
-    fn as_reader(&self) -> Self::Reader<'_> {
+    fn as_reader(&self) -> Self::AsReader<'_> {
         (**self).as_reader()
     }
 }

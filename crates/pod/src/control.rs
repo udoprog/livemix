@@ -15,12 +15,12 @@ use crate::{Reader, TypedPod};
 ///     Ok(())
 /// })?;
 ///
-/// let mut seq = pod.as_ref().decode_sequence()?;
+/// let mut seq = pod.as_ref().next_sequence()?;
 /// assert!(!seq.is_empty());
 /// let c = seq.control()?;
 /// assert_eq!(c.offset(), 1);
 /// assert_eq!(c.ty(), 10);
-/// assert_eq!(c.value().decode::<i32>()?, 1);
+/// assert_eq!(c.value().next::<i32>()?, 1);
 /// # Ok::<_, pod::Error>(())
 /// ```
 pub struct Control<B> {
@@ -48,7 +48,7 @@ impl<B> Control<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().decode_sequence()?;
+    /// let mut seq = pod.as_ref().next_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 1);
     /// # Ok::<_, pod::Error>(())
@@ -71,7 +71,7 @@ impl<B> Control<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().decode_sequence()?;
+    /// let mut seq = pod.as_ref().next_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.ty(), 10);
     /// # Ok::<_, pod::Error>(())
@@ -94,9 +94,9 @@ impl<B> Control<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().decode_sequence()?;
+    /// let mut seq = pod.as_ref().next_sequence()?;
     /// let c = seq.control()?;
-    /// assert_eq!(c.value().decode::<i32>()?, 1);
+    /// assert_eq!(c.value().next::<i32>()?, 1);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]

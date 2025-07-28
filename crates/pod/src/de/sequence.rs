@@ -31,7 +31,7 @@ impl<B> Sequence<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.decode_sequence()?;
+    /// let seq = pod.next_sequence()?;
     /// assert_eq!(seq.unit(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -55,7 +55,7 @@ impl<B> Sequence<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.decode_sequence()?;
+    /// let seq = pod.next_sequence()?;
     /// assert_eq!(seq.pad(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -120,11 +120,11 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.decode_sequence()?;
+    /// let mut seq = pod.next_sequence()?;
     /// assert!(!seq.is_empty());
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 3i32);
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -148,16 +148,16 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.decode_sequence()?;
+    /// let mut seq = pod.next_sequence()?;
     /// assert!(!seq.is_empty());
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 3i32);
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn control(&mut self) -> Result<Control<B::Reader<'_>>, Error> {
+    pub fn control(&mut self) -> Result<Control<B::AsReader<'_>>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
@@ -199,13 +199,13 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.decode_sequence()?.to_owned();
+    /// let seq = pod.next_sequence()?.to_owned();
     ///
     /// let mut seq = seq.as_ref();
     /// assert!(!seq.is_empty());
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 3i32);
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -242,18 +242,18 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.decode_sequence()?.to_owned();
+    /// let seq = pod.next_sequence()?.to_owned();
     ///
     /// let mut seq = seq.as_ref();
     /// assert!(!seq.is_empty());
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
-    /// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
+    /// assert_eq!(seq.control()?.value().next::<i32>()?, 3i32);
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Sequence<B::Reader<'_>> {
+    pub fn as_ref(&self) -> Sequence<B::AsReader<'_>> {
         Sequence::new(self.buf.as_reader(), self.size, self.unit, self.pad)
     }
 }
@@ -273,18 +273,18 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let seq = pod.decode_sequence()?;
+/// let seq = pod.next_sequence()?;
 ///
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(seq)?;
 ///
-/// let seq = pod2.decode_sequence()?;
+/// let seq = pod2.next_sequence()?;
 ///
 /// let mut seq = seq.as_ref();
 /// assert!(!seq.is_empty());
-/// assert_eq!(seq.control()?.value().decode::<i32>()?, 1i32);
-/// assert_eq!(seq.control()?.value().decode::<i32>()?, 2i32);
-/// assert_eq!(seq.control()?.value().decode::<i32>()?, 3i32);
+/// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
+/// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
+/// assert_eq!(seq.control()?.value().next::<i32>()?, 3i32);
 /// assert!(seq.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```

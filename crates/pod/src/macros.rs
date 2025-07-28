@@ -63,13 +63,13 @@ macro_rules! __id {
             ///
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
-            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let id = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
-            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let id = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
             /// # Ok::<_, pod::Error>(())
             /// ```
@@ -83,7 +83,7 @@ macro_rules! __id {
             /// let mut pod = Pod::array();
             /// pod.as_mut().push(Id(u32::MAX / 2))?;
             ///
-            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let id = pod.next::<", stringify!($ty), ">()?;")]
             /// assert!(id.is_invalid());
             /// # Ok::<_, pod::Error>(())
             /// ```
@@ -215,13 +215,13 @@ macro_rules! __consts {
             ///
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
-            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let id = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
-            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let id = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
             /// # Ok::<_, pod::Error>(())
             /// ```
@@ -235,7 +235,7 @@ macro_rules! __consts {
             /// let mut pod = Pod::array();
             /// pod.as_mut().push(Id(u32::MAX / 2))?;
             ///
-            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let id = pod.next::<", stringify!($ty), ">()?;")]
             /// assert!(id.is_invalid());
             /// # Ok::<_, pod::Error>(())
             /// ```
@@ -394,13 +394,13 @@ macro_rules! __flags {
             ///
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example0), ")?;")]
             ///
-            #[doc = concat!(" let flags = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let flags = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(flags, ", stringify!($ty), "::", stringify!($example0), ");")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example0), ")?;")]
             ///
-            #[doc = concat!(" let flags = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let flags = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(flags, ", stringify!($ty), "::", stringify!($example0), ");")]
             /// # Ok::<_, pod::Error>(())
             /// ```
@@ -414,7 +414,7 @@ macro_rules! __flags {
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.as_mut().push(1 | (1 as ", stringify!($repr), ").rotate_right(1))?;")]
             ///
-            #[doc = concat!(" let flags = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" let flags = pod.next::<", stringify!($ty), ">()?;")]
             #[doc = concat!(" assert_eq!(flags.unknown_bits(), (1 as ", stringify!($repr), ").rotate_right(1));")]
             /// # Ok::<_, pod::Error>(())
             /// ```

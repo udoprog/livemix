@@ -55,7 +55,7 @@ where
     fn skip(&mut self, size: usize) -> Result<(), Error>;
 
     /// Split off the head of the current buffer.
-    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error>;
+    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
@@ -170,7 +170,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error> {
+    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error> {
         (**self).split(at)
     }
 
@@ -241,7 +241,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::Reader<'_>, Error> {
+    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error> {
         let at = at.div_ceil(mem::size_of::<T>());
 
         let Some((head, tail)) = self.split_at_checked(at) else {

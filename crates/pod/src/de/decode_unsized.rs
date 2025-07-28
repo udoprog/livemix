@@ -63,7 +63,7 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized(c"hello world")?;
-/// assert_eq!(pod.as_ref().decode_borrowed::<CStr>()?, c"hello world");
+/// assert_eq!(pod.as_ref().next_borrowed::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for CStr {
@@ -121,7 +121,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized("hello world")?;
-/// assert_eq!(pod.as_ref().decode_borrowed::<str>()?, "hello world");
+/// assert_eq!(pod.as_ref().next_borrowed::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for str {
@@ -146,12 +146,12 @@ impl<'de> DecodeUnsized<'de> for str {
 
             #[inline]
             fn visit_borrowed(self, bytes: &'de [u8]) -> Result<Self::Ok, Error> {
-                self.0.visit_borrowed(decode_string(bytes)?)
+                self.0.visit_borrowed(next_string(bytes)?)
             }
 
             #[inline]
             fn visit_ref(self, bytes: &[u8]) -> Result<Self::Ok, Error> {
-                self.0.visit_ref(decode_string(bytes)?)
+                self.0.visit_ref(next_string(bytes)?)
             }
         }
 
@@ -168,7 +168,7 @@ impl<'de> DecodeUnsized<'de> for str {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized(&b"hello world"[..])?;
-/// assert_eq!(pod.as_ref().decode_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for [u8] {
@@ -196,7 +196,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
-/// assert_eq!(pod.as_ref().decode_borrowed::<Bitmap>()?, b"asdfasdf");
+/// assert_eq!(pod.as_ref().next_borrowed::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for Bitmap {
@@ -234,7 +234,7 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     }
 }
 
-fn decode_string(bytes: &[u8]) -> Result<&str, Error> {
+fn next_string(bytes: &[u8]) -> Result<&str, Error> {
     let bytes = match bytes {
         [head @ .., 0] => head,
         _ => return Err(Error::new(ErrorKind::NonTerminatedString)),

@@ -495,23 +495,23 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_info_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<u32>()?;
-        let cookie = st.field()?.decode::<i32>()?;
-        let user_name = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
-        let host_name = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
-        let version = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
-        let name = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
-        let change_mask = st.field()?.decode::<u64>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<u32>()?;
+        let cookie = st.field()?.next::<i32>()?;
+        let user_name = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let host_name = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let version = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let name = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let change_mask = st.field()?.next::<u64>()?;
 
-        let mut props = st.field()?.decode_struct()?;
+        let mut props = st.field()?.next_struct()?;
 
         if change_mask & 0x1 != 0 {
-            let n_items = props.field()?.decode::<i32>()?;
+            let n_items = props.field()?.next::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.decode_unsized::<str, _>(str::to_owned)?;
-                let value = props.field()?.decode_unsized::<str, _>(str::to_owned)?;
+                let key = props.field()?.next_unsized::<str, _>(str::to_owned)?;
+                let value = props.field()?.next_unsized::<str, _>(str::to_owned)?;
                 self.core.properties.insert(key, value);
             }
         }
@@ -528,9 +528,9 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_done_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<u32>()?;
-        let seq = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<u32>()?;
+        let seq = st.field()?.next::<u32>()?;
 
         match id {
             GET_REGISTRY_SYNC => {
@@ -550,9 +550,9 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_ping_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode()?;
-        let seq = st.field()?.decode()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next()?;
+        let seq = st.field()?.next()?;
 
         tracing::debug!("Core ping {id} with seq {seq}");
         self.ops.push_back(Op::Pong { id, seq });
@@ -561,11 +561,11 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_error_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<i32>()?;
-        let seq = st.field()?.decode::<i32>()?;
-        let res = st.field()?.decode::<i32>()?;
-        let error = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<i32>()?;
+        let seq = st.field()?.next::<i32>()?;
+        let res = st.field()?.next::<i32>()?;
+        let error = st.field()?.next_unsized::<str, _>(str::to_owned)?;
 
         tracing::error!(id, seq, res, error);
         Ok(())
@@ -573,9 +573,9 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_bound_id_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let local_id = st.field()?.decode::<u32>()?;
-        let global_id = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let local_id = st.field()?.next::<u32>()?;
+        let global_id = st.field()?.next::<u32>()?;
         self.globals.insert(local_id, global_id);
 
         tracing::info!(local_id, global_id);
@@ -584,11 +584,11 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_add_mem_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<u32>()?;
-        let ty = st.field()?.decode::<Id<u32>>()?;
-        let fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
-        let flags = st.field()?.decode::<i32>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<u32>()?;
+        let ty = st.field()?.next::<Id<u32>>()?;
+        let fd = self.take_fd(st.field()?.next::<Fd>()?)?;
+        let flags = st.field()?.next::<i32>()?;
 
         tracing::info!(id, ?ty, ?fd, flags);
         self.memory.insert(id, MemoryState { ty, fd, flags });
@@ -597,8 +597,8 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn core_destroy(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<u32>()?;
 
         tracing::info!(id);
         Ok(())
@@ -606,18 +606,18 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn client_info(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<u32>()?;
-        let change_mask = st.field()?.decode::<u64>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<u32>()?;
+        let change_mask = st.field()?.next::<u64>()?;
 
-        let mut props = st.field()?.decode_struct()?;
+        let mut props = st.field()?.next_struct()?;
 
         if change_mask & 0x1 != 0 {
-            let n_items = props.field()?.decode::<i32>()?;
+            let n_items = props.field()?.next::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.decode_unsized::<str, _>(str::to_owned)?;
-                let value = props.field()?.decode_unsized::<str, _>(str::to_owned)?;
+                let key = props.field()?.next_unsized::<str, _>(str::to_owned)?;
+                let value = props.field()?.next_unsized::<str, _>(str::to_owned)?;
                 self.client.properties.insert(key, value);
             }
         }
@@ -628,36 +628,36 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn client_error(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<i32>()?;
-        let res = st.field()?.decode::<i32>()?;
-        let error = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<i32>()?;
+        let res = st.field()?.next::<i32>()?;
+        let error = st.field()?.next_unsized::<str, _>(str::to_owned)?;
         tracing::error!(id, res, error, "Client errored");
         Ok(())
     }
 
     #[tracing::instrument(skip_all)]
     fn registry_global(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
+        let mut st = pod.next_struct()?;
 
-        let id = st.field()?.decode::<u32>()?;
+        let id = st.field()?.next::<u32>()?;
 
         let index = self.registries.vacant_key();
 
         let mut registry = RegistryState::default();
 
         registry.id = id;
-        registry.permissions = st.field()?.decode::<i32>()?;
-        registry.ty = st.field()?.decode::<String>()?;
-        registry.version = st.field()?.decode::<u32>()?;
+        registry.permissions = st.field()?.next::<i32>()?;
+        registry.ty = st.field()?.next::<String>()?;
+        registry.version = st.field()?.next::<u32>()?;
 
-        let mut props = st.field()?.decode_struct()?;
+        let mut props = st.field()?.next_struct()?;
 
-        let n_items = props.field()?.decode::<i32>()?;
+        let n_items = props.field()?.next::<i32>()?;
 
         for _ in 0..n_items {
-            let key = props.field()?.decode_unsized::<str, _>(str::to_owned)?;
-            let value = props.field()?.decode_unsized::<str, _>(str::to_owned)?;
+            let key = props.field()?.next_unsized::<str, _>(str::to_owned)?;
+            let value = props.field()?.next_unsized::<str, _>(str::to_owned)?;
             registry.properties.insert(key, value);
         }
 
@@ -693,8 +693,8 @@ impl ConnectionState {
 
     #[tracing::instrument(skip_all)]
     fn registry_global_remove(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<u32>()?;
 
         let Some(registry_index) = self.id_to_registry.remove(&id) else {
             tracing::warn!(id, "Tried to remove unknown registry");
@@ -731,12 +731,12 @@ impl ConnectionState {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_transport(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let read_fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
-        let write_fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
-        let memfd = st.field()?.decode::<i32>()?;
-        let offset = st.field()?.decode::<i32>()?;
-        let size = st.field()?.decode::<i32>()?;
+        let mut st = pod.next_struct()?;
+        let read_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
+        let write_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
+        let memfd = st.field()?.next::<i32>()?;
+        let offset = st.field()?.next::<i32>()?;
+        let size = st.field()?.next::<i32>()?;
 
         tracing::info!(index, ?read_fd, ?write_fd, memfd, offset, size,);
 
@@ -751,10 +751,10 @@ impl ConnectionState {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_param(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
-        let param = st.field()?.decode::<id::Param>()?;
-        let flags = st.field()?.decode::<i32>()?;
-        let obj = st.field()?.decode_object()?;
+        let mut st = pod.next_struct()?;
+        let param = st.field()?.next::<id::Param>()?;
+        let flags = st.field()?.next::<i32>()?;
+        let obj = st.field()?.next_object()?;
 
         let object_type = id::ObjectType::from_id(obj.object_type());
         let object_id = id::Param::from_id(obj.object_id());
@@ -768,7 +768,7 @@ impl ConnectionState {
 
                     match id::Prop::from_id(p.key()) {
                         id::Prop::CHANNEL_VOLUMES => {
-                            let value = p.value().decode_array()?;
+                            let value = p.value().next_array()?;
                             tracing::info!(?value, "Set channel volumes");
                         }
                         prop => {
@@ -796,11 +796,11 @@ impl ConnectionState {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<id::IoType>()?;
-        let mem_id = st.field()?.decode::<i32>()?;
-        let offset = st.field()?.decode::<u32>()?;
-        let size = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let id = st.field()?.next::<id::IoType>()?;
+        let mem_id = st.field()?.next::<i32>()?;
+        let offset = st.field()?.next::<u32>()?;
+        let size = st.field()?.next::<u32>()?;
 
         tracing::info!(index, ?id, mem_id, offset, size);
         Ok(())
@@ -812,8 +812,8 @@ impl ConnectionState {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.as_ref().decode_struct()?;
-        let obj = st.field()?.decode_object()?;
+        let mut st = pod.as_ref().next_struct()?;
+        let obj = st.field()?.next_object()?;
 
         let object_type = id::CommandType::from_id(obj.object_type());
         let object_id = id::NodeCommand::from_id(obj.object_id());
@@ -828,11 +828,11 @@ impl ConnectionState {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.decode_struct()?;
-        let direction = consts::Direction::from_raw(st.field()?.decode::<u32>()?);
-        let port_id = st.field()?.decode::<u32>()?;
-        let id = st.field()?.decode::<id::Param>()?;
-        let flags = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let direction = consts::Direction::from_raw(st.field()?.next::<u32>()?);
+        let port_id = st.field()?.next::<u32>()?;
+        let id = st.field()?.next::<id::Param>()?;
+        let flags = st.field()?.next::<u32>()?;
         let param = st.field()?;
 
         tracing::info!(index, ?direction, ?port_id, ?id, ?flags, ?param);
@@ -845,7 +845,7 @@ impl ConnectionState {
             bail!("Missing client node {index}");
         };
 
-        let st = pod.decode_struct()?;
+        let st = pod.next_struct()?;
         tracing::info!(?st);
         Ok(())
     }
@@ -856,14 +856,14 @@ impl ConnectionState {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.decode_struct()?;
-        let direction = consts::Direction::from_raw(st.field()?.decode::<u32>()?);
-        let port_id = st.field()?.decode::<u32>()?;
-        let mix_id = st.field()?.decode::<u32>()?;
-        let id = st.field()?.decode::<id::IoType>()?;
-        let mem_id = st.field()?.decode::<i32>()?;
-        let offset = st.field()?.decode::<u32>()?;
-        let size = st.field()?.decode::<u32>()?;
+        let mut st = pod.next_struct()?;
+        let direction = consts::Direction::from_raw(st.field()?.next::<u32>()?);
+        let port_id = st.field()?.next::<u32>()?;
+        let mix_id = st.field()?.next::<u32>()?;
+        let id = st.field()?.next::<id::IoType>()?;
+        let mem_id = st.field()?.next::<i32>()?;
+        let offset = st.field()?.next::<u32>()?;
+        let size = st.field()?.next::<u32>()?;
 
         tracing::info!(?direction, port_id, mix_id, ?id, mem_id, offset, size);
         Ok(())
@@ -871,13 +871,13 @@ impl ConnectionState {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_activation(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.decode_struct()?;
+        let mut st = pod.next_struct()?;
 
-        let node_id = st.field()?.decode::<i32>()?;
-        let fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
-        let mem_id = st.field()?.decode::<i32>()?;
-        let offset = st.field()?.decode::<u32>()?;
-        let size = st.field()?.decode::<u32>()?;
+        let node_id = st.field()?.next::<i32>()?;
+        let fd = self.take_fd(st.field()?.next::<Fd>()?)?;
+        let mem_id = st.field()?.next::<i32>()?;
+        let offset = st.field()?.next::<u32>()?;
+        let size = st.field()?.next::<u32>()?;
 
         tracing::info!(index, node_id, ?fd, mem_id, offset, size,);
 
@@ -900,7 +900,7 @@ impl ConnectionState {
             bail!("Missing client node {index}");
         };
 
-        let st = pod.decode_struct()?;
+        let st = pod.next_struct()?;
         tracing::info!(?st);
         Ok(())
     }

@@ -21,7 +21,7 @@ fn sandbox() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut().push_unsized(Bitmap::new(b"hello world"))?;
 
-    assert_eq!(pod.decode::<OwnedBitmap>()?.as_bytes(), b"hello world");
+    assert_eq!(pod.next::<OwnedBitmap>()?.as_bytes(), b"hello world");
     Ok(())
 }
 
@@ -110,12 +110,12 @@ fn test_array_underflow() -> Result<(), Error> {
 fn test_none() -> Result<(), Error> {
     let pod = push_none()?;
 
-    assert!(pod.decode_option()?.is_none());
+    assert!(pod.next_option()?.is_none());
 
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<bool>().unwrap_err().kind(),
+        pod.next::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -127,7 +127,7 @@ fn test_bool() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<bool>().unwrap_err().kind(),
+        pod.next::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -139,7 +139,7 @@ fn test_int() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<i32>().unwrap_err().kind(),
+        pod.next::<i32>().unwrap_err().kind(),
         expected(Type::INT, Type::NONE)
     );
 
@@ -151,7 +151,7 @@ fn test_long() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<i64>().unwrap_err().kind(),
+        pod.next::<i64>().unwrap_err().kind(),
         expected(Type::LONG, Type::NONE)
     );
 
@@ -163,7 +163,7 @@ fn test_float() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<f32>().unwrap_err().kind(),
+        pod.next::<f32>().unwrap_err().kind(),
         expected(Type::FLOAT, Type::NONE)
     );
 
@@ -175,7 +175,7 @@ fn test_double() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<f64>().unwrap_err().kind(),
+        pod.next::<f64>().unwrap_err().kind(),
         expected(Type::DOUBLE, Type::NONE)
     );
 
@@ -187,7 +187,7 @@ fn test_string() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode_borrowed::<CStr>().unwrap_err().kind(),
+        pod.next_borrowed::<CStr>().unwrap_err().kind(),
         expected(Type::STRING, Type::NONE)
     );
 
@@ -199,7 +199,7 @@ fn test_bytes() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode_borrowed::<[u8]>().unwrap_err().kind(),
+        pod.next_borrowed::<[u8]>().unwrap_err().kind(),
         expected(Type::BYTES, Type::NONE)
     );
 
@@ -211,7 +211,7 @@ fn test_rectangle() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<Rectangle>().unwrap_err().kind(),
+        pod.next::<Rectangle>().unwrap_err().kind(),
         expected(Type::RECTANGLE, Type::NONE)
     );
 
@@ -223,7 +223,7 @@ fn test_fraction() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<Fraction>().unwrap_err().kind(),
+        pod.next::<Fraction>().unwrap_err().kind(),
         expected(Type::FRACTION, Type::NONE)
     );
 
@@ -235,14 +235,14 @@ fn test_bitmap() -> Result<(), Error> {
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode_borrowed::<Bitmap>().unwrap_err().kind(),
+        pod.next_borrowed::<Bitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
     let pod = push_none()?;
 
     assert_eq!(
-        pod.decode::<OwnedBitmap>().unwrap_err().kind(),
+        pod.next::<OwnedBitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
@@ -260,14 +260,14 @@ fn test_array() -> Result<(), Error> {
         Ok(())
     })?;
 
-    let mut array = pod.as_ref().decode_array()?;
+    let mut array = pod.as_ref().next_array()?;
 
     assert_eq!(array.len(), 3);
-    assert_eq!(array.item()?.decode_borrowed::<CStr>()?, c"foo");
+    assert_eq!(array.item()?.next_borrowed::<CStr>()?, c"foo");
     assert_eq!(array.len(), 2);
-    assert_eq!(array.item()?.decode_borrowed::<CStr>()?, c"bar");
+    assert_eq!(array.item()?.next_borrowed::<CStr>()?, c"bar");
     assert_eq!(array.len(), 1);
-    assert_eq!(array.item()?.decode_borrowed::<CStr>()?, c"baz");
+    assert_eq!(array.item()?.next_borrowed::<CStr>()?, c"baz");
 
     assert!(array.is_empty());
     assert_eq!(array.len(), 0);
@@ -289,20 +289,20 @@ fn test_decode_complex_struct() -> Result<(), Error> {
         })
     })?;
 
-    let mut st = pod.decode_struct()?;
+    let mut st = pod.next_struct()?;
     assert!(!st.is_empty());
-    assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    assert_eq!(st.field()?.decode::<i32>()?, 2i32);
+    assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    assert_eq!(st.field()?.next::<i32>()?, 2i32);
     assert!(!st.is_empty());
 
-    let mut inner = st.field()?.decode_struct()?;
+    let mut inner = st.field()?.next_struct()?;
     assert!(!inner.is_empty());
-    assert_eq!(inner.field()?.decode_borrowed::<CStr>()?, c"hello world");
+    assert_eq!(inner.field()?.next_borrowed::<CStr>()?, c"hello world");
     assert_eq!(
-        inner.field()?.decode::<Rectangle>()?,
+        inner.field()?.next::<Rectangle>()?,
         Rectangle::new(800, 600)
     );
-    assert_eq!(inner.field()?.decode_borrowed::<CStr>()?, c"goodbye world");
+    assert_eq!(inner.field()?.next_borrowed::<CStr>()?, c"goodbye world");
     assert!(inner.is_empty());
 
     assert!(inner.field().is_err());
@@ -321,12 +321,12 @@ fn test_decode_struct() -> Result<(), Error> {
         Ok(())
     })?;
 
-    let mut st = pod.decode_struct()?;
+    let mut st = pod.next_struct()?;
 
     assert!(!st.is_empty());
-    assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    assert_eq!(st.field()?.next::<i32>()?, 3i32);
     assert!(st.is_empty());
     Ok(())
 }
@@ -421,7 +421,7 @@ fn test_format_l1_struct() -> Result<(), Error> {
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().decode_struct()?;
+    let mut st = pod.as_ref().next_struct()?;
     assert_eq!(format!("{:?}", st.field()?), "b\"a\"");
     assert_eq!(format!("{:?}", st.field()?), "b\"b\"");
     assert_eq!(format!("{pod:?}"), "Struct { fields: [b\"a\", b\"b\"] }");

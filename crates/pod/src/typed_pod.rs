@@ -91,7 +91,7 @@ where
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.decode::<i32>()?, 10i32);
+    /// assert_eq!(pod.next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -116,10 +116,10 @@ where
     /// })?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     /// assert!(!array.is_empty());
     /// array.item()?.skip()?;
-    /// assert_eq!(array.item()?.decode::<i32>()?, 20i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -139,11 +139,11 @@ where
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.decode::<i32>()?, 10i32);
+    /// assert_eq!(pod.next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode<T>(self) -> Result<T, Error>
+    pub fn next<T>(self) -> Result<T, Error>
     where
         T: Decode<'de>,
     {
@@ -168,11 +168,11 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
+    pub fn next_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
@@ -198,11 +198,11 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_borrowed<T>(self) -> Result<&'de T, Error>
+    pub fn next_borrowed<T>(self) -> Result<&'de T, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
@@ -230,22 +230,22 @@ where
     /// pod.as_mut().push_none()?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert!(pod.decode_option()?.is_none());
+    /// assert!(pod.next_option()?.is_none());
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push(true)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     ///
-    /// let Some(mut pod) = pod.decode_option()? else {
+    /// let Some(mut pod) = pod.next_option()? else {
     ///     panic!("expected some value");
     /// };
     ///
-    /// assert!(pod.decode::<bool>()?);
+    /// assert!(pod.next::<bool>()?);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_option(self) -> Result<Option<TypedPod<B>>, Error> {
+    pub fn next_option(self) -> Result<Option<TypedPod<B>>, Error> {
         match self.ty {
             Type::NONE => Ok(None),
             _ => Ok(Some(TypedPod::new(self.size, self.ty, self.buf))),
@@ -269,21 +269,21 @@ where
     /// })?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     ///
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
     ///
-    /// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 1i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 2i32);
+    /// assert_eq!(array.item()?.next::<i32>()?, 3i32);
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_array(self) -> Result<Array<B>, Error> {
+    pub fn next_array(self) -> Result<Array<B>, Error> {
         match self.ty {
             Type::ARRAY => Array::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -308,16 +308,16 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.as_ref().into_typed()?.decode_struct()?;
+    /// let mut st = pod.as_ref().into_typed()?.next_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_struct(self) -> Result<Struct<B>, Error> {
+    pub fn next_struct(self) -> Result<Struct<B>, Error> {
         match self.ty {
             Type::STRUCT => Ok(Struct::new(self.buf, self.size)),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -342,29 +342,29 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.decode_object()?;
+    /// let mut obj = pod.next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 10);
-    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 20);
-    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 30);
-    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_object(self) -> Result<Object<B>, Error> {
+    pub fn next_object(self) -> Result<Object<B>, Error> {
         match self.ty {
             Type::OBJECT => Object::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -389,29 +389,29 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().into_typed()?.decode_sequence()?;
+    /// let mut seq = pod.as_ref().into_typed()?.next_sequence()?;
     /// assert!(!seq.is_empty());
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 1);
     /// assert_eq!(c.ty(), 10);
-    /// assert_eq!(c.value().decode::<i32>()?, 1);
+    /// assert_eq!(c.value().next::<i32>()?, 1);
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 2);
     /// assert_eq!(c.ty(), 20);
-    /// assert_eq!(c.value().decode::<i32>()?, 2);
+    /// assert_eq!(c.value().next::<i32>()?, 2);
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 3);
     /// assert_eq!(c.ty(), 30);
-    /// assert_eq!(c.value().decode::<i32>()?, 3);
+    /// assert_eq!(c.value().next::<i32>()?, 3);
     ///
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_sequence(self) -> Result<Sequence<B>, Error> {
+    pub fn next_sequence(self) -> Result<Sequence<B>, Error> {
         match self.ty {
             Type::SEQUENCE => Sequence::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -436,16 +436,16 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.decode_choice()?;
+    /// let mut choice = pod.next_choice()?;
     /// assert!(!choice.is_empty());
-    /// assert_eq!(choice.entry()?.decode::<i32>()?, 10);
-    /// assert_eq!(choice.entry()?.decode::<i32>()?, 0);
-    /// assert_eq!(choice.entry()?.decode::<i32>()?, 30);
+    /// assert_eq!(choice.entry()?.next::<i32>()?, 10);
+    /// assert_eq!(choice.entry()?.next::<i32>()?, 0);
+    /// assert_eq!(choice.entry()?.next::<i32>()?, 30);
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_choice(self) -> Result<Choice<B>, Error> {
+    pub fn next_choice(self) -> Result<Choice<B>, Error> {
         match self.ty {
             Type::CHOICE => Choice::from_reader(self.buf, self.size),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -472,17 +472,17 @@ where
     ///     })
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.decode_pod()?;
-    /// let mut st = pod.decode_struct()?;
+    /// let pod = pod.as_ref().into_typed()?.next_pod()?;
+    /// let mut st = pod.next_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.decode::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.decode::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode_pod(self) -> Result<Pod<B>, Error> {
+    pub fn next_pod(self) -> Result<Pod<B>, Error> {
         match self.ty {
             Type::POD => Ok(Pod::new(self.buf)),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -500,7 +500,7 @@ where
     /// Convert the [`TypedPod`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> TypedPod<B::Reader<'_>> {
+    pub fn as_ref(&self) -> TypedPod<B::AsReader<'_>> {
         TypedPod::new(self.size, self.ty, self.buf.as_reader())
     }
 }
@@ -537,23 +537,23 @@ where
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(pod.into_typed()?)?;
 ///
-/// let mut obj = pod2.decode_pod()?.decode_object()?;
+/// let mut obj = pod2.next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
 /// assert_eq!(p.flags(), 10);
-/// assert_eq!(p.value().decode::<i32>()?, 1);
+/// assert_eq!(p.value().next::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
 /// assert_eq!(p.flags(), 20);
-/// assert_eq!(p.value().decode::<i32>()?, 2);
+/// assert_eq!(p.value().next::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
 /// assert_eq!(p.flags(), 30);
-/// assert_eq!(p.value().decode::<i32>()?, 3);
+/// assert_eq!(p.value().next::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
@@ -598,18 +598,18 @@ where
 
         macro_rules! decode {
             ($ty:ty, $pat:pat => $expr:expr) => {
-                match self.as_ref().decode::<$ty>() {
+                match self.as_ref().next::<$ty>() {
                     Ok($pat) => $expr,
                     Err(e) => e.fmt(f),
                 }
             };
         }
 
-        macro_rules! decode_unsized {
+        macro_rules! next_unsized {
             ($ty:ty, $pat:pat => $expr:expr) => {{
                 let mut outer = Ok(());
 
-                let result = self.as_ref().decode_unsized(FunctionVisitor(|$pat: &$ty| {
+                let result = self.as_ref().next_unsized(FunctionVisitor(|$pat: &$ty| {
                     outer = $expr;
                 }));
 
@@ -642,10 +642,10 @@ where
                 decode!(f64, value => write!(f, "{value:?}"))
             }
             Type::STRING => {
-                decode_unsized!(CStr, value => write!(f, "{value:?}"))
+                next_unsized!(CStr, value => write!(f, "{value:?}"))
             }
             Type::BYTES => {
-                decode_unsized!([u8], value => write!(f, "{:?}", BStr::new(value)))
+                next_unsized!([u8], value => write!(f, "{:?}", BStr::new(value)))
             }
             Type::RECTANGLE => {
                 decode!(Rectangle, value => value.fmt(f))
@@ -654,16 +654,16 @@ where
                 decode!(Fraction, value => value.fmt(f))
             }
             Type::BITMAP => {
-                decode_unsized!(Bitmap, value => value.fmt(f))
+                next_unsized!(Bitmap, value => value.fmt(f))
             }
-            Type::ARRAY => tri!(self.as_ref().decode_array()).fmt(f),
-            Type::STRUCT => tri!(self.as_ref().decode_struct()).fmt(f),
-            Type::OBJECT => tri!(self.as_ref().decode_object()).fmt(f),
-            Type::SEQUENCE => tri!(self.as_ref().decode_sequence()).fmt(f),
+            Type::ARRAY => tri!(self.as_ref().next_array()).fmt(f),
+            Type::STRUCT => tri!(self.as_ref().next_struct()).fmt(f),
+            Type::OBJECT => tri!(self.as_ref().next_object()).fmt(f),
+            Type::SEQUENCE => tri!(self.as_ref().next_sequence()).fmt(f),
             Type::POINTER => decode!(Pointer, value => value.fmt(f)),
             Type::FD => decode!(Fd, value => value.fmt(f)),
-            Type::CHOICE => tri!(self.as_ref().decode_choice()).fmt(f),
-            Type::POD => tri!(tri!(self.as_ref().decode_pod()).into_typed()).fmt(f),
+            Type::CHOICE => tri!(self.as_ref().next_choice()).fmt(f),
+            Type::POD => tri!(tri!(self.as_ref().next_pod()).into_typed()).fmt(f),
             ty => write!(f, "{{{ty:?}}}"),
         }
     }

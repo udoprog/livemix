@@ -25,7 +25,7 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(true)?;
-/// assert_eq!(pod.decode::<bool>()?, true);
+/// assert_eq!(pod.next::<bool>()?, true);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for bool {
@@ -51,7 +51,7 @@ impl Encode for bool {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(Id(142u32))?;
-/// assert_eq!(pod.decode::<Id<u32>>()?, Id(142u32));
+/// assert_eq!(pod.next::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<I> Encode for Id<I>
@@ -80,7 +80,7 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.decode::<i32>()?, 10);
+/// assert_eq!(pod.next::<i32>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for i32 {
@@ -106,11 +106,11 @@ impl Encode for i32 {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10u32)?;
-/// assert_eq!(pod.decode::<u32>()?, 10);
+/// assert_eq!(pod.next::<u32>()?, 10);
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.decode::<u32>()?, 10);
+/// assert_eq!(pod.next::<u32>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for u32 {
@@ -136,7 +136,7 @@ impl Encode for u32 {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10i64)?;
-/// assert_eq!(pod.decode::<i64>()?, 10i64);
+/// assert_eq!(pod.next::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for i64 {
@@ -162,11 +162,11 @@ impl Encode for i64 {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10u64)?;
-/// assert_eq!(pod.decode::<u64>()?, 10);
+/// assert_eq!(pod.next::<u64>()?, 10);
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10i64)?;
-/// assert_eq!(pod.decode::<u64>()?, 10);
+/// assert_eq!(pod.next::<u64>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for u64 {
@@ -192,7 +192,7 @@ impl Encode for u64 {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(42.42f32)?;
-/// assert_eq!(pod.decode::<f32>()?, 42.42f32);
+/// assert_eq!(pod.next::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for f32 {
@@ -218,7 +218,7 @@ impl Encode for f32 {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(42.42f64)?;
-/// assert_eq!(pod.decode::<f64>()?, 42.42f64);
+/// assert_eq!(pod.next::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for f64 {
@@ -244,7 +244,7 @@ impl Encode for f64 {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(Rectangle::new(100, 200))?;
-/// assert_eq!(pod.decode::<Rectangle>()?, Rectangle::new(100, 200));
+/// assert_eq!(pod.next::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for Rectangle {
@@ -270,7 +270,7 @@ impl Encode for Rectangle {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(Fraction::new(800, 600))?;
-/// assert_eq!(pod.decode::<Fraction>()?, Fraction::new(800, 600));
+/// assert_eq!(pod.next::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for Fraction {
@@ -297,7 +297,7 @@ impl Encode for Fraction {
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(*b"hello world")?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<const N: usize> Encode for [u8; N] {
@@ -325,7 +325,7 @@ impl<const N: usize> Encode for [u8; N] {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(Pointer::new((&value as *const u32).addr()))?;
-/// assert_eq!(pod.decode::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
+/// assert_eq!(pod.next::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for Pointer {
@@ -356,7 +356,7 @@ impl Encode for Pointer {
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(Fd::new(4))?;
-/// assert_eq!(pod.decode::<Fd>()?, Fd::new(4));
+/// assert_eq!(pod.next::<Fd>()?, Fd::new(4));
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl Encode for Fd {
@@ -384,7 +384,7 @@ impl Encode for Fd {
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(&b"hello world"[..])?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.decode_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<T> Encode for &T

@@ -24,14 +24,14 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 ///     Ok(())
 /// })?;
 ///
-/// let mut array = pod.decode_array()?;
+/// let mut array = pod.next_array()?;
 ///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
 ///
-/// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
-/// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
-/// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
+/// assert_eq!(array.item()?.next::<i32>()?, 1i32);
+/// assert_eq!(array.item()?.next::<i32>()?, 2i32);
+/// assert_eq!(array.item()?.next::<i32>()?, 3i32);
 ///
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
@@ -51,12 +51,12 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 ///     Ok(())
 /// })?;
 ///
-/// let mut array = pod.as_ref().decode_array()?;
+/// let mut array = pod.as_ref().next_array()?;
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
-/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "foo");
-/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "bar");
-/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "baz");
+/// assert_eq!(array.item()?.next_borrowed::<str>()?, "foo");
+/// assert_eq!(array.item()?.next_borrowed::<str>()?, "bar");
+/// assert_eq!(array.item()?.next_borrowed::<str>()?, "baz");
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
@@ -75,12 +75,12 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 ///     Ok(())
 /// })?;
 ///
-/// let mut array = pod.as_ref().decode_array()?;
+/// let mut array = pod.as_ref().next_array()?;
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
-/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "foo");
-/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "bar");
-/// assert_eq!(array.item()?.decode_borrowed::<str>()?, "baz");
+/// assert_eq!(array.item()?.next_borrowed::<str>()?, "foo");
+/// assert_eq!(array.item()?.next_borrowed::<str>()?, "bar");
+/// assert_eq!(array.item()?.next_borrowed::<str>()?, "baz");
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
@@ -113,7 +113,7 @@ impl<B> Array<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     ///
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
@@ -134,7 +134,7 @@ impl<B> Array<B> {
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -192,7 +192,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     ///
     /// let mut count = 0;
     ///
@@ -207,7 +207,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn item(&mut self) -> Result<TypedPod<B::Reader<'_>>, Error> {
+    pub fn item(&mut self) -> Result<TypedPod<B::AsReader<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
@@ -234,7 +234,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let array = pod.decode_array()?.to_owned();
+    /// let array = pod.next_array()?.to_owned();
     /// let mut array = array.as_ref();
     ///
     /// let mut count = 0;
@@ -282,7 +282,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let array = pod.decode_array()?.to_owned();
+    /// let array = pod.next_array()?.to_owned();
     /// let mut array = array.as_ref();
     ///
     /// let mut count = 0;
@@ -298,7 +298,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Array<B::Reader<'_>> {
+    pub fn as_ref(&self) -> Array<B::AsReader<'_>> {
         Array::new(
             self.buf.as_reader(),
             self.child_size,
@@ -324,18 +324,18 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let array = pod.decode_array()?;
+/// let array = pod.next_array()?;
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(array)?;
 ///
-/// let mut array = pod2.decode_array()?;
+/// let mut array = pod2.next_array()?;
 ///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
 ///
-/// assert_eq!(array.item()?.decode::<i32>()?, 1i32);
-/// assert_eq!(array.item()?.decode::<i32>()?, 2i32);
-/// assert_eq!(array.item()?.decode::<i32>()?, 3i32);
+/// assert_eq!(array.item()?.next::<i32>()?, 1i32);
+/// assert_eq!(array.item()?.next::<i32>()?, 2i32);
+/// assert_eq!(array.item()?.next::<i32>()?, 3i32);
 ///
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);

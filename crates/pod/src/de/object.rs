@@ -84,23 +84,23 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.decode_object()?;
+    /// let mut obj = pod.next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 10);
-    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 20);
-    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 30);
-    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -125,29 +125,29 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.decode_object()?;
+    /// let mut obj = pod.next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 10);
-    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 20);
-    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 30);
-    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property(&mut self) -> Result<Property<B::Reader<'_>>, Error> {
+    pub fn property(&mut self) -> Result<Property<B::AsReader<'_>>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
@@ -189,7 +189,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let obj = pod.decode_object()?.to_owned();
+    /// let obj = pod.next_object()?.to_owned();
     ///
     /// let mut obj = obj.as_ref();
     /// assert!(!obj.is_empty());
@@ -197,17 +197,17 @@ where
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 10);
-    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 20);
-    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 30);
-    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -245,7 +245,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let obj = pod.decode_object()?.to_owned();
+    /// let obj = pod.next_object()?.to_owned();
     ///
     /// let mut obj = obj.as_ref();
     /// assert!(!obj.is_empty());
@@ -253,23 +253,23 @@ where
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 10);
-    /// assert_eq!(p.value().decode::<i32>()?, 1);
+    /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 20);
-    /// assert_eq!(p.value().decode::<i32>()?, 2);
+    /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 30);
-    /// assert_eq!(p.value().decode::<i32>()?, 3);
+    /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Object<B::Reader<'_>> {
+    pub fn as_ref(&self) -> Object<B::AsReader<'_>> {
         Object::new(
             self.buf.as_reader(),
             self.size,
@@ -294,12 +294,12 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let obj = pod.decode_object()?.to_owned();
+/// let obj = pod.next_object()?.to_owned();
 ///
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(obj.as_ref())?;
 ///
-/// let obj = pod2.decode_object()?;
+/// let obj = pod2.next_object()?;
 ///
 /// let mut obj = obj.as_ref();
 /// assert!(!obj.is_empty());
@@ -307,17 +307,17 @@ where
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
 /// assert_eq!(p.flags(), 10);
-/// assert_eq!(p.value().decode::<i32>()?, 1);
+/// assert_eq!(p.value().next::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
 /// assert_eq!(p.flags(), 20);
-/// assert_eq!(p.value().decode::<i32>()?, 2);
+/// assert_eq!(p.value().next::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
 /// assert_eq!(p.flags(), 30);
-/// assert_eq!(p.value().decode::<i32>()?, 3);
+/// assert_eq!(p.value().next::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())

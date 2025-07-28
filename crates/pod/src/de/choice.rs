@@ -23,7 +23,7 @@ use crate::{AsReader, ChoiceType, Encode, Error, Reader, Type, TypedPod, Writer}
 ///     Ok(())
 /// })?;
 ///
-/// let mut choice = pod.decode_choice()?;
+/// let mut choice = pod.next_choice()?;
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
 ///
 /// let mut count = 0;
@@ -63,7 +63,7 @@ impl<B> Choice<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.decode_choice()?;
+    /// let mut choice = pod.next_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
@@ -98,7 +98,7 @@ impl<B> Choice<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.decode_choice()?;
+    /// let choice = pod.next_choice()?;
     /// assert_eq!(choice.child_type(), Type::INT);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -122,7 +122,7 @@ impl<B> Choice<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.decode_choice()?;
+    /// let choice = pod.next_choice()?;
     /// assert_eq!(choice.child_size(), 4);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -196,7 +196,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -216,7 +216,7 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
-    /// let mut array = pod.decode_array()?;
+    /// let mut array = pod.next_array()?;
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -240,7 +240,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.decode_choice()?;
+    /// let mut choice = pod.next_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
@@ -256,7 +256,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn entry(&mut self) -> Result<TypedPod<B::Reader<'_>>, Error> {
+    pub fn entry(&mut self) -> Result<TypedPod<B::AsReader<'_>>, Error> {
         if self.remaining == 0 {
             return Err(Error::new(ErrorKind::ArrayUnderflow));
         }
@@ -283,7 +283,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.decode_choice()?.to_owned();
+    /// let choice = pod.next_choice()?.to_owned();
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
@@ -335,7 +335,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.decode_choice()?.to_owned();
+    /// let choice = pod.next_choice()?.to_owned();
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
@@ -353,7 +353,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Choice<B::Reader<'_>> {
+    pub fn as_ref(&self) -> Choice<B::AsReader<'_>> {
         Choice::new(
             self.buf.as_reader(),
             self.choice_type,
@@ -380,12 +380,12 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let mut choice = pod.decode_choice()?;
+/// let mut choice = pod.next_choice()?;
 ///
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(choice)?;
 ///
-/// let mut choice = pod2.decode_choice()?;
+/// let mut choice = pod2.next_choice()?;
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
 ///
 /// let mut count = 0;
