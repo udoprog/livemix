@@ -38,9 +38,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_struct(|st| {
-    ///     st.field()?.push(1i32)?;
-    ///     st.field()?.push(2i32)?;
-    ///     st.field()?.push(3i32)?;
+    ///     st.field().push(1i32)?;
+    ///     st.field().push(2i32)?;
+    ///     st.field().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -67,9 +67,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_struct(|st| {
-    ///     st.field()?.push(1i32)?;
-    ///     st.field()?.push(2i32)?;
-    ///     st.field()?.push(3i32)?;
+    ///     st.field().push(1i32)?;
+    ///     st.field().push(2i32)?;
+    ///     st.field().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -120,9 +120,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_struct(|st| {
-    ///     st.field()?.push(1i32)?;
-    ///     st.field()?.push(2i32)?;
-    ///     st.field()?.push(3i32)?;
+    ///     st.field().push(1i32)?;
+    ///     st.field().push(2i32)?;
+    ///     st.field().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -162,9 +162,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_struct(|st| {
-    ///     st.field()?.push(1i32)?;
-    ///     st.field()?.push(2i32)?;
-    ///     st.field()?.push(3i32)?;
+    ///     st.field().push(1i32)?;
+    ///     st.field().push(2i32)?;
+    ///     st.field().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -193,9 +193,9 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_struct(|st| {
-///     st.field()?.push(1i32)?;
-///     st.field()?.push(2i32)?;
-///     st.field()?.push(3i32)?;
+///     st.field().push(1i32)?;
+///     st.field().push(2i32)?;
+///     st.field().push(3i32)?;
 ///     Ok(())
 /// })?;
 ///

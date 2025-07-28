@@ -38,16 +38,16 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_struct(|st| {
-    ///     st.field()?.push(1i32)?;
-    ///     st.field()?.push(2i32)?;
-    ///     st.field()?.push(3i32)?;
+    ///     st.field().push(1i32)?;
+    ///     st.field().push(2i32)?;
+    ///     st.field().push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Result<Pod<W::Mut<'_>>, Error> {
-        Ok(Pod::new(self.writer.borrow_mut()))
+    pub fn field(&mut self) -> Pod<W::Mut<'_>> {
+        Pod::new(self.writer.borrow_mut())
     }
 
     #[inline]

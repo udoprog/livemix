@@ -283,13 +283,13 @@ fn test_array() -> Result<(), Error> {
 fn test_decode_complex_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut().push_struct(|st| {
-        st.field()?.push(1i32)?;
-        st.field()?.push(2i32)?;
+        st.field().push(1i32)?;
+        st.field().push(2i32)?;
 
-        st.field()?.push_struct(|inner| {
-            inner.field()?.push(c"hello world")?;
-            inner.field()?.push(Rectangle::new(800, 600))?;
-            inner.field()?.push(c"goodbye world")?;
+        st.field().push_struct(|inner| {
+            inner.field().push(c"hello world")?;
+            inner.field().push(Rectangle::new(800, 600))?;
+            inner.field().push(c"goodbye world")?;
             Ok(())
         })
     })?;
@@ -320,9 +320,9 @@ fn test_decode_complex_struct() -> Result<(), Error> {
 fn test_decode_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut().push_struct(|st| {
-        st.field()?.push(1i32)?;
-        st.field()?.push(2i32)?;
-        st.field()?.push(3i32)?;
+        st.field().push(1i32)?;
+        st.field().push(2i32)?;
+        st.field().push(3i32)?;
         Ok(())
     })?;
 
@@ -340,13 +340,13 @@ fn test_decode_struct() -> Result<(), Error> {
 fn test_format_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut().push_struct(|st| {
-        st.field()?.push(1i32)?;
-        st.field()?.push(2i32)?;
+        st.field().push(1i32)?;
+        st.field().push(2i32)?;
 
-        st.field()?.push_struct(|inner| {
-            inner.field()?.push(*b"hello world")?;
-            inner.field()?.push(Rectangle::new(800, 600))?;
-            inner.field()?.push(*b"goodbye world")?;
+        st.field().push_struct(|inner| {
+            inner.field().push(*b"hello world")?;
+            inner.field().push(Rectangle::new(800, 600))?;
+            inner.field().push(*b"goodbye world")?;
             Ok(())
         })
     })?;
@@ -367,9 +367,9 @@ fn test_format_object() -> Result<(), Error> {
         obj.property(2, 0b010)?.push(2i32)?;
 
         obj.property(3, 0b001)?.push_struct(|st| {
-            st.field()?.push(*b"hello world")?;
-            st.field()?.push(Rectangle::new(800, 600))?;
-            st.field()?.push(*b"goodbye world")?;
+            st.field().push(*b"hello world")?;
+            st.field().push(Rectangle::new(800, 600))?;
+            st.field().push(*b"goodbye world")?;
             Ok(())
         })
     })?;
@@ -421,8 +421,8 @@ fn test_format_array() -> Result<(), Error> {
 fn test_format_l1_struct() -> Result<(), Error> {
     let mut pod = Pod::array();
     pod.as_mut().push_struct(|st| {
-        st.field()?.push(*b"a")?;
-        st.field()?.push(*b"b")?;
+        st.field().push(*b"a")?;
+        st.field().push(*b"b")?;
         Ok(())
     })?;
 

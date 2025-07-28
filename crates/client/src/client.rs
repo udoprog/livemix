@@ -31,7 +31,7 @@ impl Client {
     pub fn core_hello(&mut self) -> Result<()> {
         let mut pod = Pod::array();
         pod.as_mut()
-            .push_struct(|st| st.field()?.push(consts::VERSION))?;
+            .push_struct(|st| st.field().push(consts::VERSION))?;
 
         self.connection
             .request(consts::CORE_ID, op::CORE_HELLO, pod)?;
@@ -43,8 +43,8 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(consts::REGISTRY_VERSION as i32)?;
-            st.field()?.push(new_id)?;
+            st.field().push(consts::REGISTRY_VERSION as i32)?;
+            st.field().push(new_id)?;
             Ok(())
         })?;
 
@@ -61,8 +61,8 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(id)?;
-            st.field()?.push(sync_sequence)?;
+            st.field().push(id)?;
+            st.field().push(sync_sequence)?;
             Ok(())
         })?;
 
@@ -76,8 +76,8 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(id)?;
-            st.field()?.push(seq)?;
+            st.field().push(id)?;
+            st.field().push(seq)?;
             Ok(())
         })?;
 
@@ -99,7 +99,7 @@ impl Client {
         pod.as_mut().push_struct(|st| {
             st.field()?.push_unsized(factory_name)?;
             st.field()?.push_unsized(ty)?;
-            st.field()?.push(version)?;
+            st.field().push(version)?;
 
             st.field()?.push_struct(|props| {
                 props.field()?.push(6)?;
@@ -124,7 +124,7 @@ impl Client {
                 Ok(())
             })?;
 
-            st.field()?.push(new_id)?;
+            st.field().push(new_id)?;
             Ok(())
         })?;
 
@@ -139,13 +139,13 @@ impl Client {
 
         pod.as_mut().push_struct(|st| {
             st.field()?.push_struct(|st| {
-                st.field()?.push(2)?;
+                st.field().push(2)?;
 
-                st.field()?.push("application.name")?;
-                st.field()?.push("livemix")?;
+                st.field().push("application.name")?;
+                st.field().push("livemix")?;
 
-                st.field()?.push("node.name")?;
-                st.field()?.push("livemix")?;
+                st.field().push("node.name")?;
+                st.field().push("livemix")?;
                 Ok(())
             })
         })?;
@@ -160,8 +160,8 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(version)?;
-            st.field()?.push(new_id)?;
+            st.field().push(version)?;
+            st.field().push(new_id)?;
             Ok(())
         })?;
 
@@ -189,9 +189,9 @@ impl Client {
         let node_flags = flags::Node::IN_DYNAMIC_PORTS | flags::Node::OUT_DYNAMIC_PORTS;
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(change_mask)?;
+            st.field().push(change_mask)?;
 
-            st.field()?.push(2)?;
+            st.field().push(2)?;
 
             st.field()?
                 .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
@@ -221,27 +221,27 @@ impl Client {
 
             if change_mask & flags::ClientNodeUpdate::INFO {
                 st.field()?.push_struct(|st| {
-                    st.field()?.push(max_input_ports)?;
-                    st.field()?.push(max_output_ports)?;
-                    st.field()?.push(node_change_mask)?;
-                    st.field()?.push(node_flags)?;
+                    st.field().push(max_input_ports)?;
+                    st.field().push(max_output_ports)?;
+                    st.field().push(node_change_mask)?;
+                    st.field().push(node_flags)?;
 
-                    st.field()?.push(1u32)?;
-                    st.field()?.push("node.name")?;
+                    st.field().push(1u32)?;
+                    st.field().push("node.name")?;
                     st.field()?.push_unsized("livemix2")?;
 
-                    st.field()?.push(4u32)?;
-                    st.field()?.push(id::Param::PROP_INFO)?;
-                    st.field()?.push(flags::Param::NONE)?;
+                    st.field().push(4u32)?;
+                    st.field().push(id::Param::PROP_INFO)?;
+                    st.field().push(flags::Param::NONE)?;
 
-                    st.field()?.push(id::Param::PROPS)?;
-                    st.field()?.push(flags::Param::WRITE)?;
+                    st.field().push(id::Param::PROPS)?;
+                    st.field().push(flags::Param::WRITE)?;
 
-                    st.field()?.push(id::Param::ENUM_FORMAT)?;
-                    st.field()?.push(flags::Param::READ)?;
+                    st.field().push(id::Param::ENUM_FORMAT)?;
+                    st.field().push(flags::Param::READ)?;
 
-                    st.field()?.push(id::Param::FORMAT)?;
-                    st.field()?.push(flags::Param::WRITE)?;
+                    st.field().push(id::Param::FORMAT)?;
+                    st.field().push(flags::Param::WRITE)?;
                     Ok(())
                 })?;
             } else {
@@ -278,12 +278,12 @@ impl Client {
         let port_flags = flags::Port::NONE;
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(direction)?;
-            st.field()?.push(port_id)?;
-            st.field()?.push(change_mask)?;
+            st.field().push(direction)?;
+            st.field().push(port_id)?;
+            st.field().push(change_mask)?;
 
             // Parameters.
-            st.field()?.push(2u32)?;
+            st.field().push(2u32)?;
 
             st.field()?
                 .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
@@ -313,37 +313,37 @@ impl Client {
 
             if change_mask & flags::ClientNodePortUpdate::INFO {
                 st.field()?.push_struct(|st| {
-                    st.field()?.push(port_change_mask)?;
-                    st.field()?.push(port_flags)?;
+                    st.field().push(port_change_mask)?;
+                    st.field().push(port_flags)?;
 
                     // Rate num / denom
-                    st.field()?.push(0u32)?;
-                    st.field()?.push(0u32)?;
+                    st.field().push(0u32)?;
+                    st.field().push(0u32)?;
 
                     // Properties.
-                    st.field()?.push(2u32)?;
-                    st.field()?.push("port.name")?;
+                    st.field().push(2u32)?;
+                    st.field().push("port.name")?;
                     st.field()?.push_unsized(name)?;
 
-                    st.field()?.push("format.dsp")?;
+                    st.field().push("format.dsp")?;
                     st.field()?.push_unsized("32 bit float mono audio")?;
 
                     // Parameters.
-                    st.field()?.push(5u32)?;
-                    st.field()?.push(id::Param::ENUM_FORMAT)?;
-                    st.field()?.push(flags::Param::READ)?;
+                    st.field().push(5u32)?;
+                    st.field().push(id::Param::ENUM_FORMAT)?;
+                    st.field().push(flags::Param::READ)?;
 
-                    st.field()?.push(id::Param::FORMAT)?;
-                    st.field()?.push(flags::Param::WRITE)?;
+                    st.field().push(id::Param::FORMAT)?;
+                    st.field().push(flags::Param::WRITE)?;
 
-                    st.field()?.push(id::Param::META)?;
-                    st.field()?.push(flags::Param::READ)?;
+                    st.field().push(id::Param::META)?;
+                    st.field().push(flags::Param::READ)?;
 
-                    st.field()?.push(id::Param::IO)?;
-                    st.field()?.push(flags::Param::READ)?;
+                    st.field().push(id::Param::IO)?;
+                    st.field().push(flags::Param::READ)?;
 
-                    st.field()?.push(id::Param::BUFFERS)?;
-                    st.field()?.push(flags::Param::NONE)?;
+                    st.field().push(id::Param::BUFFERS)?;
+                    st.field().push(flags::Param::NONE)?;
                     Ok(())
                 })?;
             } else {
@@ -363,7 +363,7 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(active)?;
+            st.field().push(active)?;
             Ok(())
         })?;
 
