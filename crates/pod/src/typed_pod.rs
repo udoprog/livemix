@@ -2,11 +2,12 @@ use core::ffi::CStr;
 use core::fmt;
 use core::mem;
 
+use crate::EncodeUnsized;
 use crate::bstr::BStr;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, Bitmap, Decode, DecodeUnsized, Encode, Error, Fd, Fraction, Id, Pod, Pointer, Reader,
+    AsReader, Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pod, Pointer, Reader,
     Rectangle, Type, Visitor, Writer,
 };
 
@@ -535,7 +536,7 @@ where
 /// })?;
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(pod.as_ref().into_typed()?)?;
+/// pod2.as_mut().encode(pod.as_ref().into_typed()?)?;
 ///
 /// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());
@@ -558,7 +559,7 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for TypedPod<B>
+impl<B> EncodeUnsized for TypedPod<B>
 where
     B: AsReader<u64>,
 {
@@ -580,6 +581,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsReader<u64>);
 
 impl<'de, B> fmt::Debug for TypedPod<B>
 where

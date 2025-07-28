@@ -13,9 +13,9 @@ pub mod macros;
 
 pub(crate) mod bstr;
 
-pub mod pod;
+mod pod;
 #[doc(inline)]
-pub use self::pod::Pod;
+pub use self::pod::{Pod, PodKind};
 
 mod typed_pod;
 pub use self::typed_pod::TypedPod;
@@ -29,7 +29,7 @@ mod id;
 pub use self::id::{Id, RawId};
 
 mod en;
-pub use self::en::{Encode, EncodeUnsized};
+pub use self::en::{Encode, EncodeInto, EncodeUnsized};
 
 mod de;
 pub use self::de::{Array, Choice, Decode, DecodeUnsized, Object, Sequence, Struct};

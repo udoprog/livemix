@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
+use crate::{AsReader, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for an array.
 ///
@@ -324,7 +324,7 @@ where
 ///
 /// let array = pod.as_ref().next_array()?;
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(array)?;
+/// pod2.as_mut().encode(array)?;
 ///
 /// let mut array = pod2.as_ref().next_array()?;
 ///
@@ -339,7 +339,7 @@ where
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for Array<B>
+impl<B> EncodeUnsized for Array<B>
 where
     B: AsReader<u64>,
 {
@@ -361,6 +361,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] Array<B> where B: AsReader<u64>);
 
 impl<B> fmt::Debug for Array<B>
 where

@@ -5,7 +5,7 @@ use core::mem;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Control, Encode, Error, Reader, Type, TypedPod, Writer};
+use crate::{AsReader, Control, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a sequence.
 pub struct Sequence<B> {
@@ -281,7 +281,7 @@ where
 /// let seq = pod.as_ref().next_sequence()?;
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(seq)?;
+/// pod2.as_mut().encode(seq)?;
 ///
 /// let seq = pod2.as_ref().next_sequence()?;
 ///
@@ -293,7 +293,7 @@ where
 /// assert!(seq.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for Sequence<B>
+impl<B> EncodeUnsized for Sequence<B>
 where
     B: AsReader<u64>,
 {
@@ -311,6 +311,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] Sequence<B> where B: AsReader<u64>);
 
 impl<B> fmt::Debug for Sequence<B>
 where

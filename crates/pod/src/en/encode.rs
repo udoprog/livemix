@@ -8,9 +8,8 @@ where
 {
     /// The type of the encoded value.
     const TYPE: Type;
-
-    /// The size in bytes of the encoded value.
-    fn size(&self) -> usize;
+    /// The size of the encoded value in bytes.
+    const SIZE: usize;
 
     /// Write the content of a type.
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
@@ -30,17 +29,15 @@ where
 /// ```
 impl Encode for bool {
     const TYPE: Type = Type::BOOL;
-
-    #[inline]
-    fn size(&self) -> usize {
-        4
-    }
+    const SIZE: usize = 4;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([if *self { 1u32 } else { 0u32 }, 0u32])
     }
 }
+
+crate::macros::encode_into_sized!(bool);
 
 /// [`Encode`] implementation for any type that can be converted into an [`Id`].
 ///
@@ -59,17 +56,15 @@ where
     I: RawId,
 {
     const TYPE: Type = Type::ID;
-
-    #[inline]
-    fn size(&self) -> usize {
-        4
-    }
+    const SIZE: usize = 4;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.0.into_id(), 0])
     }
 }
+
+crate::macros::encode_into_sized!(impl [I] Id<I> where I: RawId);
 
 /// [`Encode`] implementation for `i32`.
 ///
@@ -85,17 +80,15 @@ where
 /// ```
 impl Encode for i32 {
     const TYPE: Type = Type::INT;
-
-    #[inline]
-    fn size(&self) -> usize {
-        4
-    }
+    const SIZE: usize = 4;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.cast_unsigned(), 0])
     }
 }
+
+crate::macros::encode_into_sized!(i32);
 
 /// [`Encode`] implementation for `u32`.
 ///
@@ -115,17 +108,15 @@ impl Encode for i32 {
 /// ```
 impl Encode for u32 {
     const TYPE: Type = Type::INT;
-
-    #[inline]
-    fn size(&self) -> usize {
-        4
-    }
+    const SIZE: usize = 4;
 
     #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
         self.cast_signed().write_content(writer)
     }
 }
+
+crate::macros::encode_into_sized!(u32);
 
 /// [`Encode`] implementation for `i64`.
 ///
@@ -141,17 +132,15 @@ impl Encode for u32 {
 /// ```
 impl Encode for i64 {
     const TYPE: Type = Type::LONG;
-
-    #[inline]
-    fn size(&self) -> usize {
-        8
-    }
+    const SIZE: usize = 8;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write(self.cast_unsigned())
     }
 }
+
+crate::macros::encode_into_sized!(i64);
 
 /// [`Encode`] implementation for `u64`.
 ///
@@ -171,17 +160,14 @@ impl Encode for i64 {
 /// ```
 impl Encode for u64 {
     const TYPE: Type = Type::LONG;
-
-    #[inline]
-    fn size(&self) -> usize {
-        8
-    }
+    const SIZE: usize = 8;
 
     #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
         self.cast_signed().write_content(writer)
     }
 }
+crate::macros::encode_into_sized!(u64);
 
 /// [`Encode`] implementation for `f32`.
 ///
@@ -197,17 +183,15 @@ impl Encode for u64 {
 /// ```
 impl Encode for f32 {
     const TYPE: Type = Type::FLOAT;
-
-    #[inline]
-    fn size(&self) -> usize {
-        4
-    }
+    const SIZE: usize = 4;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.to_bits(), 0])
     }
 }
+
+crate::macros::encode_into_sized!(f32);
 
 /// Decode implementation for `f64`.
 ///
@@ -223,17 +207,15 @@ impl Encode for f32 {
 /// ```
 impl Encode for f64 {
     const TYPE: Type = Type::DOUBLE;
-
-    #[inline]
-    fn size(&self) -> usize {
-        8
-    }
+    const SIZE: usize = 8;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write(self.to_bits())
     }
 }
+
+crate::macros::encode_into_sized!(f64);
 
 /// [`Encode`] implementation for [`Rectangle`].
 ///
@@ -249,17 +231,15 @@ impl Encode for f64 {
 /// ```
 impl Encode for Rectangle {
     const TYPE: Type = Type::RECTANGLE;
-
-    #[inline]
-    fn size(&self) -> usize {
-        8
-    }
+    const SIZE: usize = 8;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.width, self.height])
     }
 }
+
+crate::macros::encode_into_sized!(Rectangle);
 
 /// [`Encode`] a [`Fraction`].
 ///
@@ -275,17 +255,15 @@ impl Encode for Rectangle {
 /// ```
 impl Encode for Fraction {
     const TYPE: Type = Type::FRACTION;
-
-    #[inline]
-    fn size(&self) -> usize {
-        8
-    }
+    const SIZE: usize = 8;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.num, self.denom])
     }
 }
+
+crate::macros::encode_into_sized!(Fraction);
 
 /// [`Encode`] a an array of bytes `[u8; N]`.
 ///
@@ -301,17 +279,15 @@ impl Encode for Fraction {
 /// ```
 impl<const N: usize> Encode for [u8; N] {
     const TYPE: Type = Type::BYTES;
-
-    #[inline]
-    fn size(&self) -> usize {
-        N
-    }
+    const SIZE: usize = N;
 
     #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
         <[u8]>::write_content(self, writer)
     }
 }
+
+crate::macros::encode_into_sized!(impl [const N: usize] [u8; N]);
 
 /// [`Encode`] implementation for [`Pointer`].
 ///
@@ -329,11 +305,7 @@ impl<const N: usize> Encode for [u8; N] {
 /// ```
 impl Encode for Pointer {
     const TYPE: Type = Type::POINTER;
-
-    #[inline]
-    fn size(&self) -> usize {
-        16
-    }
+    const SIZE: usize = 16;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
@@ -345,6 +317,8 @@ impl Encode for Pointer {
         Ok(())
     }
 }
+
+crate::macros::encode_into_sized!(Pointer);
 
 /// [`Encode`] implementation for [`Fd`].
 ///
@@ -360,11 +334,7 @@ impl Encode for Pointer {
 /// ```
 impl Encode for Fd {
     const TYPE: Type = Type::FD;
-
-    #[inline]
-    fn size(&self) -> usize {
-        8
-    }
+    const SIZE: usize = 8;
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
@@ -372,6 +342,8 @@ impl Encode for Fd {
         Ok(())
     }
 }
+
+crate::macros::encode_into_sized!(Fd);
 
 /// [`Encode`] an unsized type through a reference.
 ///
@@ -392,11 +364,7 @@ where
     T: ?Sized + Encode,
 {
     const TYPE: Type = T::TYPE;
-
-    #[inline]
-    fn size(&self) -> usize {
-        Encode::size(*self)
-    }
+    const SIZE: usize = T::SIZE;
 
     #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {

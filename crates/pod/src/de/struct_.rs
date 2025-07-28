@@ -4,7 +4,7 @@ use core::fmt;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
+use crate::{AsReader, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a struct.
 pub struct Struct<B> {
@@ -202,7 +202,7 @@ where
 /// let st = pod.as_ref().next_struct()?;
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(st)?;
+/// pod2.as_mut().encode(st)?;
 ///
 /// let mut st = pod2.as_ref().next_struct()?;
 ///
@@ -213,7 +213,7 @@ where
 /// assert!(st.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for Struct<B>
+impl<B> EncodeUnsized for Struct<B>
 where
     B: AsReader<u64>,
 {
@@ -229,6 +229,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader<u64>);
 
 impl<B> fmt::Debug for Struct<B>
 where

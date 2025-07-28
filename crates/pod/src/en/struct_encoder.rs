@@ -1,5 +1,4 @@
-use crate::pod::PodKind;
-use crate::{Error, Pod, Type, Writer};
+use crate::{Error, Pod, PodKind, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]

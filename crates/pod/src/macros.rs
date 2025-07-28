@@ -39,15 +39,18 @@ macro_rules! __id {
             /// ```
             impl $crate::Encode for $ty {
                 const TYPE: $crate::Type = $crate::Type::ID;
-
-                #[inline]
-                fn size(&self) -> usize {
-                    4
-                }
+                const SIZE: usize = <u32 as $crate::Encode>::SIZE;
 
                 #[inline]
                 fn write_content(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
                     $crate::Id(*self).write_content(writer)
+                }
+            }
+
+            impl $crate::EncodeInto for $ty {
+                #[inline]
+                fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                    pod.push(self)
                 }
             }
 
@@ -191,15 +194,18 @@ macro_rules! __consts {
             /// ```
             impl $crate::Encode for $ty {
                 const TYPE: $crate::Type = <$repr as $crate::Encode>::TYPE;
-
-                #[inline]
-                fn size(&self) -> usize {
-                    <$repr as $crate::Encode>::size(&self.0)
-                }
+                const SIZE: usize = <$repr as $crate::Encode>::SIZE;
 
                 #[inline]
                 fn write_content(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
                     <$repr as $crate::Encode>::write_content(&self.0, writer)
+                }
+            }
+
+            impl $crate::EncodeInto for $ty {
+                #[inline]
+                fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                    pod.push(self)
                 }
             }
 
@@ -370,15 +376,18 @@ macro_rules! __flags {
             /// ```
             impl $crate::Encode for $ty {
                 const TYPE: $crate::Type = <$repr as $crate::Encode>::TYPE;
-
-                #[inline]
-                fn size(&self) -> usize {
-                    <$repr as $crate::Encode>::size(&self.0)
-                }
+                const SIZE: usize = <$repr as $crate::Encode>::SIZE;
 
                 #[inline]
                 fn write_content(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
                     <$repr as $crate::Encode>::write_content(&self.0, writer)
+                }
+            }
+
+            impl $crate::EncodeInto for $ty {
+                #[inline]
+                fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                    pod.push(self)
                 }
             }
 
@@ -550,3 +559,70 @@ macro_rules! __flags {
 }
 
 pub use __flags as flags;
+
+macro_rules! __encode_into_sized {
+    (impl [$($tt:tt)*] $ty:ty $(where $($where:tt)*)?) => {
+        impl<$($tt)*> $crate::EncodeInto for $ty
+        $(where $($where)*)*
+        {
+            #[inline]
+            fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                pod.push(self)
+            }
+        }
+    };
+
+    ($ty:ty) => {
+        impl $crate::EncodeInto for $ty {
+            #[inline]
+            fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                pod.push(self)
+            }
+        }
+    };
+}
+
+pub(crate) use __encode_into_sized as encode_into_sized;
+
+macro_rules! __encode_into_unsized {
+    (impl [$($tt:tt)*] $ty:ty $(where $t_key:ident: $($t_bound:tt)*)?) => {
+        impl<$($tt)*> $crate::EncodeInto for $ty
+        $(
+            where
+                $t_key: $($t_bound)*
+        )*
+        {
+            #[inline]
+            fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                pod.push_unsized(self)
+            }
+        }
+    };
+
+    ($ty:ty) => {
+        impl $crate::EncodeInto for $ty {
+            #[inline]
+            fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
+                pod.push_unsized(self)
+            }
+        }
+    };
+}
+
+pub(crate) use __encode_into_unsized as encode_into_unsized;
+
+macro_rules! __repeat_tuple {
+    ($macro:path) => {
+        $macro!(1, A, a);
+        $macro!(2, A, a, B, b);
+        $macro!(3, A, a, B, b, C, c);
+        $macro!(4, A, a, B, b, C, c, D, d);
+        $macro!(5, A, a, B, b, C, c, D, d, E, e);
+        $macro!(6, A, a, B, b, C, c, D, d, E, e, F, f);
+        $macro!(7, A, a, B, b, C, c, D, d, E, e, F, f, G, g);
+        $macro!(8, A, a, B, b, C, c, D, d, E, e, F, f, G, g, H, h);
+        $macro!(9, A, a, B, b, C, c, D, d, E, e, F, f, G, g, H, h, I, i);
+    };
+}
+
+pub(crate) use __repeat_tuple as repeat_tuple;

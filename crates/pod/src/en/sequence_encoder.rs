@@ -1,7 +1,6 @@
 use core::mem;
 
-use crate::pod::PodKind;
-use crate::{Error, Pod, Type, Writer};
+use crate::{Error, Pod, PodKind, Type, Writer};
 
 /// An encoder for a sequence.
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]

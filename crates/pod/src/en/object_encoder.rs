@@ -1,7 +1,6 @@
 use core::mem;
 
-use crate::pod::PodKind;
-use crate::{Error, Pod, RawId, Type, Writer};
+use crate::{Error, Pod, PodKind, RawId, Type, Writer};
 
 /// An encoder for an object.
 pub struct ObjectEncoder<W, K>

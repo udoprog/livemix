@@ -97,30 +97,30 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push_unsized(factory_name)?;
-            st.field()?.push_unsized(ty)?;
+            st.field().push_unsized(factory_name)?;
+            st.field().push_unsized(ty)?;
             st.field().push(version)?;
 
-            st.field()?.push_struct(|props| {
-                props.field()?.push(6)?;
+            st.field().push_struct(|props| {
+                props.field().push(6)?;
 
-                props.field()?.push("node.description")?;
-                props.field()?.push("livemix")?;
+                props.field().push_unsized("node.description")?;
+                props.field().push_unsized("livemix")?;
 
-                props.field()?.push("node.name")?;
-                props.field()?.push("livemix")?;
+                props.field().push_unsized("node.name")?;
+                props.field().push_unsized("livemix")?;
 
-                props.field()?.push("media.class")?;
-                props.field()?.push("Audio/Duplex")?;
+                props.field().push_unsized("media.class")?;
+                props.field().push_unsized("Audio/Duplex")?;
 
-                props.field()?.push("media.type")?;
-                props.field()?.push("Audio")?;
+                props.field().push_unsized("media.type")?;
+                props.field().push_unsized("Audio")?;
 
-                props.field()?.push("media.category")?;
-                props.field()?.push("Duplex")?;
+                props.field().push_unsized("media.category")?;
+                props.field().push_unsized("Duplex")?;
 
-                props.field()?.push("media.role")?;
-                props.field()?.push("DSP")?;
+                props.field().push_unsized("media.role")?;
+                props.field().push_unsized("DSP")?;
                 Ok(())
             })?;
 
@@ -138,14 +138,14 @@ impl Client {
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push_struct(|st| {
+            st.field().push_struct(|st| {
                 st.field().push(2)?;
 
-                st.field().push("application.name")?;
-                st.field().push("livemix")?;
+                st.field().push_unsized("application.name")?;
+                st.field().push_unsized("livemix")?;
 
-                st.field().push("node.name")?;
-                st.field().push("livemix")?;
+                st.field().push_unsized("node.name")?;
+                st.field().push_unsized("livemix")?;
                 Ok(())
             })
         })?;
@@ -193,7 +193,7 @@ impl Client {
 
             st.field().push(2)?;
 
-            st.field()?
+            st.field()
                 .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
                     obj.property(id::Format::MEDIA_TYPE, 0)?
                         .push(id::MediaType::AUDIO)?;
@@ -206,7 +206,7 @@ impl Client {
                     Ok(())
                 })?;
 
-            st.field()?
+            st.field()
                 .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
                     obj.property(id::Format::MEDIA_TYPE, 0)?
                         .push(id::MediaType::AUDIO)?;
@@ -220,15 +220,15 @@ impl Client {
                 })?;
 
             if change_mask & flags::ClientNodeUpdate::INFO {
-                st.field()?.push_struct(|st| {
+                st.field().push_struct(|st| {
                     st.field().push(max_input_ports)?;
                     st.field().push(max_output_ports)?;
                     st.field().push(node_change_mask)?;
                     st.field().push(node_flags)?;
 
                     st.field().push(1u32)?;
-                    st.field().push("node.name")?;
-                    st.field()?.push_unsized("livemix2")?;
+                    st.field().push_unsized("node.name")?;
+                    st.field().push_unsized("livemix2")?;
 
                     st.field().push(4u32)?;
                     st.field().push(id::Param::PROP_INFO)?;
@@ -245,7 +245,7 @@ impl Client {
                     Ok(())
                 })?;
             } else {
-                st.field()?.push_none()?;
+                st.field().push_none()?;
             }
 
             Ok(())
@@ -285,7 +285,7 @@ impl Client {
             // Parameters.
             st.field().push(2u32)?;
 
-            st.field()?
+            st.field()
                 .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
                     obj.property(id::Format::MEDIA_TYPE, 0)?
                         .push(id::MediaType::AUDIO)?;
@@ -298,7 +298,7 @@ impl Client {
                     Ok(())
                 })?;
 
-            st.field()?
+            st.field()
                 .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
                     obj.property(id::Format::MEDIA_TYPE, 0)?
                         .push(id::MediaType::AUDIO)?;
@@ -312,7 +312,7 @@ impl Client {
                 })?;
 
             if change_mask & flags::ClientNodePortUpdate::INFO {
-                st.field()?.push_struct(|st| {
+                st.field().push_struct(|st| {
                     st.field().push(port_change_mask)?;
                     st.field().push(port_flags)?;
 
@@ -322,11 +322,11 @@ impl Client {
 
                     // Properties.
                     st.field().push(2u32)?;
-                    st.field().push("port.name")?;
-                    st.field()?.push_unsized(name)?;
+                    st.field().push_unsized("port.name")?;
+                    st.field().push_unsized(name)?;
 
-                    st.field().push("format.dsp")?;
-                    st.field()?.push_unsized("32 bit float mono audio")?;
+                    st.field().push_unsized("format.dsp")?;
+                    st.field().push_unsized("32 bit float mono audio")?;
 
                     // Parameters.
                     st.field().push(5u32)?;
@@ -347,7 +347,7 @@ impl Client {
                     Ok(())
                 })?;
             } else {
-                st.field()?.push_none()?;
+                st.field().push_none()?;
             }
 
             Ok(())

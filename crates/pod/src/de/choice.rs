@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, ChoiceType, Encode, Error, Reader, Type, TypedPod, Writer};
+use crate::{AsReader, ChoiceType, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a choice.
 ///
@@ -377,7 +377,7 @@ where
 /// let mut choice = pod.as_ref().next_choice()?;
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(choice)?;
+/// pod2.as_mut().encode(choice)?;
 ///
 /// let mut choice = pod2.as_ref().next_choice()?;
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
@@ -393,7 +393,7 @@ where
 /// assert_eq!(count, 3);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for Choice<B>
+impl<B> EncodeUnsized for Choice<B>
 where
     B: AsReader<u64>,
 {
@@ -421,6 +421,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] Choice<B> where B: AsReader<u64>);
 
 impl<B> fmt::Debug for Choice<B>
 where

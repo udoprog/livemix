@@ -4,12 +4,14 @@ use core::mem;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
+use crate::Encode;
+use crate::EncodeInto;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, Buf, ChoiceType, Decode, DecodeUnsized, Encode, EncodeUnsized, Error, RawId, Reader,
-    Type, TypedPod, Visitor, Writer,
+    AsReader, Buf, ChoiceType, Decode, DecodeUnsized, EncodeUnsized, Error, RawId, Reader, Type,
+    TypedPod, Visitor, Writer,
 };
 
 /// An unlimited pod.
@@ -80,7 +82,7 @@ impl PodKind for ChildPod {
     where
         T: Encode,
     {
-        self.check(T::TYPE, value.size())?;
+        self.check(T::TYPE, T::SIZE)?;
         value.write_content(buf)
     }
 
@@ -121,7 +123,7 @@ impl PodKind for EnvelopePod {
     where
         T: Encode,
     {
-        let Ok(size) = u32::try_from(value.size()) else {
+        let Ok(size) = u32::try_from(T::SIZE) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
@@ -266,6 +268,38 @@ where
     B: Writer<u64>,
     K: PodKind,
 {
+    /// Conveniently encode a value into the pod.
+    ///
+    /// This supports APIs for building structs by providing a tuple as an
+    /// argument, or an array by providing an array as a value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().encode((10i32, "hello world", [1u32, 2u32]))?;
+    ///
+    /// let mut pod = pod.as_ref();
+    /// let mut st = pod.next_struct()?;
+    ///
+    /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
+    /// assert_eq!(st.field()?.next_borrowed::<str>()?, "hello world");
+    ///
+    /// let mut array = st.field()?.next_array()?;
+    /// assert_eq!(array.next().unwrap().next::<u32>()?, 1);
+    /// assert_eq!(array.next().unwrap().next::<u32>()?, 2);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn encode<T>(self, value: T) -> Result<(), Error>
+    where
+        T: EncodeInto,
+    {
+        value.encode_into(self)
+    }
+
     /// Encode a value from the pod.
     ///
     /// # Examples
@@ -1125,7 +1159,7 @@ where
 /// })?;
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(pod)?;
+/// pod2.as_mut().encode(pod)?;
 ///
 /// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());
@@ -1148,7 +1182,7 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for Pod<B>
+impl<B> EncodeUnsized for Pod<B>
 where
     B: AsReader<u64>,
 {
@@ -1164,6 +1198,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] Pod<B> where B: AsReader<u64>);
 
 impl<B, K> fmt::Debug for Pod<B, K>
 where

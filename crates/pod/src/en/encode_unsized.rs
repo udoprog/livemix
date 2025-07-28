@@ -3,24 +3,8 @@ use core::ffi::CStr;
 use crate::error::ErrorKind;
 use crate::{Bitmap, Error, Type, Writer};
 
-mod sealed {
-    use core::ffi::CStr;
-
-    use super::Bitmap;
-
-    pub trait Sealed {}
-
-    impl Sealed for [u8] {}
-    impl Sealed for CStr {}
-    impl Sealed for str {}
-    impl Sealed for Bitmap {}
-}
-
 /// A trait for unsized types that can be encoded.
-pub trait EncodeUnsized
-where
-    Self: self::sealed::Sealed,
-{
+pub trait EncodeUnsized {
     /// The type of the encoded value.
     #[doc(hidden)]
     const TYPE: Type;
@@ -60,6 +44,8 @@ impl EncodeUnsized for [u8] {
     }
 }
 
+crate::macros::encode_into_unsized!([u8]);
+
 /// [`EncodeUnsized`] implementation for an unsized [`CStr`].
 ///
 /// # Examples
@@ -88,6 +74,8 @@ impl EncodeUnsized for CStr {
         Ok(())
     }
 }
+
+crate::macros::encode_into_unsized!(CStr);
 
 /// [`EncodeUnsized`] implementation for an unsized [`str`].
 ///
@@ -139,6 +127,8 @@ impl EncodeUnsized for str {
     }
 }
 
+crate::macros::encode_into_unsized!(str);
+
 /// [`EncodeUnsized`] implementation for an unsized [`Bitmap`].
 ///
 /// # Examples
@@ -166,3 +156,5 @@ impl EncodeUnsized for Bitmap {
         Ok(())
     }
 }
+
+crate::macros::encode_into_unsized!(Bitmap);

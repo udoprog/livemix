@@ -5,7 +5,7 @@ use core::mem;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, Encode, Error, Property, Reader, Type, TypedPod, Writer};
+use crate::{AsReader, EncodeUnsized, Error, Property, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a struct.
 pub struct Object<B> {
@@ -302,7 +302,7 @@ where
 /// let obj = pod.as_ref().next_object()?.to_owned();
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(obj)?;
+/// pod2.as_mut().encode(obj)?;
 ///
 /// let obj = pod2.as_ref().next_object()?;
 ///
@@ -327,7 +327,7 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> Encode for Object<B>
+impl<B> EncodeUnsized for Object<B>
 where
     B: AsReader<u64>,
 {
@@ -345,6 +345,8 @@ where
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
+
+crate::macros::encode_into_unsized!(impl [B] Object<B> where B: AsReader<u64>);
 
 impl<'de, B> fmt::Debug for Object<B>
 where
