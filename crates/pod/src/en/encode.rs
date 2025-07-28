@@ -12,9 +12,6 @@ where
     /// The size in bytes of the encoded value.
     fn size(&self) -> u32;
 
-    /// Encode the value into the writer.
-    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error>;
-
     /// Write the content of a type.
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
 }
@@ -37,16 +34,6 @@ impl Encode for bool {
     #[inline]
     fn size(&self) -> u32 {
         4
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([
-            4u32,
-            Type::BOOL.into_u32(),
-            if *self { 1u32 } else { 0u32 },
-            0u32,
-        ])
     }
 
     #[inline]
@@ -79,11 +66,6 @@ where
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([4, Type::ID.into_u32(), self.0.into_id(), 0])
-    }
-
-    #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.0.into_id(), 0])
     }
@@ -107,11 +89,6 @@ impl Encode for i32 {
     #[inline]
     fn size(&self) -> u32 {
         4
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([4, Type::INT.into_u32(), self.cast_unsigned(), 0])
     }
 
     #[inline]
@@ -145,11 +122,6 @@ impl Encode for u32 {
     }
 
     #[inline]
-    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error> {
-        self.cast_signed().write(writer)
-    }
-
-    #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
         self.cast_signed().write_content(writer)
     }
@@ -173,13 +145,6 @@ impl Encode for i64 {
     #[inline]
     fn size(&self) -> u32 {
         8
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([8, Type::LONG.into_u32()])?;
-        writer.write(self.cast_unsigned())?;
-        Ok(())
     }
 
     #[inline]
@@ -213,11 +178,6 @@ impl Encode for u64 {
     }
 
     #[inline]
-    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error> {
-        self.cast_signed().write(writer)
-    }
-
-    #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
         self.cast_signed().write_content(writer)
     }
@@ -241,11 +201,6 @@ impl Encode for f32 {
     #[inline]
     fn size(&self) -> u32 {
         4
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([4, Type::FLOAT.into_u32(), self.to_bits(), 0])
     }
 
     #[inline]
@@ -275,13 +230,6 @@ impl Encode for f64 {
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([8, Type::DOUBLE.into_u32()])?;
-        writer.write(self.to_bits())?;
-        Ok(())
-    }
-
-    #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write(self.to_bits())
     }
@@ -308,11 +256,6 @@ impl Encode for Rectangle {
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([8, Type::RECTANGLE.into_u32(), self.width, self.height])
-    }
-
-    #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([self.width, self.height])
     }
@@ -336,11 +279,6 @@ impl Encode for Fraction {
     #[inline]
     fn size(&self) -> u32 {
         8
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([8, Type::FRACTION.into_u32(), self.num, self.denom])
     }
 
     #[inline]
@@ -371,11 +309,6 @@ impl<const N: usize> Encode for [u8; N] {
     }
 
     #[inline]
-    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error> {
-        <[u8]>::write(self, writer)
-    }
-
-    #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
         <[u8]>::write_content(self, writer)
     }
@@ -401,16 +334,6 @@ impl Encode for Pointer {
     #[inline]
     fn size(&self) -> u32 {
         16
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let mut bytes = WordBytes::new();
-        bytes.write_usize(self.pointer());
-
-        writer.write([16, Type::POINTER.into_u32(), self.ty(), 0])?;
-        writer.write_words(bytes.as_array())?;
-        Ok(())
     }
 
     #[inline]
@@ -445,15 +368,6 @@ impl Encode for Fd {
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let mut bytes = WordBytes::new();
-        bytes.write_u64(self.fd().cast_unsigned());
-        let &[a, b] = bytes.as_array_u32();
-        writer.write([8, Type::FD.into_u32(), a, b])?;
-        Ok(())
-    }
-
-    #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write(self.fd().cast_unsigned())?;
         Ok(())
@@ -482,11 +396,6 @@ where
     #[inline]
     fn size(&self) -> u32 {
         EncodeUnsized::size(*self)
-    }
-
-    #[inline]
-    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error> {
-        <T as EncodeUnsized>::write(self, writer)
     }
 
     #[inline]

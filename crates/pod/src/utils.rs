@@ -171,16 +171,6 @@ impl WordBytes {
         }
     }
 
-    /// Write a `u64` value to the region.
-    #[inline]
-    pub(crate) fn write_u64(&mut self, value: u64) {
-        // SAFETY: 8-byte alignment ensures that the pointer is valid for
-        // writing.
-        unsafe {
-            self.0.as_mut_ptr().cast::<u64>().write(value);
-        }
-    }
-
     /// Reading a `usize` value from the lower end of the region..
     #[inline]
     pub(crate) fn read_usize(&self) -> usize {
@@ -202,12 +192,6 @@ impl WordBytes {
     pub(crate) fn as_array(&self) -> &[u64; 1] {
         // SAFETY: Type is always initialized to something valid.
         unsafe { &*self.0.as_ptr().cast::<[u64; 1]>() }
-    }
-
-    #[inline]
-    pub(crate) fn as_array_u32(&self) -> &[u32; 2] {
-        // SAFETY: Type is always initialized to something valid.
-        unsafe { &*self.0.as_ptr().cast::<[u32; 2]>() }
     }
 }
 

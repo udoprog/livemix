@@ -30,9 +30,6 @@ where
     fn size(&self) -> u32;
 
     #[doc(hidden)]
-    fn write(&self, writer: impl Writer<u64>) -> Result<(), Error>;
-
-    #[doc(hidden)]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
 }
 
@@ -55,17 +52,6 @@ impl EncodeUnsized for [u8] {
     #[inline]
     fn size(&self) -> u32 {
         self.len() as u32
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let Ok(len) = u32::try_from(self.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        writer.write([len, Type::BYTES.into_u32()])?;
-        writer.write_bytes(self, 0)?;
-        Ok(())
     }
 
     #[inline]
@@ -97,19 +83,6 @@ impl EncodeUnsized for CStr {
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let bytes = self.to_bytes_with_nul();
-
-        let Ok(len) = u32::try_from(bytes.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        writer.write([len, Type::STRING.into_u32()])?;
-        writer.write_bytes(bytes, 0)?;
-        Ok(())
-    }
-
-    #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write_bytes(self.to_bytes_with_nul(), 0)?;
         Ok(())
@@ -138,28 +111,11 @@ impl EncodeUnsized for str {
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let bytes = self.as_bytes();
-
-        let Some(len) = bytes
-            .len()
-            .checked_add(1)
-            .and_then(|v| u32::try_from(v).ok())
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        if bytes.contains(&0) {
+    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        if self.as_bytes().contains(&0) {
             return Err(Error::new(ErrorKind::NullContainingString));
         }
 
-        writer.write([len, Type::STRING.into_u32()])?;
-        writer.write_bytes(bytes, 1)?;
-        Ok(())
-    }
-
-    #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write_bytes(self.as_bytes(), 1)?;
         Ok(())
     }
@@ -184,19 +140,6 @@ impl EncodeUnsized for Bitmap {
     #[inline]
     fn size(&self) -> u32 {
         Bitmap::as_bytes(self).len() as u32
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let value = self.as_bytes();
-
-        let Ok(len) = u32::try_from(value.len()) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        writer.write([len, Type::BITMAP.into_u32()])?;
-        writer.write_bytes(value, 0)?;
-        Ok(())
     }
 
     #[inline]

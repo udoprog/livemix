@@ -412,33 +412,6 @@ where
     }
 
     #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let data = self.buf.as_reader();
-        let data = data.as_slice();
-
-        let size = data
-            .len()
-            .wrapping_mul(mem::size_of::<u64>())
-            .wrapping_add((WORD_SIZE * 2) as usize);
-
-        let Ok(size) = u32::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        writer.write([
-            size,
-            Type::CHOICE.into_u32(),
-            self.choice_type.into_u32(),
-            self.flags,
-            self.child_size,
-            self.child_type.into_u32(),
-        ])?;
-
-        writer.write_words(data.as_slice())?;
-        Ok(())
-    }
-
-    #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
         writer.write([
             self.choice_type.into_u32(),

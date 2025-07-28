@@ -1,5 +1,5 @@
 use core::ffi::CStr;
-use core::fmt;
+use core::{fmt, mem};
 
 use crate::bstr::BStr;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
@@ -562,23 +562,17 @@ where
 
     #[inline]
     fn size(&self) -> u32 {
-        self.buf.as_reader().as_slice().len() as u32
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        writer.write([
-            self.size.wrapping_add(WORD_SIZE),
-            Type::POD.into_u32(),
-            self.size,
-            self.ty.into_u32(),
-        ])?;
-        writer.write_words(self.buf.as_reader().as_slice())?;
-        Ok(())
+        self.buf
+            .as_reader()
+            .as_slice()
+            .len()
+            .wrapping_mul(mem::size_of::<u64>())
+            .wrapping_add(WORD_SIZE as usize) as u32
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+        writer.write([self.size, self.ty.into_u32()])?;
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }

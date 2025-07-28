@@ -91,19 +91,23 @@ impl PodKind for EnvelopePod {
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push<T>(&self, value: T, mut buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: Encode,
     {
-        value.write(buf)
+        let size = value.size();
+        buf.write([size, T::TYPE.into_u32()])?;
+        value.write_content(buf)
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push_unsized<T>(&self, value: &T, mut buf: impl Writer<u64>) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
-        value.write(buf)
+        let size = value.size();
+        buf.write([size, T::TYPE.into_u32()])?;
+        value.write_content(buf)
     }
 
     #[inline]
@@ -1115,23 +1119,11 @@ where
 
     #[inline]
     fn size(&self) -> u32 {
-        self.buf.as_reader().as_slice().len() as u32
-    }
-
-    #[inline]
-    fn write(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
-        let reader = self.buf.as_reader();
-
-        let data = reader.as_slice();
-        let size = data.len().wrapping_mul(mem::size_of::<u64>());
-
-        let Ok(size) = u32::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        writer.write([size, Type::POD.into_u32()])?;
-        writer.write_words(data.as_slice())?;
-        Ok(())
+        self.buf
+            .as_reader()
+            .as_slice()
+            .len()
+            .wrapping_mul(mem::size_of::<u64>()) as u32
     }
 
     #[inline]

@@ -46,11 +46,6 @@ macro_rules! __id {
                 }
 
                 #[inline]
-                fn write(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
-                    $crate::Id(*self).write(writer)
-                }
-
-                #[inline]
                 fn write_content(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
                     $crate::Id(*self).write_content(writer)
                 }
@@ -240,11 +235,6 @@ macro_rules! __flags {
                 #[inline]
                 fn size(&self) -> u32 {
                     <$repr as $crate::Encode>::size(&self.0)
-                }
-
-                #[inline]
-                fn write(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
-                    <$repr as $crate::Encode>::write(&self.0, writer)
                 }
 
                 #[inline]
