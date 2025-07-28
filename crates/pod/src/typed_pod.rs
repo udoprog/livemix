@@ -157,7 +157,7 @@ where
         T::read_content(self.buf, self.size)
     }
 
-    /// Decode an unsized value into the pod.
+    /// Read the next unsized value into the pod.
     ///
     /// # Examples
     ///
@@ -167,8 +167,7 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_unsized(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -187,7 +186,25 @@ where
         T::read_content(self.buf, visitor, self.size)
     }
 
-    /// Decode an unsized value into the pod.
+    /// Read the next unsized value into the pod.
+    ///
+    /// # Errors
+    ///
+    /// Since this cannot return borrows from data which is owned, it will error
+    /// if used directly on types like [`TypedPod<Buf<T>>`].
+    ///
+    /// ```should_panic
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_unsized(&b"hello world"[..])?;
+    /// let mut pod = pod.into_typed()?;
+    ///
+    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    ///
+    /// To mitigate this, it can be borrowed first through [`Pod::as_ref`].
     ///
     /// # Examples
     ///
@@ -216,7 +233,7 @@ where
         T::read_borrowed(self.buf, self.size)
     }
 
-    /// Decode an optional value.
+    /// Read the next optional value.
     ///
     /// This returns `None` if the encoded value is `None`, otherwise a pod
     /// for the value is returned.
@@ -252,7 +269,7 @@ where
         }
     }
 
-    /// Decode an array.
+    /// Read the next array.
     ///
     /// # Examples
     ///
@@ -327,7 +344,7 @@ where
         }
     }
 
-    /// Decode an object.
+    /// Read the next object.
     ///
     /// # Examples
     ///
@@ -609,9 +626,9 @@ where
             ($ty:ty, $pat:pat => $expr:expr) => {{
                 let mut outer = Ok(());
 
-                let result = self.as_ref().next_unsized(FunctionVisitor(|$pat: &$ty| {
+                let result = self.as_ref().next_unsized(|$pat: &$ty| {
                     outer = $expr;
-                }));
+                });
 
                 if let Err(e) = result {
                     return e.fmt(f);
@@ -666,24 +683,5 @@ where
             Type::POD => tri!(tri!(self.as_ref().next_pod()).into_typed()).fmt(f),
             ty => write!(f, "{{{ty:?}}}"),
         }
-    }
-}
-
-struct FunctionVisitor<F>(F);
-
-impl<'de, F, T> Visitor<'de, T> for FunctionVisitor<F>
-where
-    F: FnOnce(&T),
-    T: ?Sized,
-{
-    type Ok = ();
-
-    #[inline]
-    fn visit_ref(self, value: &T) -> Result<Self::Ok, Error>
-    where
-        Self: Sized,
-    {
-        (self.0)(value);
-        Ok(())
     }
 }

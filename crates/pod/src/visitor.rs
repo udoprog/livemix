@@ -1,7 +1,24 @@
 use super::Error;
 use super::error::ErrorKind;
 
-/// A bytes visitor.
+/// An unsized visitor.
+///
+/// This can be used to visit unsized data in a pod, allowing it to be accessed
+/// without having to borrow the pod before reading it.
+///
+/// # Examples
+///
+/// This is implemented for functions or closures like `|value: &T| -> U`:
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push_unsized(&b"hello world"[..])?;
+///
+/// assert_eq!(pod.next_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");
+/// # Ok::<_, pod::Error>(())
+/// ```
 pub trait Visitor<'de, T>
 where
     T: ?Sized,

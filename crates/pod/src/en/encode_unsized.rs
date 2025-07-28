@@ -91,6 +91,20 @@ impl EncodeUnsized for CStr {
 
 /// [`EncodeUnsized`] implementation for an unsized [`str`].
 ///
+/// # Errors
+///
+/// Trying to encode a UTf-8 string containing a null byte will return an error.
+/// This is due to the underlying representation being a C-style string who's
+/// length must be determined by a terminating null.
+///
+/// ```should_panic
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push_unsized("hello\0world")?;
+/// # Ok::<_, pod::Error>(())
+/// ```
+///
 /// # Examples
 ///
 /// ```

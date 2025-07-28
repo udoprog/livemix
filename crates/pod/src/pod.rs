@@ -266,7 +266,7 @@ where
     B: Writer<u64>,
     K: PodKind,
 {
-    /// Encode a value into the pod.
+    /// Encode a value from the pod.
     ///
     /// # Examples
     ///
@@ -284,7 +284,7 @@ where
         self.kind.push(value, self.buf)
     }
 
-    /// Encode an unsized value into the pod.
+    /// Encode an unsized value from the pod.
     ///
     /// # Examples
     ///
@@ -657,7 +657,7 @@ where
         self.into_typed()?.skip()
     }
 
-    /// Encode a value into the pod.
+    /// Encode a value from the pod.
     ///
     /// # Examples
     ///
@@ -678,7 +678,7 @@ where
         self.into_typed()?.next::<T>()
     }
 
-    /// Decode an unsized value into the pod.
+    /// Read the next unsized value from the pod.
     ///
     /// # Examples
     ///
@@ -688,7 +688,6 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = pod.as_ref();
     /// assert_eq!(pod.next_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -701,7 +700,24 @@ where
         self.into_typed()?.next_unsized(visitor)
     }
 
-    /// Decode an unsized value into the pod.
+    /// Read the next unsized value from the pod.
+    ///
+    /// # Errors
+    ///
+    /// Since this cannot return borrows from data which is owned, it will error
+    /// if used directly on types like [`Pod<Buf<T>>`].
+    ///
+    /// ```should_panic
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_unsized(&b"hello world"[..])?;
+    ///
+    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    ///
+    /// To mitigate this, it can be borrowed first through [`Pod::as_ref`].
     ///
     /// # Examples
     ///
@@ -723,10 +739,10 @@ where
         self.into_typed()?.next_borrowed()
     }
 
-    /// Decode an optional value.
+    /// Read the next optional value from the pod.
     ///
-    /// This returns `None` if the encoded value is `None`, otherwise a pod for
-    /// the value is returned.
+    /// This returns [`None`] if the encoded value is [`None`], otherwise a pod
+    /// for the value is returned.
     ///
     /// # Examples
     ///
@@ -753,7 +769,7 @@ where
         self.into_typed()?.next_option()
     }
 
-    /// Decode an array.
+    /// Read the next array.
     ///
     /// # Examples
     ///
@@ -802,7 +818,7 @@ where
         self.into_typed()?.next_array()
     }
 
-    /// Decode a struct.
+    /// Read the next struct.
     ///
     /// # Examples
     ///
@@ -843,7 +859,7 @@ where
         self.into_typed()?.next_struct()
     }
 
-    /// Decode an object.
+    /// Read the next object.
     ///
     /// # Examples
     ///
@@ -897,7 +913,7 @@ where
         self.into_typed()?.next_object()
     }
 
-    /// Decode a sequence.
+    /// Read the next sequence.
     ///
     /// # Examples
     ///
@@ -951,7 +967,7 @@ where
         self.into_typed()?.next_sequence()
     }
 
-    /// Decode a choice.
+    /// Read the next choice.
     ///
     /// # Examples
     ///
@@ -992,7 +1008,7 @@ where
         self.into_typed()?.next_choice()
     }
 
-    /// Decode a nested pod.
+    /// Read the next nested pod.
     ///
     /// # Examples
     ///
