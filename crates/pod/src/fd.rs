@@ -1,5 +1,7 @@
+use core::fmt;
+
 /// A pointer stored in a pod.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(C, align(8))]
 pub struct Fd {
     fd: i64,
@@ -16,5 +18,12 @@ impl Fd {
     #[inline]
     pub const fn fd(&self) -> i64 {
         self.fd
+    }
+}
+
+impl fmt::Debug for Fd {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Fd").field(&self.fd).finish()
     }
 }

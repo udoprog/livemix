@@ -63,6 +63,9 @@ pub const CORE_BOUND_ID_EVENT: u8 = 5;
 /// references to this fd will be made with the per memory unique identifier id.
 pub const CORE_ADD_MEM_EVENT: u8 = 6;
 
+/// Destroy an object.
+pub const CORE_DESTROY_EVENT: u8 = 7;
+
 /// Notify a client about a new global object.
 pub const REGISTRY_GLOBAL_EVENT: u8 = 0;
 
@@ -92,6 +95,22 @@ pub const CLIENT_NODE_SET_PARAM_EVENT: u8 = 1;
 /// Set an IO area on the node.
 pub const CLIENT_NODE_SET_IO_EVENT: u8 = 2;
 
+/// Send a command on the node.
+pub const CLIENT_NODE_COMMAND_EVENT: u8 = 4;
+
+/// Set a parameter on the Port of the node.
+pub const CLIENT_NODE_PORT_SET_PARAM_EVENT: u8 = 7;
+
+/// Use a set of buffers on the mixer port
+pub const CLIENT_NODE_USE_BUFFERS_EVENT: u8 = 8;
+
+/// Set an IO area on a mixer port.
+pub const CLIENT_NODE_PORT_SET_IO_EVENT: u8 = 9;
+
 /// Notify the client of the activation record of a peer node. This activation
 /// record should be triggered when this node finishes processing.
 pub const CLIENT_NODE_SET_ACTIVATION_EVENT: u8 = 10;
+
+/// Notify the node of the peer of a mixer port. This can be used to track the
+/// peer ports of a node.
+pub const CLIENT_NODE_PORT_SET_MIX_INFO_EVENT: u8 = 11;

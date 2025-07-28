@@ -55,17 +55,18 @@ struct RegistryState {
 #[derive(Debug)]
 #[allow(unused)]
 struct Activation {
-    fd: OwnedFd,
-    mem_id: u32,
-    offset: i32,
-    size: i32,
+    fd: Option<OwnedFd>,
+    mem_id: i32,
+    offset: u32,
+    size: u32,
 }
 
 #[derive(Default, Debug)]
 #[allow(unused)]
 struct ClientNodeState {
     id: u32,
-    port_id: u32,
+    input_ports: u32,
+    output_ports: u32,
     read_fd: Option<OwnedFd>,
     write_fd: Option<OwnedFd>,
     activation: Option<Activation>,
@@ -85,6 +86,8 @@ struct ReceivedFd {
 
 #[derive(Debug)]
 enum Op {
+    CoreHello,
+    GetRegistry,
     Pong { id: u32, seq: u32 },
     ConstructNode,
     AddPort { client: usize },
@@ -94,7 +97,7 @@ enum Op {
 #[allow(unused)]
 struct MemoryState {
     ty: Id<u32>,
-    fd: OwnedFd,
+    fd: Option<OwnedFd>,
     flags: i32,
 }
 
@@ -156,7 +159,6 @@ pub struct ConnectionState {
     globals: GlobalMap,
     client_nodes: Slab<ClientNodeState>,
     local_id_to_kind: BTreeMap<u32, Kind>,
-    state: State,
     has_header: bool,
     header: Header,
     ids: Ids,
@@ -182,12 +184,11 @@ impl ConnectionState {
             globals: GlobalMap::new(),
             client_nodes: Slab::new(),
             local_id_to_kind: BTreeMap::new(),
-            state: State::ClientHello,
             has_header: false,
             header: Header::default(),
             ids,
             fds: VecDeque::with_capacity(16),
-            ops: VecDeque::new(),
+            ops: VecDeque::from([Op::CoreHello]),
             memory: HashMap::new(),
         }
     }
@@ -204,6 +205,18 @@ impl ConnectionState {
         'next: loop {
             while let Some(op) = self.ops.pop_front() {
                 match op {
+                    Op::CoreHello => {
+                        c.core_hello()?;
+                        c.client_update_properties()?;
+                    }
+                    Op::GetRegistry => {
+                        tracing::info!("Getting registry");
+
+                        let local_id = self.ids.alloc().context("ran out of identifiers")?;
+                        c.core_get_registry(local_id)?;
+                        self.local_id_to_kind.insert(local_id, Kind::Registry);
+                        c.core_sync(GET_REGISTRY_SYNC)?;
+                    }
                     Op::Pong { id, seq } => {
                         c.core_pong(id, seq)?;
                     }
@@ -215,35 +228,36 @@ impl ConnectionState {
                     Op::AddPort { client } => {
                         tracing::info!("Adding port to client node");
 
-                        if let Some(client) = self.client_nodes.get(client) {
-                            c.client_node_update(client.id)?;
-                            c.client_node_port_update(
-                                client.id,
-                                consts::Direction::Output,
-                                client.port_id,
-                            )?;
+                        if let Some(client) = self.client_nodes.get_mut(client) {
+                            c.client_node_update(client.id, 4, 4)?;
                             c.client_node_set_active(client.id, true)?;
+
+                            for _ in 0..4 {
+                                let port = client.input_ports;
+                                client.input_ports += 1;
+
+                                c.client_node_port_update(
+                                    client.id,
+                                    consts::Direction::INPUT,
+                                    port,
+                                    &format!("livemix_{port}"),
+                                )?;
+                            }
+
+                            for _ in 0..4 {
+                                let port = client.output_ports;
+                                client.output_ports += 1;
+
+                                c.client_node_port_update(
+                                    client.id,
+                                    consts::Direction::OUTPUT,
+                                    port,
+                                    &format!("livemix_{port}"),
+                                )?;
+                            }
                         }
                     }
                 }
-            }
-
-            match self.state {
-                State::ClientHello => {
-                    c.core_hello()?;
-                    c.client_update_properties()?;
-                    self.state = State::Connecting;
-                }
-                State::CoreBound => {
-                    tracing::info!("Getting registry");
-
-                    let local_id = self.ids.alloc().context("ran out of identifiers")?;
-                    c.core_get_registry(local_id)?;
-                    self.local_id_to_kind.insert(local_id, Kind::Registry);
-                    c.core_sync(GET_REGISTRY_SYNC)?;
-                    self.state = State::Idle;
-                }
-                _ => {}
             }
 
             if !self.has_header {
@@ -294,7 +308,11 @@ impl ConnectionState {
     }
 
     /// Take a file descriptor from the stored range.
-    fn take_fd(&mut self, fd: Fd) -> Result<OwnedFd> {
+    fn take_fd(&mut self, fd: Fd) -> Result<Option<OwnedFd>> {
+        if fd.fd() < 0 {
+            return Ok(None);
+        }
+
         let Ok(index) = usize::try_from(fd.fd()) else {
             bail!("Received file descriptor with invalid index: {fd:?}");
         };
@@ -317,9 +335,10 @@ impl ConnectionState {
             bail!("Received file descriptor already taken: {fd:?}");
         };
 
-        Ok(fd)
+        Ok(Some(fd))
     }
 
+    #[tracing::instrument(skip_all)]
     fn op_construct_node(&mut self, c: &mut Connection) -> Result<()> {
         tracing::info!("Constructing client node");
 
@@ -344,13 +363,13 @@ impl ConnectionState {
         };
 
         let new_id = self.ids.alloc().context("ran out of identifiers")?;
-        let port_id = self.ids.alloc().context("ran out of identifiers")?;
 
         c.core_create_object("client-node", type_name, version, new_id)?;
 
         let index = self.client_nodes.insert(ClientNodeState {
             id: new_id,
-            port_id,
+            input_ports: 0,
+            output_ports: 0,
             write_fd: None,
             read_fd: None,
             activation: None,
@@ -381,6 +400,9 @@ impl ConnectionState {
             }
             op::CORE_ADD_MEM_EVENT => {
                 self.core_add_mem_event(pod).context("Core::AddMem")?;
+            }
+            op::CORE_DESTROY_EVENT => {
+                self.core_destroy(pod).context("Core::Destroy")?;
             }
             op => {
                 tracing::warn!(op, "Core unsupported op");
@@ -438,9 +460,29 @@ impl ConnectionState {
                     self.client_node_set_io(index, pod)
                         .context("ClientNode::SetIO")?;
                 }
+                op::CLIENT_NODE_COMMAND_EVENT => {
+                    self.client_node_command(index, pod)
+                        .context("ClientNode::Command")?;
+                }
+                op::CLIENT_NODE_PORT_SET_PARAM_EVENT => {
+                    self.client_node_port_set_param(index, pod)
+                        .context("ClientNode::PortSetParam")?;
+                }
+                op::CLIENT_NODE_USE_BUFFERS_EVENT => {
+                    self.client_node_use_buffers(index, pod)
+                        .context("ClientNode::UseBuffers")?;
+                }
+                op::CLIENT_NODE_PORT_SET_IO_EVENT => {
+                    self.client_node_port_set_io(index, pod)
+                        .context("ClientNode::PortSetIO")?;
+                }
                 op::CLIENT_NODE_SET_ACTIVATION_EVENT => {
                     self.client_node_set_activation(index, pod)
                         .context("ClientNode::SetActivation")?;
+                }
+                op::CLIENT_NODE_PORT_SET_MIX_INFO_EVENT => {
+                    self.client_node_set_mix_info(index, pod)
+                        .context("ClientNode::SetMixInfo")?;
                 }
                 op => {
                     tracing::warn!(op, "Client node unsupported op");
@@ -480,7 +522,7 @@ impl ConnectionState {
         self.core.host_name = host_name;
         self.core.version = version;
         self.core.name = name;
-        self.state = State::CoreBound;
+        self.ops.push_back(Op::GetRegistry);
         Ok(())
     }
 
@@ -525,7 +567,7 @@ impl ConnectionState {
         let res = st.field()?.decode::<i32>()?;
         let error = st.field()?.decode_unsized::<str, _>(str::to_owned)?;
 
-        tracing::error!(id, seq, res, error, "Core resource errored");
+        tracing::error!(id, seq, res, error);
         Ok(())
     }
 
@@ -534,8 +576,9 @@ impl ConnectionState {
         let mut st = pod.decode_struct()?;
         let local_id = st.field()?.decode::<u32>()?;
         let global_id = st.field()?.decode::<u32>()?;
-
         self.globals.insert(local_id, global_id);
+
+        tracing::info!(local_id, global_id);
         Ok(())
     }
 
@@ -547,9 +590,17 @@ impl ConnectionState {
         let fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
         let flags = st.field()?.decode::<i32>()?;
 
-        tracing::info!(id, ?ty, ?fd, flags, "Core add memory");
-
+        tracing::info!(id, ?ty, ?fd, flags);
         self.memory.insert(id, MemoryState { ty, fd, flags });
+        Ok(())
+    }
+
+    #[tracing::instrument(skip_all)]
+    fn core_destroy(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+        let mut st = pod.decode_struct()?;
+        let id = st.field()?.decode::<u32>()?;
+
+        tracing::info!(id);
         Ok(())
     }
 
@@ -616,7 +667,7 @@ impl ConnectionState {
             }
         }
 
-        tracing::trace!(id, ?registry, "Registry global event");
+        tracing::info!(id, ?registry, "Registry global event");
         self.id_to_registry.insert(id, index);
         self.registries.insert(registry);
 
@@ -687,22 +738,14 @@ impl ConnectionState {
         let offset = st.field()?.decode::<i32>()?;
         let size = st.field()?.decode::<i32>()?;
 
-        tracing::info!(
-            index,
-            ?read_fd,
-            ?write_fd,
-            memfd,
-            offset,
-            size,
-            "Client node transport"
-        );
+        tracing::info!(index, ?read_fd, ?write_fd, memfd, offset, size,);
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
-        node.read_fd = Some(read_fd);
-        node.write_fd = Some(write_fd);
+        node.read_fd = read_fd;
+        node.write_fd = write_fd;
         Ok(())
     }
 
@@ -743,7 +786,7 @@ impl ConnectionState {
             client.params.insert(param, obj.to_owned());
         }
 
-        tracing::info!(?param, flags, ?object_type, ?object_id, ?obj, "Set param");
+        tracing::info!(?param, flags, ?object_type, ?object_id, ?obj);
         Ok(())
     }
 
@@ -754,33 +797,89 @@ impl ConnectionState {
         };
 
         let mut st = pod.decode_struct()?;
-        let id = st.field()?.decode::<id::Io>()?;
-        let memid = st.field()?.decode::<i32>()?;
-        let offset = st.field()?.decode::<i32>()?;
-        let size = st.field()?.decode::<i32>()?;
+        let id = st.field()?.decode::<id::IoType>()?;
+        let mem_id = st.field()?.decode::<i32>()?;
+        let offset = st.field()?.decode::<u32>()?;
+        let size = st.field()?.decode::<u32>()?;
 
-        tracing::info!(index, ?id, memid, offset, size, "Client node set IO");
+        tracing::info!(index, ?id, mem_id, offset, size);
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_command(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+        let Some(..) = self.client_nodes.get_mut(index) else {
+            bail!("Missing client node {index}");
+        };
+
+        let mut st = pod.as_ref().decode_struct()?;
+        let obj = st.field()?.decode_object()?;
+
+        let object_type = id::CommandType::from_id(obj.object_type());
+        let object_id = id::NodeCommand::from_id(obj.object_id());
+
+        tracing::info!(?object_type, ?object_id, ?pod);
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_port_set_param(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+        let Some(..) = self.client_nodes.get_mut(index) else {
+            bail!("Missing client node {index}");
+        };
+
+        let mut st = pod.decode_struct()?;
+        let direction = consts::Direction::from_raw(st.field()?.decode::<u32>()?);
+        let port_id = st.field()?.decode::<u32>()?;
+        let id = st.field()?.decode::<id::Param>()?;
+        let flags = st.field()?.decode::<u32>()?;
+        let param = st.field()?;
+
+        tracing::info!(index, ?direction, ?port_id, ?id, ?flags, ?param);
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_use_buffers(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+        let Some(..) = self.client_nodes.get_mut(index) else {
+            bail!("Missing client node {index}");
+        };
+
+        let st = pod.decode_struct()?;
+        tracing::info!(?st);
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_port_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+        let Some(..) = self.client_nodes.get_mut(index) else {
+            bail!("Missing client node {index}");
+        };
+
+        let mut st = pod.decode_struct()?;
+        let direction = consts::Direction::from_raw(st.field()?.decode::<u32>()?);
+        let port_id = st.field()?.decode::<u32>()?;
+        let mix_id = st.field()?.decode::<u32>()?;
+        let id = st.field()?.decode::<id::IoType>()?;
+        let mem_id = st.field()?.decode::<i32>()?;
+        let offset = st.field()?.decode::<u32>()?;
+        let size = st.field()?.decode::<u32>()?;
+
+        tracing::info!(?direction, port_id, mix_id, ?id, mem_id, offset, size);
         Ok(())
     }
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_activation(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.decode_struct()?;
+
         let node_id = st.field()?.decode::<i32>()?;
         let fd = self.take_fd(st.field()?.decode::<Fd>()?)?;
-        let mem_id = st.field()?.decode::<u32>()?;
-        let offset = st.field()?.decode::<i32>()?;
-        let size = st.field()?.decode::<i32>()?;
+        let mem_id = st.field()?.decode::<i32>()?;
+        let offset = st.field()?.decode::<u32>()?;
+        let size = st.field()?.decode::<u32>()?;
 
-        tracing::info!(
-            index,
-            node_id,
-            ?fd,
-            mem_id,
-            offset,
-            size,
-            "Client node set activation"
-        );
+        tracing::info!(index, node_id, ?fd, mem_id, offset, size,);
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
@@ -794,13 +893,15 @@ impl ConnectionState {
         });
         Ok(())
     }
-}
 
-#[derive(Default, Debug)]
-enum State {
-    #[default]
-    ClientHello,
-    Connecting,
-    CoreBound,
-    Idle,
+    #[tracing::instrument(skip(self, pod))]
+    fn client_node_set_mix_info(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+        let Some(..) = self.client_nodes.get_mut(index) else {
+            bail!("Missing client node {index}");
+        };
+
+        let st = pod.decode_struct()?;
+        tracing::info!(?st);
+        Ok(())
+    }
 }

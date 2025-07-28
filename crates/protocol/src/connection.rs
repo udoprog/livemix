@@ -245,15 +245,17 @@ impl Connection {
     }
 
     /// Update client node.
-    pub fn client_node_update(&mut self, id: u32) -> Result<(), Error> {
+    pub fn client_node_update(
+        &mut self,
+        id: u32,
+        max_input_ports: u32,
+        max_output_ports: u32,
+    ) -> Result<(), Error> {
         let mut pod = Pod::array();
 
         let mut change_mask = flags::ClientNodeUpdate::NONE;
         change_mask |= flags::ClientNodeUpdate::PARAMS;
         change_mask |= flags::ClientNodeUpdate::INFO;
-
-        let max_input_ports = 2u32;
-        let max_output_ports = 2u32;
 
         let mut node_change_mask = flags::NodeChangeMask::FLAGS;
         node_change_mask |= flags::NodeChangeMask::PROPS;
@@ -329,12 +331,16 @@ impl Connection {
     }
 
     /// Update client node port.
+    #[tracing::instrument(skip(self))]
     pub fn client_node_port_update(
         &mut self,
         id: u32,
         direction: consts::Direction,
         port_id: u32,
+        name: &str,
     ) -> Result<(), Error> {
+        tracing::info!("port update");
+
         let mut pod = Pod::array();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
@@ -349,7 +355,7 @@ impl Connection {
         let port_flags = flags::Port::NONE;
 
         pod.as_mut().push_struct(|st| {
-            st.field()?.push(direction as u32)?;
+            st.field()?.push(direction)?;
             st.field()?.push(port_id)?;
             st.field()?.push(change_mask)?;
 
@@ -394,20 +400,19 @@ impl Connection {
                     // Properties.
                     st.field()?.push(2u32)?;
                     st.field()?.push("port.name")?;
-                    st.field()?.push_unsized("livemix_port0")?;
+                    st.field()?.push_unsized(name)?;
 
                     st.field()?.push("format.dsp")?;
                     st.field()?.push_unsized("32 bit float mono audio")?;
 
                     // Parameters.
-                    st.field()?.push(2u32)?;
+                    st.field()?.push(5u32)?;
                     st.field()?.push(id::Param::ENUM_FORMAT)?;
                     st.field()?.push(flags::Param::READ)?;
 
                     st.field()?.push(id::Param::FORMAT)?;
                     st.field()?.push(flags::Param::WRITE)?;
 
-                    /*
                     st.field()?.push(id::Param::META)?;
                     st.field()?.push(flags::Param::READ)?;
 
@@ -416,8 +421,6 @@ impl Connection {
 
                     st.field()?.push(id::Param::BUFFERS)?;
                     st.field()?.push(flags::Param::NONE)?;
-                    */
-
                     Ok(())
                 })?;
             } else {

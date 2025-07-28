@@ -7,7 +7,8 @@ macro_rules! __id {
             $ty_vis:vis struct $ty:ident {
                 $default:ident
                 $(,
-                    $(#[$($field_meta:meta)*])* $field:ident = $field_value:expr
+                    $(#[$($field_meta:meta)*])*
+                    $field:ident = $field_value:expr
                 )* $(,)?
             }
         )*
@@ -19,9 +20,8 @@ macro_rules! __id {
 
             impl $ty {
                 $(
-                    $(
-                        #[$($field_meta)*])*
-                        $ty_vis const $field: Self = Self($field_value);
+                    $(#[$($field_meta)*])*
+                    $ty_vis const $field: Self = Self($field_value);
                 )*
             }
 
@@ -148,6 +148,145 @@ macro_rules! __id {
 }
 
 pub use __id as id;
+
+#[macro_export]
+macro_rules! __consts {
+    (
+        $(
+            $(#[doc = $doc:literal])*
+            #[example = $example:ident]
+            $ty_vis:vis struct $ty:ident($repr:ty) {
+                $default:ident
+                $(,
+                    $(#[$($field_meta:meta)*])*
+                    $field:ident = $field_value:expr
+                )* $(,)?
+            }
+        )*
+    ) => {
+        $(
+            $(#[doc = $doc])*
+            #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            #[repr(transparent)]
+            $ty_vis struct $ty($repr);
+
+            impl $ty {
+                $(
+                    $(#[$($field_meta)*])*
+                    $ty_vis const $field: Self = Self($field_value);
+                )*
+            }
+
+            #[doc = concat!(" Encode an [`", stringify!($ty), "`].")]
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use pod::Pod;
+            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            ///
+            /// let mut pod = Pod::array();
+            #[doc = concat!(" pod.push(", stringify!($ty), "::", stringify!($example), ")?;")]
+            /// # Ok::<_, pod::Error>(())
+            /// ```
+            impl $crate::Encode for $ty {
+                const TYPE: $crate::Type = <$repr as $crate::Encode>::TYPE;
+
+                #[inline]
+                fn size(&self) -> usize {
+                    <$repr as $crate::Encode>::size(&self.0)
+                }
+
+                #[inline]
+                fn write_content(&self, writer: impl $crate::Writer<u64>) -> Result<(), $crate::Error> {
+                    <$repr as $crate::Encode>::write_content(&self.0, writer)
+                }
+            }
+
+            #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use pod::Pod;
+            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            ///
+            /// let mut pod = Pod::array();
+            ///
+            #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
+            ///
+            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
+            ///
+            /// let mut pod = Pod::array();
+            #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
+            ///
+            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
+            /// # Ok::<_, pod::Error>(())
+            /// ```
+            ///
+            #[doc = concat!(" Unknown identifiers will be decoded as the default value ", stringify!($default), ".")]
+            ///
+            /// ```
+            /// use pod::{Pod, Id};
+            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            ///
+            /// let mut pod = Pod::array();
+            /// pod.as_mut().push(Id(u32::MAX / 2))?;
+            ///
+            #[doc = concat!(" let id = pod.decode::<", stringify!($ty), ">()?;")]
+            /// assert!(id.is_invalid());
+            /// # Ok::<_, pod::Error>(())
+            /// ```
+            impl<'de> $crate::Decode<'de> for $ty {
+                const TYPE: $crate::Type = <$repr as $crate::Decode<'de>>::TYPE;
+
+                #[inline]
+                fn read_content(reader: impl $crate::Reader<'de, u64>, len: usize) -> Result<Self, $crate::Error> {
+                    Ok(Self(<$repr as $crate::Decode<'de>>::read_content(reader, len)?))
+                }
+            }
+
+            impl $ty {
+                /// Test if the identifier is invalid.
+                pub fn is_invalid(&self) -> bool {
+                    match self.0 {
+                        $($field_value => false,)*
+                        _ => true,
+                    }
+                }
+
+                /// Get the identifier value.
+                #[inline]
+                pub fn into_raw(self) -> $repr {
+                    self.0
+                }
+
+                /// Convert an identifier value into the type.
+                #[inline]
+                pub fn from_raw(value: $repr) -> Self {
+                    match value {
+                        $($field_value => Self::$field,)*
+                        _ => Self(value),
+                    }
+                }
+            }
+
+            impl core::fmt::Debug for $ty {
+                #[inline]
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    match self.0 {
+                        $($field_value => write!(f, "{}", stringify!($field)),)*
+                        _ => write!(f, "{}({})", stringify!($default), self.0),
+                    }
+                }
+            }
+        )*
+    };
+}
+
+pub use __consts as consts;
 
 #[macro_export]
 macro_rules! __flags {

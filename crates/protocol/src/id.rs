@@ -181,8 +181,9 @@ pod::macros::id! {
         START_CUSTOM = 0x1000000,
     }
 
+    /// The representation of `enum spa_io_type`.
     #[example = FREQUENCY]
-    pub struct Io {
+    pub struct IoType {
         UNKNOWN,
         /// Area to exchange buffers, `struct spa_io_buffers`.
         BUFFERS = 1,
@@ -328,6 +329,39 @@ pod::macros::id! {
         F32P = 0x206,
         F64P = 0x207,
         S8P = 0x208,
+    }
+
+    #[example = SUSPEND]
+    pub struct NodeCommand {
+        UNKNOWN,
+        /// Suspend a node, this removes all configuredformats and closes any
+        /// devices.
+        SUSPEND = 0,
+        /// Pause a node. this makes it stop emitting scheduling events.
+        PAUSE = 1,
+        /// Start a node, this makes it start emitting scheduling events.
+        START = 2,
+        ENABLE = 3,
+        DISABLE = 4,
+        FLUSH = 5,
+        DRAIN = 6,
+        MARKER = 7,
+        /// Begin a set of parameter enumerations or configuration that require
+        /// the device to remain opened, like query formats and then set a
+        /// format.
+        PARAM_BEGIN = 8,
+        /// End a transaction.
+        PARAM_END = 9,
+        /// Sent to a driver when some other node emitted the RequestProcess
+        /// event.
+        REQUEST_PROCESS = 10,
+    }
+
+    #[example = NODE]
+    pub struct CommandType {
+        UNKNOWN,
+        DEVICE = 0x30001,
+        NODE = 0x30002,
     }
 }
 
