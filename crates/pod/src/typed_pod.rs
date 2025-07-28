@@ -91,7 +91,7 @@ where
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -110,16 +110,16 @@ where
     /// let mut pod = Pod::array();
     ///
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(10i32)?;
-    ///     array.child()?.push(20i32)?;
+    ///     array.child().push(10i32)?;
+    ///     array.child().push(20i32)?;
     ///     Ok(())
     /// })?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     /// let mut array = pod.next_array()?;
     /// assert!(!array.is_empty());
-    /// array.item()?.skip()?;
-    /// assert_eq!(array.item()?.next::<i32>()?, 20i32);
+    /// array.next().unwrap();
+    /// assert_eq!(array.next().unwrap().next::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -139,7 +139,7 @@ where
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -167,6 +167,7 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
+    /// let pod = pod.as_ref().into_typed()?;
     /// assert_eq!(pod.next_unsized(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -187,24 +188,6 @@ where
     }
 
     /// Read the next unsized value into the pod.
-    ///
-    /// # Errors
-    ///
-    /// Since this cannot return borrows from data which is owned, it will error
-    /// if used directly on types like [`TypedPod<Buf<T>>`].
-    ///
-    /// ```should_panic
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().push_unsized(&b"hello world"[..])?;
-    /// let mut pod = pod.into_typed()?;
-    ///
-    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    ///
-    /// To mitigate this, it can be borrowed first through [`Pod::as_ref`].
     ///
     /// # Examples
     ///
@@ -258,7 +241,7 @@ where
     ///     panic!("expected some value");
     /// };
     ///
-    /// assert!(pod.next::<bool>()?);
+    /// assert!(pod.as_ref().next::<bool>()?);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -279,9 +262,9 @@ where
     /// let mut pod = Pod::array();
     ///
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
-    ///     array.child()?.push(2i32)?;
-    ///     array.child()?.push(3i32)?;
+    ///     array.child().push(1i32)?;
+    ///     array.child().push(2i32)?;
+    ///     array.child().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -291,9 +274,9 @@ where
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
     ///
-    /// assert_eq!(array.item()?.next::<i32>()?, 1i32);
-    /// assert_eq!(array.item()?.next::<i32>()?, 2i32);
-    /// assert_eq!(array.item()?.next::<i32>()?, 3i32);
+    /// assert_eq!(array.next().unwrap().next::<i32>()?, 1i32);
+    /// assert_eq!(array.next().unwrap().next::<i32>()?, 2i32);
+    /// assert_eq!(array.next().unwrap().next::<i32>()?, 3i32);
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);
@@ -359,7 +342,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.next_object()?;
+    /// let mut obj = pod.as_ref().next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
@@ -447,17 +430,17 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.next_choice()?;
+    /// let mut choice = pod.as_ref().next_choice()?;
     /// assert!(!choice.is_empty());
-    /// assert_eq!(choice.entry()?.next::<i32>()?, 10);
-    /// assert_eq!(choice.entry()?.next::<i32>()?, 0);
-    /// assert_eq!(choice.entry()?.next::<i32>()?, 30);
+    /// assert_eq!(choice.next().unwrap().next::<i32>()?, 10);
+    /// assert_eq!(choice.next().unwrap().next::<i32>()?, 0);
+    /// assert_eq!(choice.next().unwrap().next::<i32>()?, 30);
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -552,9 +535,9 @@ where
 /// })?;
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(pod.into_typed()?)?;
+/// pod2.as_mut().push(pod.as_ref().into_typed()?)?;
 ///
-/// let mut obj = pod2.next_pod()?.next_object()?;
+/// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;

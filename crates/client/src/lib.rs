@@ -104,7 +104,6 @@ struct MemoryState {
 #[derive(Debug)]
 pub struct GlobalMap {
     global_to_local: BTreeMap<u32, u32>,
-    local_to_global: BTreeMap<u32, u32>,
 }
 
 impl GlobalMap {
@@ -112,14 +111,12 @@ impl GlobalMap {
     fn new() -> Self {
         Self {
             global_to_local: BTreeMap::new(),
-            local_to_global: BTreeMap::new(),
         }
     }
 
     #[inline]
     fn insert(&mut self, local_id: u32, global_id: u32) {
         self.global_to_local.insert(global_id, local_id);
-        self.local_to_global.insert(local_id, global_id);
     }
 
     /// Map a global to a local id.
@@ -128,24 +125,9 @@ impl GlobalMap {
         self.global_to_local.get(&global_id).copied()
     }
 
-    /// Map a local to a global id.
-    #[inline]
-    fn by_local(&self, local_id: u32) -> Option<u32> {
-        self.local_to_global.get(&local_id).copied()
-    }
-
-    #[inline]
-    fn remove_by_local(&mut self, local_id: u32) -> Option<u32> {
-        let global_id = self.local_to_global.remove(&local_id)?;
-        self.global_to_local.remove(&global_id);
-        Some(global_id)
-    }
-
     #[inline]
     fn remove_by_global(&mut self, global_id: u32) -> Option<u32> {
-        let local_id = self.global_to_local.remove(&global_id)?;
-        self.local_to_global.remove(&local_id);
-        Some(local_id)
+        self.global_to_local.remove(&global_id)
     }
 }
 

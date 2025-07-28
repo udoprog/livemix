@@ -20,6 +20,9 @@ pub trait Reader<'de, T>
 where
     Self: AsReader<T> + self::sealed::Sealed<T>,
 {
+    /// The type of a split off reader.
+    type Split: Reader<'de, T>;
+
     /// The mutable borrow of a reader.
     type Mut<'this>: Reader<'de, T>
     where
@@ -35,27 +38,26 @@ where
     /// ```
     /// use pod::{Buf, Reader};
     ///
-    /// let mut array = Buf::from_array([1u32, 2, 3]);
-    /// assert_eq!(array.remaining(), 3);
-    /// assert_eq!(array.remaining_bytes(), 12);
+    /// let array = Buf::from_array([1u32, 2, 3]);
+    /// let mut buf = array.as_slice();
     ///
-    /// assert_eq!(array.read::<[u32; 1]>()?, [1]);
-    /// assert_eq!(array.remaining(), 2);
-    /// assert_eq!(array.remaining_bytes(), 8);
-    /// assert_eq!(array.as_slice(), &[2, 3]);
+    /// assert_eq!(buf.remaining(), 12);
     ///
-    /// assert_eq!(array.read::<u64>()?, 2u64 + (3u64 << 32));
-    /// assert_eq!(array.remaining(), 0);
-    /// assert_eq!(array.remaining_bytes(), 0);
+    /// assert_eq!(buf.read::<[u32; 1]>()?, [1]);
+    /// assert_eq!(buf.remaining(), 8);
+    /// assert_eq!(buf.as_slice(), &[2, 3]);
+    ///
+    /// assert_eq!(buf.read::<u64>()?, 2u64 + (3u64 << 32));
+    /// assert_eq!(buf.remaining(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    fn remaining_bytes(&self) -> usize;
+    fn remaining(&self) -> usize;
 
     /// Skip the given number of bytes.
     fn skip(&mut self, size: usize) -> Result<(), Error>;
 
     /// Split off the head of the current buffer.
-    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error>;
+    fn split(&mut self, at: usize) -> Option<Self::Split>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<T>]) -> Result<(), Error>;
@@ -149,6 +151,8 @@ impl<'de, R, T> Reader<'de, T> for &mut R
 where
     R: ?Sized + Reader<'de, T>,
 {
+    type Split = R::Split;
+
     type Mut<'this>
         = R::Mut<'this>
     where
@@ -160,8 +164,8 @@ where
     }
 
     #[inline]
-    fn remaining_bytes(&self) -> usize {
-        (**self).remaining_bytes()
+    fn remaining(&self) -> usize {
+        (**self).remaining()
     }
 
     #[inline]
@@ -170,7 +174,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error> {
+    fn split(&mut self, at: usize) -> Option<Self::Split> {
         (**self).split(at)
     }
 
@@ -213,6 +217,9 @@ impl<'de, T> Reader<'de, T> for &'de [T]
 where
     T: 'static,
 {
+    /// The type of a split off reader.
+    type Split = &'de [T];
+
     type Mut<'this>
         = &'this mut &'de [T]
     where
@@ -224,7 +231,7 @@ where
     }
 
     #[inline]
-    fn remaining_bytes(&self) -> usize {
+    fn remaining(&self) -> usize {
         self.len() * mem::size_of::<T>()
     }
 
@@ -241,15 +248,11 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Result<Self::AsReader<'_>, Error> {
+    fn split(&mut self, at: usize) -> Option<Self::Split> {
         let at = at.div_ceil(mem::size_of::<T>());
-
-        let Some((head, tail)) = self.split_at_checked(at) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+        let (head, tail) = self.split_at_checked(at)?;
         *self = tail;
-        Ok(head)
+        Some(head)
     }
 
     #[inline]

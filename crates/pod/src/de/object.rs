@@ -84,7 +84,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.next_object()?;
+    /// let mut obj = pod.as_ref().next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
@@ -125,7 +125,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.next_object()?;
+    /// let mut obj = pod.as_ref().next_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
@@ -147,14 +147,19 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property(&mut self) -> Result<Property<B::AsReader<'_>>, Error> {
+    pub fn property(&mut self) -> Result<Property<B::Split>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
 
         let [key, flags] = self.buf.read::<[u32; 2]>()?;
         let (size, ty) = self.buf.header()?;
-        let pod = TypedPod::new(size, ty, self.buf.split(size)?);
+
+        let Some(head) = self.buf.split(size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        let pod = TypedPod::new(size, ty, head);
 
         let Some(size_with_header) = pod
             .size_with_header()
@@ -189,7 +194,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let obj = pod.next_object()?.to_owned();
+    /// let obj = pod.as_ref().next_object()?.to_owned();
     ///
     /// let mut obj = obj.as_ref();
     /// assert!(!obj.is_empty());
@@ -245,7 +250,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let obj = pod.next_object()?.to_owned();
+    /// let obj = pod.as_ref().next_object()?.to_owned();
     ///
     /// let mut obj = obj.as_ref();
     /// assert!(!obj.is_empty());
@@ -294,12 +299,12 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let obj = pod.next_object()?.to_owned();
+/// let obj = pod.as_ref().next_object()?.to_owned();
 ///
 /// let mut pod2 = Pod::array();
-/// pod2.as_mut().push(obj.as_ref())?;
+/// pod2.as_mut().push(obj)?;
 ///
-/// let obj = pod2.next_object()?;
+/// let obj = pod2.as_ref().next_object()?;
 ///
 /// let mut obj = obj.as_ref();
 /// assert!(!obj.is_empty());

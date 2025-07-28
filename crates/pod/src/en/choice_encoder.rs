@@ -73,18 +73,14 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.push_choice(ChoiceType::NONE, Type::INT, |choice| {
-    ///     choice.entry()?.push(1i32)?;
+    ///     choice.child().push(1i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn entry(&mut self) -> Result<Pod<W::Mut<'_>, ChildPod>, Error> {
-        Ok(Pod::new_child(
-            self.writer.borrow_mut(),
-            self.child_size,
-            self.child_type,
-        ))
+    pub fn child(&mut self) -> Pod<W::Mut<'_>, ChildPod> {
+        Pod::new_child(self.writer.borrow_mut(), self.child_size, self.child_type)
     }
 
     #[inline]

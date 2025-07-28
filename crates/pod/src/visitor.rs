@@ -16,6 +16,7 @@ use super::error::ErrorKind;
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized(&b"hello world"[..])?;
 ///
+/// let pod = pod.as_ref();
 /// assert_eq!(pod.next_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```

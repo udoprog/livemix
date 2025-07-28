@@ -29,7 +29,7 @@ impl<T, const N: usize> Events<T> for Buf<T, N> {
 
     #[inline]
     fn remaining_mut(&self) -> usize {
-        Buf::remaining_mut(self)
+        N.wrapping_sub(Buf::len(self))
     }
 
     #[inline]

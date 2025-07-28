@@ -18,20 +18,20 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 /// let mut pod = Pod::array();
 ///
 /// pod.as_mut().push_array(Type::INT, |array| {
-///     array.child()?.push(1i32)?;
-///     array.child()?.push(2i32)?;
-///     array.child()?.push(3i32)?;
+///     array.child().push(1i32)?;
+///     array.child().push(2i32)?;
+///     array.child().push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut array = pod.next_array()?;
+/// let mut array = pod.as_ref().next_array()?;
 ///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
 ///
-/// assert_eq!(array.item()?.next::<i32>()?, 1i32);
-/// assert_eq!(array.item()?.next::<i32>()?, 2i32);
-/// assert_eq!(array.item()?.next::<i32>()?, 3i32);
+/// assert_eq!(array.next().unwrap().next::<i32>()?, 1i32);
+/// assert_eq!(array.next().unwrap().next::<i32>()?, 2i32);
+/// assert_eq!(array.next().unwrap().next::<i32>()?, 3i32);
 ///
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
@@ -45,18 +45,19 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
-///     array.child()?.push_unsized("foo")?;
-///     array.child()?.push_unsized("bar")?;
-///     array.child()?.push_unsized("baz")?;
+///     array.child().push_unsized("foo")?;
+///     array.child().push_unsized("bar")?;
+///     array.child().push_unsized("baz")?;
 ///     Ok(())
 /// })?;
 ///
 /// let mut array = pod.as_ref().next_array()?;
+///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
-/// assert_eq!(array.item()?.next_borrowed::<str>()?, "foo");
-/// assert_eq!(array.item()?.next_borrowed::<str>()?, "bar");
-/// assert_eq!(array.item()?.next_borrowed::<str>()?, "baz");
+/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "foo");
+/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "bar");
+/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "baz");
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
@@ -69,18 +70,18 @@ use crate::{AsReader, Encode, Error, Reader, Type, TypedPod, Writer};
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
-///     array.child()?.push_unsized("foo")?;
-///     array.child()?.push_unsized("bar")?;
-///     array.child()?.push_unsized("baz")?;
+///     array.child().push_unsized("foo")?;
+///     array.child().push_unsized("bar")?;
+///     array.child().push_unsized("baz")?;
 ///     Ok(())
 /// })?;
 ///
 /// let mut array = pod.as_ref().next_array()?;
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
-/// assert_eq!(array.item()?.next_borrowed::<str>()?, "foo");
-/// assert_eq!(array.item()?.next_borrowed::<str>()?, "bar");
-/// assert_eq!(array.item()?.next_borrowed::<str>()?, "baz");
+/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "foo");
+/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "bar");
+/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "baz");
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
@@ -109,12 +110,11 @@ impl<B> Array<B> {
     /// let mut pod = Pod::array();
     ///
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
+    ///     array.child().push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.next_array()?;
-    ///
+    /// let mut array = pod.as_ref().next_array()?;
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -134,7 +134,7 @@ impl<B> Array<B> {
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
-    /// let mut array = pod.next_array()?;
+    /// let mut array = pod.as_ref().next_array()?;
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -186,18 +186,18 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
-    ///     array.child()?.push(2i32)?;
-    ///     array.child()?.push(3i32)?;
+    ///     array.child().push(1i32)?;
+    ///     array.child().push(2i32)?;
+    ///     array.child().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.next_array()?;
+    /// let mut array = pod.as_ref().next_array()?;
     ///
     /// let mut count = 0;
     ///
     /// while !array.is_empty() {
-    ///     let pod = array.item()?;
+    ///     let pod = array.next().unwrap();
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -207,16 +207,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn item(&mut self) -> Result<TypedPod<B::AsReader<'_>>, Error> {
+    pub fn next(&mut self) -> Option<TypedPod<B::Split>> {
         if self.remaining == 0 {
-            return Err(Error::new(ErrorKind::ArrayUnderflow));
+            return None;
         }
 
         let tail = self.buf.split(self.child_size)?;
-
         let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
-        Ok(pod)
+        Some(pod)
     }
 
     /// Coerce into an owned [`Array`].
@@ -228,19 +227,19 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
-    ///     array.child()?.push(2i32)?;
-    ///     array.child()?.push(3i32)?;
+    ///     array.child().push(1i32)?;
+    ///     array.child().push(2i32)?;
+    ///     array.child().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let array = pod.next_array()?.to_owned();
+    /// let array = pod.as_ref().next_array()?.to_owned();
     /// let mut array = array.as_ref();
     ///
     /// let mut count = 0;
     ///
     /// while !array.is_empty() {
-    ///     let pod = array.item()?;
+    ///     let pod = array.next().unwrap();
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -276,19 +275,18 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
-    ///     array.child()?.push(2i32)?;
-    ///     array.child()?.push(3i32)?;
+    ///     array.child().push(1i32)?;
+    ///     array.child().push(2i32)?;
+    ///     array.child().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let array = pod.next_array()?.to_owned();
+    /// let array = pod.as_ref().next_array()?.to_owned();
     /// let mut array = array.as_ref();
     ///
     /// let mut count = 0;
     ///
-    /// while !array.is_empty() {
-    ///     let pod = array.item()?;
+    /// while let Some(pod) = array.next() {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -318,24 +316,24 @@ where
 /// let mut pod = Pod::array();
 ///
 /// pod.as_mut().push_array(Type::INT, |array| {
-///     array.child()?.push(1i32)?;
-///     array.child()?.push(2i32)?;
-///     array.child()?.push(3i32)?;
+///     array.child().push(1i32)?;
+///     array.child().push(2i32)?;
+///     array.child().push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let array = pod.next_array()?;
+/// let array = pod.as_ref().next_array()?;
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(array)?;
 ///
-/// let mut array = pod2.next_array()?;
+/// let mut array = pod2.as_ref().next_array()?;
 ///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
 ///
-/// assert_eq!(array.item()?.next::<i32>()?, 1i32);
-/// assert_eq!(array.item()?.next::<i32>()?, 2i32);
-/// assert_eq!(array.item()?.next::<i32>()?, 3i32);
+/// assert_eq!(array.next().unwrap().next::<i32>()?, 1i32);
+/// assert_eq!(array.next().unwrap().next::<i32>()?, 2i32);
+/// assert_eq!(array.next().unwrap().next::<i32>()?, 3i32);
 ///
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
@@ -382,15 +380,8 @@ where
 
                 let mut f = f.debug_list();
 
-                while !this.is_empty() {
-                    match this.item() {
-                        Ok(e) => {
-                            f.entry(&e);
-                        }
-                        Err(e) => {
-                            f.entry(&e);
-                        }
-                    }
+                while let Some(child) = this.next() {
+                    f.entry(&child);
                 }
 
                 f.finish()

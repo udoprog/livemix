@@ -44,7 +44,8 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.next_struct()?;
+    /// let mut st = pod.as_ref().next_struct()?;
+    ///
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
     /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
@@ -72,7 +73,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.next_struct()?;
+    /// let mut st = pod.as_ref().next_struct()?;
     ///
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
@@ -82,14 +83,17 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Result<TypedPod<B::AsReader<'_>>, Error> {
+    pub fn field(&mut self) -> Result<TypedPod<B::Split>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::StructUnderflow));
         }
 
         let (size, ty) = self.buf.header()?;
 
-        let head = self.buf.split(size)?;
+        let Some(head) = self.buf.split(size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
         let pod = TypedPod::new(size, ty, head);
 
         let Some(size_with_header) = pod.size_with_header() else {
@@ -122,7 +126,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let st = pod.next_struct()?.to_owned();
+    /// let st = pod.as_ref().next_struct()?.to_owned();
     ///
     /// let mut st = st.as_ref();
     ///
@@ -164,8 +168,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let st = pod.next_struct()?.to_owned();
-    ///
+    /// let st = pod.as_ref().next_struct()?.to_owned();
     /// let mut st = st.as_ref();
     ///
     /// assert!(!st.is_empty());
@@ -196,12 +199,12 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let st = pod.next_struct()?;
+/// let st = pod.as_ref().next_struct()?;
 ///
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(st)?;
 ///
-/// let mut st = pod2.next_struct()?;
+/// let mut st = pod2.as_ref().next_struct()?;
 ///
 /// assert!(!st.is_empty());
 /// assert_eq!(st.field()?.next::<i32>()?, 1i32);

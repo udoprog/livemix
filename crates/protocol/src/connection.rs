@@ -10,6 +10,7 @@ use std::os::fd::RawFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
+use pod::AsReader;
 use pod::Pod;
 use pod::Reader;
 
@@ -640,15 +641,11 @@ impl Connection {
     }
 
     /// Serialize an outgoing message.
-    fn request<'de>(
-        &mut self,
-        id: u32,
-        op: u8,
-        pod: Pod<impl Reader<'de, u64>>,
-    ) -> Result<(), Error> {
+    fn request<'de>(&mut self, id: u32, op: u8, pod: Pod<impl AsReader<u64>>) -> Result<(), Error> {
+        let pod = pod.as_ref();
         let buf = pod.as_buf();
 
-        let Ok(size) = u32::try_from(buf.remaining_bytes()) else {
+        let Ok(size) = u32::try_from(buf.remaining()) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 

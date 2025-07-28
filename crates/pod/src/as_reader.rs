@@ -17,16 +17,11 @@ mod sealed {
 
     #[cfg(feature = "alloc")]
     impl<T> Sealed<T> for Box<[T]> where T: 'static {}
-
     #[cfg(feature = "alloc")]
     impl<T> Sealed<T> for Vec<T> where T: 'static {}
-
     impl<T> Sealed<T> for [T] where T: 'static {}
-
     impl<T, const N: usize> Sealed<T> for Buf<T, N> {}
-
     impl<R, T> Sealed<T> for &mut R where R: ?Sized + AsReader<T> {}
-
     impl<R, T> Sealed<T> for &R where R: ?Sized + AsReader<T> {}
 }
 

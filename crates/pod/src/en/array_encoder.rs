@@ -14,9 +14,9 @@ use crate::{Error, Pod, Type, Writer};
 /// let mut pod = Pod::array();
 ///
 /// pod.as_mut().push_array(Type::INT, |array| {
-///     array.child()?.push(1i32)?;
-///     array.child()?.push(2i32)?;
-///     array.child()?.push(3i32)?;
+///     array.child().push(1i32)?;
+///     array.child().push(2i32)?;
+///     array.child().push(3i32)?;
 ///     Ok(())
 /// })?;
 /// # Ok::<_, pod::Error>(())
@@ -30,9 +30,9 @@ use crate::{Error, Pod, Type, Writer};
 /// let mut pod = Pod::array();
 ///
 /// pod.push_unsized_array(Type::STRING, 4, |array| {
-///     array.child()?.push_unsized("foo")?;
-///     array.child()?.push_unsized("baz")?;
-///     array.child()?.push_unsized("bar")?;
+///     array.child().push_unsized("foo")?;
+///     array.child().push_unsized("baz")?;
+///     array.child().push_unsized("bar")?;
 ///     Ok(())
 /// })?;
 /// # Ok::<_, pod::Error>(())
@@ -122,18 +122,14 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
+    ///     array.child().push(1i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn child(&mut self) -> Result<Pod<W::Mut<'_>, ChildPod>, Error> {
-        Ok(Pod::new_child(
-            self.writer.borrow_mut(),
-            self.child_size,
-            self.child_type,
-        ))
+    pub fn child(&mut self) -> Pod<W::Mut<'_>, ChildPod> {
+        Pod::new_child(self.writer.borrow_mut(), self.child_size, self.child_type)
     }
 
     #[inline]

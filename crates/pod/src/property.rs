@@ -28,7 +28,7 @@ impl<B> Property<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.next_object()?;
+    /// let mut obj = pod.as_ref().next_object()?;
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// # Ok::<_, pod::Error>(())
@@ -51,7 +51,7 @@ impl<B> Property<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.next_object()?;
+    /// let mut obj = pod.as_ref().next_object()?;
     /// let p = obj.property()?;
     /// assert_eq!(p.flags(), 10);
     /// # Ok::<_, pod::Error>(())
@@ -74,7 +74,7 @@ impl<B> Property<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.next_object()?;
+    /// let mut obj = pod.as_ref().next_object()?;
     /// let p = obj.property()?;
     /// assert_eq!(p.value().next::<i32>()?, 1);
     /// # Ok::<_, pod::Error>(())

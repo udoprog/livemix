@@ -17,19 +17,18 @@ use crate::{AsReader, ChoiceType, Encode, Error, Reader, Type, TypedPod, Writer}
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-///     choice.entry()?.push(10i32)?;
-///     choice.entry()?.push(0i32)?;
-///     choice.entry()?.push(30i32)?;
+///     choice.child().push(10i32)?;
+///     choice.child().push(0i32)?;
+///     choice.child().push(30i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut choice = pod.next_choice()?;
+/// let mut choice = pod.as_ref().next_choice()?;
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
 ///
 /// let mut count = 0;
 ///
-/// while !choice.is_empty() {
-///     let pod = choice.entry()?;
+/// while let Some(pod) = choice.next() {
 ///     assert_eq!(pod.ty(), Type::INT);
 ///     assert_eq!(pod.size(), 4);
 ///     count += 1;
@@ -57,19 +56,18 @@ impl<B> Choice<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.next_choice()?;
+    /// let mut choice = pod.as_ref().next_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
     ///
-    /// while !choice.is_empty() {
-    ///     let pod = choice.entry()?;
+    /// while let Some(pod) = choice.next() {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -92,13 +90,13 @@ impl<B> Choice<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.next_choice()?;
+    /// let choice = pod.as_ref().next_choice()?;
     /// assert_eq!(choice.child_type(), Type::INT);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -116,13 +114,13 @@ impl<B> Choice<B> {
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.next_choice()?;
+    /// let choice = pod.as_ref().next_choice()?;
     /// assert_eq!(choice.child_size(), 4);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -192,11 +190,11 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child()?.push(1i32)?;
+    ///     array.child().push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.next_array()?;
+    /// let mut array = pod.as_ref().next_array()?;
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -216,7 +214,7 @@ where
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
-    /// let mut array = pod.next_array()?;
+    /// let mut array = pod.as_ref().next_array()?;
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -234,19 +232,18 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.next_choice()?;
+    /// let mut choice = pod.as_ref().next_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
     ///
-    /// while !choice.is_empty() {
-    ///     let pod = choice.entry()?;
+    /// while let Some(pod) = choice.next() {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -256,16 +253,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn entry(&mut self) -> Result<TypedPod<B::AsReader<'_>>, Error> {
+    pub fn next(&mut self) -> Option<TypedPod<B::Split>> {
         if self.remaining == 0 {
-            return Err(Error::new(ErrorKind::ArrayUnderflow));
+            return None;
         }
 
         let tail = self.buf.split(self.child_size)?;
-
         let pod = TypedPod::new(self.child_size, self.child_type, tail);
         self.remaining -= 1;
-        Ok(pod)
+        Some(pod)
     }
 
     /// Coerce into an owned [`Choice`].
@@ -277,21 +273,20 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.next_choice()?.to_owned();
+    /// let choice = pod.as_ref().next_choice()?.to_owned();
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
     ///
     /// let mut count = 0;
     ///
-    /// while !choice.is_empty() {
-    ///     let pod = choice.entry()?;
+    /// while let Some(pod) = choice.next() {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -329,21 +324,20 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.entry()?.push(10i32)?;
-    ///     choice.entry()?.push(0i32)?;
-    ///     choice.entry()?.push(30i32)?;
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.next_choice()?.to_owned();
+    /// let choice = pod.as_ref().next_choice()?.to_owned();
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
     ///
     /// let mut count = 0;
     ///
-    /// while !choice.is_empty() {
-    ///     let pod = choice.entry()?;
+    /// while let Some(pod) = choice.next() {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -374,24 +368,23 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-///     choice.entry()?.push(10i32)?;
-///     choice.entry()?.push(0i32)?;
-///     choice.entry()?.push(30i32)?;
+///     choice.child().push(10i32)?;
+///     choice.child().push(0i32)?;
+///     choice.child().push(30i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut choice = pod.next_choice()?;
+/// let mut choice = pod.as_ref().next_choice()?;
 ///
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(choice)?;
 ///
-/// let mut choice = pod2.next_choice()?;
+/// let mut choice = pod2.as_ref().next_choice()?;
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
 ///
 /// let mut count = 0;
 ///
-/// while !choice.is_empty() {
-///     let pod = choice.entry()?;
+/// while let Some(pod) = choice.next() {
 ///     assert_eq!(pod.ty(), Type::INT);
 ///     assert_eq!(pod.size(), 4);
 ///     count += 1;
@@ -447,15 +440,8 @@ where
 
                 let mut f = f.debug_list();
 
-                while !this.is_empty() {
-                    match this.entry() {
-                        Ok(e) => {
-                            f.entry(&e);
-                        }
-                        Err(e) => {
-                            f.entry(&e);
-                        }
-                    }
+                while let Some(child) = this.next() {
+                    f.entry(&child);
                 }
 
                 f.finish()

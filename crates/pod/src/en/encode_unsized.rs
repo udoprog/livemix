@@ -121,6 +121,8 @@ impl EncodeUnsized for str {
 
     #[inline]
     fn size(&self) -> usize {
+        // A string cannot be longer than `isize::MAX`, so we can always add 1
+        // to it to get a correct usize.
         str::len(self).wrapping_add(1)
     }
 

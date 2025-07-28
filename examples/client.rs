@@ -38,7 +38,7 @@ fn main() -> Result<()> {
 
         poll.poll(&mut events)?;
 
-        while let Some(e) = events.pop_front() {
+        while let Some(e) = events.pop() {
             match e.token {
                 CONNECTION => {
                     if e.interest.is_read() {

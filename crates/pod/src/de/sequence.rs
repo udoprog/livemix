@@ -31,7 +31,7 @@ impl<B> Sequence<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.next_sequence()?;
+    /// let seq = pod.as_ref().next_sequence()?;
     /// assert_eq!(seq.unit(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -55,7 +55,7 @@ impl<B> Sequence<B> {
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.next_sequence()?;
+    /// let seq = pod.as_ref().next_sequence()?;
     /// assert_eq!(seq.pad(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -120,7 +120,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.next_sequence()?;
+    /// let mut seq = pod.as_ref().next_sequence()?;
     /// assert!(!seq.is_empty());
     /// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
     /// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
@@ -148,7 +148,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.next_sequence()?;
+    /// let mut seq = pod.as_ref().next_sequence()?;
     /// assert!(!seq.is_empty());
     /// assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
     /// assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
@@ -157,14 +157,19 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn control(&mut self) -> Result<Control<B::AsReader<'_>>, Error> {
+    pub fn control(&mut self) -> Result<Control<B::Split>, Error> {
         if self.size == 0 {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
 
         let [control_offset, control_ty] = self.buf.read::<[u32; 2]>()?;
         let (size, ty) = self.buf.header()?;
-        let pod = TypedPod::new(size, ty, self.buf.split(size)?);
+
+        let Some(head) = self.buf.split(size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        let pod = TypedPod::new(size, ty, head);
 
         let Some(size_with_header) = pod
             .size_with_header()
@@ -199,7 +204,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.next_sequence()?.to_owned();
+    /// let seq = pod.as_ref().next_sequence()?.to_owned();
     ///
     /// let mut seq = seq.as_ref();
     /// assert!(!seq.is_empty());
@@ -242,7 +247,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.next_sequence()?.to_owned();
+    /// let seq = pod.as_ref().next_sequence()?.to_owned();
     ///
     /// let mut seq = seq.as_ref();
     /// assert!(!seq.is_empty());
@@ -273,12 +278,12 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let seq = pod.next_sequence()?;
+/// let seq = pod.as_ref().next_sequence()?;
 ///
 /// let mut pod2 = Pod::array();
 /// pod2.as_mut().push(seq)?;
 ///
-/// let seq = pod2.next_sequence()?;
+/// let seq = pod2.as_ref().next_sequence()?;
 ///
 /// let mut seq = seq.as_ref();
 /// assert!(!seq.is_empty());

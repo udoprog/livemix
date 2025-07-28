@@ -25,7 +25,6 @@ impl Error {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum ErrorKind {
-    ArrayUnderflow,
     StructUnderflow,
     ObjectUnderflow,
     SizeOverflow,
@@ -63,7 +62,6 @@ impl fmt::Display for Error {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ErrorKind::ArrayUnderflow => write!(f, "Array underflow"),
             ErrorKind::StructUnderflow => write!(f, "Struct underflow"),
             ErrorKind::ObjectUnderflow => write!(f, "Object underflow"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
