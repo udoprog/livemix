@@ -94,6 +94,15 @@ impl Client {
         version: u32,
         new_id: u32,
     ) -> Result<()> {
+        const PROPS: &[(&str, &str)] = &[
+            ("node.description", "livemix"),
+            ("node.name", "livemix"),
+            ("media.class", "Audio/Duplex"),
+            ("media.type", "Audio"),
+            ("media.category", "Duplex"),
+            ("media.role", "DSP"),
+        ];
+
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
@@ -102,25 +111,13 @@ impl Client {
             st.field().push(version)?;
 
             st.field().push_struct(|props| {
-                props.field().push(6)?;
+                props.field().push(PROPS.len() as u32)?;
 
-                props.field().push_unsized("node.description")?;
-                props.field().push_unsized("livemix")?;
+                for &(key, value) in PROPS {
+                    props.field().push_unsized(key)?;
+                    props.field().push_unsized(value)?;
+                }
 
-                props.field().push_unsized("node.name")?;
-                props.field().push_unsized("livemix")?;
-
-                props.field().push_unsized("media.class")?;
-                props.field().push_unsized("Audio/Duplex")?;
-
-                props.field().push_unsized("media.type")?;
-                props.field().push_unsized("Audio")?;
-
-                props.field().push_unsized("media.category")?;
-                props.field().push_unsized("Duplex")?;
-
-                props.field().push_unsized("media.role")?;
-                props.field().push_unsized("DSP")?;
                 Ok(())
             })?;
 
@@ -135,17 +132,19 @@ impl Client {
 
     /// Update client properties.
     pub fn client_update_properties(&mut self) -> Result<()> {
+        const PROPS: &[(&str, &str)] = &[("application.name", "livemix"), ("node.name", "livemix")];
+
         let mut pod = Pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field().push_struct(|st| {
-                st.field().push(2)?;
+            st.field().push_struct(|props| {
+                props.field().push(PROPS.len() as u32)?;
 
-                st.field().push_unsized("application.name")?;
-                st.field().push_unsized("livemix")?;
+                for &(key, value) in PROPS {
+                    props.field().push_unsized(key)?;
+                    props.field().push_unsized(value)?;
+                }
 
-                st.field().push_unsized("node.name")?;
-                st.field().push_unsized("livemix")?;
                 Ok(())
             })
         })?;
