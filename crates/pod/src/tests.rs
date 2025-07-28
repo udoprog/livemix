@@ -287,9 +287,9 @@ fn test_decode_complex_struct() -> Result<(), Error> {
         st.field().push(2i32)?;
 
         st.field().push_struct(|inner| {
-            inner.field().push(c"hello world")?;
+            inner.field().push_unsized(c"hello world")?;
             inner.field().push(Rectangle::new(800, 600))?;
-            inner.field().push(c"goodbye world")?;
+            inner.field().push_unsized(c"goodbye world")?;
             Ok(())
         })
     })?;

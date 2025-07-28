@@ -380,24 +380,26 @@ impl Encode for Fd {
 /// ```
 /// use pod::Pod;
 ///
+/// let value = 42u32;
+///
 /// let mut pod = Pod::array();
-/// pod.as_mut().push(&b"hello world"[..])?;
-/// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
+/// pod.as_mut().push(&value)?;
+/// assert_eq!(pod.as_ref().next::<u32>()?, value);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<T> Encode for &T
 where
-    T: ?Sized + EncodeUnsized,
+    T: ?Sized + Encode,
 {
     const TYPE: Type = T::TYPE;
 
     #[inline]
     fn size(&self) -> usize {
-        EncodeUnsized::size(*self)
+        Encode::size(*self)
     }
 
     #[inline]
     fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
-        <T as EncodeUnsized>::write_content(self, writer)
+        <T as Encode>::write_content(self, writer)
     }
 }
