@@ -11,8 +11,8 @@ use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, Buf, ChoiceType, Decode, DecodeUnsized, EncodeUnsized, Error, RawId, Reader, Type,
-    TypedPod, Visitor, Writer,
+    ArrayBuf, AsReader, ChoiceType, Decode, DecodeUnsized, EncodeUnsized, Error, RawId, Reader,
+    Type, TypedPod, Visitor, Writer,
 };
 
 /// An unlimited pod.
@@ -173,7 +173,7 @@ where
     }
 }
 
-impl Pod<Buf<u64>> {
+impl Pod<ArrayBuf<u64>> {
     /// Construct a new [`Pod`] with a 128 word-sized array buffer.
     ///
     /// # Examples
@@ -188,7 +188,7 @@ impl Pod<Buf<u64>> {
     /// ```
     #[inline]
     pub const fn array() -> Self {
-        Self::new(Buf::new())
+        Self::new(ArrayBuf::new())
     }
 
     /// Clear the current builder.
@@ -219,12 +219,12 @@ impl<B> Pod<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Pod};
+    /// use pod::{ArrayBuf, Pod};
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// _ = Pod::new(&mut buf);
     ///
-    /// _ = Pod::new(Buf::<u64, 16>::new());
+    /// _ = Pod::new(ArrayBuf::<u64, 16>::new());
     /// ```
     #[inline]
     pub const fn new(buf: B) -> Self {

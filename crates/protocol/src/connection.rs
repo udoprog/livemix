@@ -10,15 +10,13 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
-use pod::AsReader;
-use pod::Pod;
-use pod::Reader;
+use pod::{AsReader, DynamicBuf, Pod, Reader};
 use tracing::Level;
 
+use crate::Error;
 use crate::error::ErrorKind;
 use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
-use crate::{DynamicBuf, Error};
 
 const ENVIRONS: &[&str] = &["PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR", "USERPROFILE"];
 const SOCKET: &str = "pipewire-0";

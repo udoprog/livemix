@@ -32,9 +32,9 @@ impl fmt::Display for CapacityError {
 /// # Examples
 ///
 /// ```
-/// use pod::Buf;
+/// use pod::ArrayBuf;
 ///
-/// let mut buf = Buf::<u32, 16>::from_slice(&[1, 2, 3, 4]);
+/// let mut buf = ArrayBuf::<u32, 16>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.len(), 4);
 /// buf.push(5)?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
@@ -47,28 +47,28 @@ impl fmt::Display for CapacityError {
 /// aligned will errors:
 ///
 /// ```compile_fail
-/// use pod::{Buf, Reader};
+/// use pod::{ArrayBuf, Reader};
 ///
-/// let mut buf = Buf::<u64, 16>::from_slice(&[1, 2, 3, 4]);
+/// let mut buf = ArrayBuf::<u64, 16>::from_slice(&[1, 2, 3, 4]);
 /// // This must fail because it's not possible to read half of a word out of the array.
 /// buf.read::<u32>()?;
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[repr(C, align(8))]
-pub struct Buf<T = u64, const N: usize = DEFAULT_SIZE> {
+pub struct ArrayBuf<T = u64, const N: usize = DEFAULT_SIZE> {
     data: [MaybeUninit<T>; N],
     len: usize,
 }
 
-impl<T, const N: usize> Buf<T, N> {
+impl<T, const N: usize> ArrayBuf<T, N> {
     /// Construct a new array buffer with a default size.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let buf = Buf::<u64>::new();
+    /// let buf = ArrayBuf::<u64>::new();
     /// ```
     #[inline]
     pub const fn new() -> Self {
@@ -84,9 +84,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = Buf::<String>::new();
+    /// let mut buf = ArrayBuf::<String>::new();
     /// buf.push("Hello".to_string())?;
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -113,7 +113,7 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     /// ```
     pub fn extend_from_slice(&mut self, slice: &[T]) -> Result<(), CapacityError>
     where
@@ -143,9 +143,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = Buf::<String>::new();
+    /// let mut buf = ArrayBuf::<String>::new();
     /// buf.push(String::from("Hello"))?;
     /// buf.push(String::from("World"))?;
     ///
@@ -166,22 +166,22 @@ impl<T, const N: usize> Buf<T, N> {
     }
 }
 
-impl<T> Default for Buf<T> {
+impl<T> Default for ArrayBuf<T> {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T, const N: usize> Buf<T, N> {
+impl<T, const N: usize> ArrayBuf<T, N> {
     /// Construct from an initialized array.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let buf = Buf::<u64, 3>::from_array([1, 2, 3]);
+    /// let buf = ArrayBuf::<u64, 3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
@@ -207,17 +207,17 @@ impl<T, const N: usize> Buf<T, N> {
     /// Panics if the length of the slice exceeds the buffer size.
     ///
     /// ```should_panic
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// Buf::<u64, 16>::from_slice(&[0; 32]);
+    /// ArrayBuf::<u64, 16>::from_slice(&[0; 32]);
     /// ```
     ///
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let buf = Buf::<u64, 16>::from_slice(&[1, 2, 3]);
+    /// let buf = ArrayBuf::<u64, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 16);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
@@ -250,9 +250,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert!(buf.is_empty());
     /// assert_eq!(buf.len(), 0);
     /// buf.push(42)?;
@@ -269,9 +269,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert!(buf.is_empty());
     /// assert_eq!(buf.len(), 0);
     /// buf.push(42)?;
@@ -288,9 +288,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Buf;
+    /// use pod::ArrayBuf;
     ///
-    /// let buf = Buf::<u32, 16>::from_slice(&[1, 2, 3]);
+    /// let buf = ArrayBuf::<u32, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 16);
     /// # Ok::<_, pod::Error>(())
@@ -307,15 +307,15 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Reader};
+    /// use pod::{ArrayBuf, Reader};
     ///
-    /// let mut buf = Buf::<u64, 3>::from_array([1, 2, 3]);
+    /// let mut buf = ArrayBuf::<u64, 3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// buf.clear();
     /// assert!(buf.as_slice().is_empty());
     ///
-    /// let mut buf = Buf::<String, 2>::from_array([String::from("Hello"), String::from("World")]);
+    /// let mut buf = ArrayBuf::<String, 2>::from_array([String::from("Hello"), String::from("World")]);
     /// assert_eq!(buf.len(), 2);
     /// assert_eq!(buf.as_slice(), &[String::from("Hello"), String::from("World")]);
     /// buf.clear();
@@ -342,9 +342,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Writer};
+    /// use pod::{ArrayBuf, Writer};
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert_eq!(buf.as_bytes().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -368,9 +368,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Writer};
+    /// use pod::{ArrayBuf, Writer};
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -388,9 +388,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Writer};
+    /// use pod::{ArrayBuf, Writer};
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -420,20 +420,20 @@ impl<T, const N: usize> Buf<T, N> {
     }
 }
 
-/// Debug implementation for `Buf`.
+/// Debug implementation for `ArrayBuf`.
 ///
 /// # Examples
 ///
 /// ```
-/// use pod::{Buf, Reader};
+/// use pod::{ArrayBuf, Reader};
 ///
-/// let mut buf = Buf::from_array([1, 2, 3]);
+/// let mut buf = ArrayBuf::from_array([1, 2, 3]);
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
 /// buf.pop();
 /// assert_eq!(format!("{buf:?}"), "[1, 2]");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<T, const N: usize> fmt::Debug for Buf<T, N>
+impl<T, const N: usize> fmt::Debug for ArrayBuf<T, N>
 where
     T: fmt::Debug,
 {
@@ -448,20 +448,20 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Buf;
+/// use pod::ArrayBuf;
 ///
-/// let buf1 = Buf::from_array([1, 2, 3]);
-/// let buf2 = Buf::from_array([1, 2, 3, 4]);
+/// let buf1 = ArrayBuf::from_array([1, 2, 3]);
+/// let buf2 = ArrayBuf::from_array([1, 2, 3, 4]);
 ///
 /// assert_ne!(buf1, buf2);
 /// assert_eq!(buf1, buf1);
 /// ```
-impl<T, U, const A: usize, const B: usize> PartialEq<Buf<U, B>> for Buf<T, A>
+impl<T, U, const A: usize, const B: usize> PartialEq<ArrayBuf<U, B>> for ArrayBuf<T, A>
 where
     T: PartialEq<U>,
 {
     #[inline]
-    fn eq(&self, other: &Buf<U, B>) -> bool {
+    fn eq(&self, other: &ArrayBuf<U, B>) -> bool {
         self.as_slice() == other.as_slice()
     }
 }
@@ -471,16 +471,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Buf;
+/// use pod::ArrayBuf;
 ///
-/// let array1 = Buf::from_array([1, 2, 3]);
+/// let array1 = ArrayBuf::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, *slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<[U]> for Buf<T, N>
+impl<T, U, const N: usize> PartialEq<[U]> for ArrayBuf<T, N>
 where
     T: PartialEq<U>,
 {
@@ -495,16 +495,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Buf;
+/// use pod::ArrayBuf;
 ///
-/// let array1 = Buf::from_array([1, 2, 3]);
+/// let array1 = ArrayBuf::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, *slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<[U; N]> for Buf<T, N>
+impl<T, U, const N: usize> PartialEq<[U; N]> for ArrayBuf<T, N>
 where
     T: PartialEq<U>,
 {
@@ -519,16 +519,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Buf;
+/// use pod::ArrayBuf;
 ///
-/// let slice1 = Buf::from_array([1, 2, 3]);
+/// let slice1 = ArrayBuf::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(slice1, *slice2);
 /// assert_eq!(slice1, slice1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<&[U; N]> for Buf<T, N>
+impl<T, U, const N: usize> PartialEq<&[U; N]> for ArrayBuf<T, N>
 where
     T: PartialEq<U>,
 {
@@ -543,16 +543,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Buf;
+/// use pod::ArrayBuf;
 ///
-/// let array1 = Buf::from_array([1, 2, 3]);
+/// let array1 = ArrayBuf::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(slice2, slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<&[U]> for Buf<T, N>
+impl<T, U, const N: usize> PartialEq<&[U]> for ArrayBuf<T, N>
 where
     T: PartialEq<U>,
 {
@@ -562,9 +562,9 @@ where
     }
 }
 
-impl<T, const N: usize> Eq for Buf<T, N> where T: Eq {}
+impl<T, const N: usize> Eq for ArrayBuf<T, N> where T: Eq {}
 
-impl<T, const N: usize> Drop for Buf<T, N> {
+impl<T, const N: usize> Drop for ArrayBuf<T, N> {
     fn drop(&mut self) {
         self.clear();
     }
@@ -576,12 +576,12 @@ pub struct Pos {
     len: usize,
 }
 
-impl<T, const N: usize> Writer<T> for Buf<T, N>
+impl<T, const N: usize> Writer<T> for ArrayBuf<T, N>
 where
     T: BytesInhabited,
 {
     type Mut<'this>
-        = &'this mut Buf<T, N>
+        = &'this mut ArrayBuf<T, N>
     where
         Self: 'this;
 
@@ -697,7 +697,7 @@ where
     }
 }
 
-impl<T, const N: usize> AsReader<T> for Buf<T, N>
+impl<T, const N: usize> AsReader<T> for ArrayBuf<T, N>
 where
     T: 'static,
 {

@@ -4,7 +4,7 @@
 //! [StackVec][crate::stack::StackVec] and [Vec].
 
 use alloc::vec::Vec;
-use pod::Buf;
+use pod::ArrayBuf;
 
 /// Trait used for collecting events.
 pub trait Events<T> {
@@ -21,20 +21,20 @@ pub trait Events<T> {
     fn push(&mut self, event: T) -> bool;
 }
 
-impl<T, const N: usize> Events<T> for Buf<T, N> {
+impl<T, const N: usize> Events<T> for ArrayBuf<T, N> {
     #[inline]
     fn is_empty(&self) -> bool {
-        Buf::is_empty(self)
+        ArrayBuf::is_empty(self)
     }
 
     #[inline]
     fn remaining_mut(&self) -> usize {
-        N.wrapping_sub(Buf::len(self))
+        N.wrapping_sub(ArrayBuf::len(self))
     }
 
     #[inline]
     fn push(&mut self, event: T) -> bool {
-        Buf::push(self, event).is_ok()
+        ArrayBuf::push(self, event).is_ok()
     }
 }
 

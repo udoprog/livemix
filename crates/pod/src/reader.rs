@@ -7,12 +7,12 @@ use crate::utils::{AlignableWith, BytesInhabited, UninitAlign};
 use crate::{AsReader, Error, Type, Visitor};
 
 mod sealed {
-    use crate::{Buf, Reader};
+    use crate::{ArrayBuf, Reader};
 
     pub trait Sealed<T> {}
 
     impl<T> Sealed<T> for &[T] {}
-    impl<T, const N: usize> Sealed<T> for Buf<T, N> {}
+    impl<T, const N: usize> Sealed<T> for ArrayBuf<T, N> {}
     impl<'de, R, T> Sealed<T> for &mut R where R: ?Sized + Reader<'de, T> {}
 }
 
@@ -46,9 +46,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Reader};
+    /// use pod::{ArrayBuf, Reader};
     ///
-    /// let array = Buf::from_array([1u32, 2, 3]);
+    /// let array = ArrayBuf::from_array([1u32, 2, 3]);
     /// let mut buf = array.as_slice();
     ///
     /// assert_eq!(buf.remaining(), 12);
@@ -86,9 +86,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Writer};
+    /// use pod::{ArrayBuf, Writer};
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert_eq!(buf.as_bytes().len(), 0);
     ///
     /// buf.write(42u64)?;
@@ -106,9 +106,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Buf, Writer};
+    /// use pod::{ArrayBuf, Writer};
     ///
-    /// let mut buf = Buf::<u64>::new();
+    /// let mut buf = ArrayBuf::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
     /// buf.write(42u64)?;

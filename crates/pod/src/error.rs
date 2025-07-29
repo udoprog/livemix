@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::Type;
-use crate::array::CapacityError;
+use crate::array_buf::CapacityError;
 
 #[non_exhaustive]
 pub struct Error {

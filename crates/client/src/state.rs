@@ -9,12 +9,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
-use pod::{Fd, Object, Pod, Struct};
+use pod::{DynamicBuf, Fd, Object, Pod, Struct};
+use protocol::Connection;
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
 use protocol::types::Header;
-use protocol::{Connection, DynamicBuf};
 use protocol::{EventFd, id};
 use protocol::{consts, flags};
 use slab::Slab;
@@ -415,7 +415,7 @@ impl State {
                     break 'done;
                 }
 
-                let Some(pod) = recv.frame(&self.header) else {
+                let Some(pod) = frame(recv, &self.header) else {
                     break 'done;
                 };
 
@@ -1299,4 +1299,14 @@ impl State {
         tracing::info!(?st);
         Ok(())
     }
+}
+
+/// Read a frame from the current buffer.
+fn frame<'buf>(buf: &'buf mut DynamicBuf<u64>, header: &Header) -> Option<Pod<&'buf [u64]>> {
+    let size = header.size() as usize;
+    debug_assert!(
+        size % <DynamicBuf<u64>>::WORD_SIZE == 0,
+        "Size of frame is not aligned"
+    );
+    Some(Pod::new(buf.read_words(size)?))
 }

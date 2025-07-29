@@ -1,5 +1,5 @@
 use crate::error::ErrorKind;
-use crate::{Buf, Error, Pod, PodKind, Reader};
+use crate::{ArrayBuf, Error, Pod, PodKind, Reader};
 
 /// Helper trait to more easily encode values into a [`Pod`].
 ///
@@ -47,7 +47,7 @@ where
 {
     #[inline]
     fn decode_from(mut pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error> {
-        let mut values = Buf::<T, N>::new();
+        let mut values = ArrayBuf::<T, N>::new();
 
         for _ in 0..N {
             values.push(T::decode_from(pod.as_read_mut())?)?;

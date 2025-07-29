@@ -3,8 +3,9 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use pod::DynamicBuf;
 use protocol::poll::{ChangeInterest, Interest, PollEvent};
-use protocol::{Connection, DynamicBuf, Poll, TimerFd};
+use protocol::{Connection, Poll, TimerFd};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
 
     timer.set_interval(Duration::from_secs(1))?;
 
-    let mut events = pod::Buf::<PollEvent, 4>::new();
+    let mut events = pod::ArrayBuf::<PollEvent, 4>::new();
 
     loop {
         state.run(&mut recv)?;

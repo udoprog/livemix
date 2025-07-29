@@ -5,35 +5,28 @@ use core::ptr;
 use core::slice;
 
 use alloc::alloc;
-use pod::Pod;
-use pod::utils::{Align, AlignableWith, UninitAlign};
 
-use crate::types::Header;
+use crate::utils::{Align, AlignableWith, UninitAlign};
 
 pub(crate) const ALLOC: usize = 1024;
 
 /// A buffer which can be used in combination with a channel.
-pub struct DynamicBuf<A = u64>
-where
-    A: Copy,
-{
-    data: ptr::NonNull<A>,
+pub struct DynamicBuf<T = u64> {
+    data: ptr::NonNull<T>,
     cap: usize,
     read: usize,
     write: usize,
 }
 
-impl<A> DynamicBuf<A>
-where
-    A: Copy,
-{
-    pub(crate) const WORD_SIZE: usize = mem::size_of::<A>();
+impl<T> DynamicBuf<T> {
+    /// The size of a word in bytes.
+    pub const WORD_SIZE: usize = mem::size_of::<T>();
 
     /// Construct a new empty buffer.
     #[inline]
     pub fn new() -> Self {
         DynamicBuf {
-            data: ptr::NonNull::<A>::dangling().cast(),
+            data: ptr::NonNull::<T>::dangling().cast(),
             cap: 0,
             read: 0,
             write: 0,
@@ -54,13 +47,13 @@ where
 
     /// Test if the buffer is empty.
     #[inline]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.read == self.write
     }
 
     /// Get the slice available for reading.
     #[inline]
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         // SAFETY: The buffer is guaranteed to initialized due to invariants.
         unsafe {
             slice::from_raw_parts(
@@ -80,7 +73,7 @@ where
     /// Since this might cause the buffer to be unaligned, it is the caller's
     /// responsibility to ensure that writes (if any) in the future are aligned.
     #[inline]
-    pub(crate) unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
+    pub unsafe fn as_bytes_mut(&mut self) -> &mut [u8] {
         self.reserve(self.write + ALLOC);
 
         unsafe {
@@ -93,7 +86,7 @@ where
 
     /// Extend the buffer with a slice of words.
     #[inline]
-    pub(crate) fn extend_from_words(&mut self, words: &[A]) {
+    pub fn extend_from_words(&mut self, words: &[T]) {
         debug_assert!(
             self.write % Self::WORD_SIZE == 0,
             "Write position in buffer is not aligned for T"
@@ -108,7 +101,7 @@ where
                 .as_ptr()
                 .cast::<u8>()
                 .add(self.write)
-                .cast::<A>()
+                .cast::<T>()
                 .copy_from_nonoverlapping(words.as_ptr(), words.len());
 
             self.advance_written(n);
@@ -117,18 +110,18 @@ where
 
     /// Write `T` to the buffer.
     #[inline]
-    pub(crate) fn write<T>(&mut self, value: T)
+    pub fn write<U>(&mut self, value: U)
     where
-        T: AlignableWith<A>,
+        U: AlignableWith<T>,
     {
         let value = Align(value);
 
         debug_assert!(
-            self.write % mem::size_of::<A>() == 0,
+            self.write % mem::size_of::<T>() == 0,
             "Write position in buffer is not aligned for T"
         );
 
-        self.reserve(self.write + mem::size_of::<T>());
+        self.reserve(self.write + mem::size_of::<U>());
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
@@ -136,24 +129,24 @@ where
                 .as_ptr()
                 .cast::<u8>()
                 .add(self.write)
-                .cast::<A>()
-                .copy_from_nonoverlapping(value.as_ptr::<A>(), value.size::<A>());
+                .cast::<T>()
+                .copy_from_nonoverlapping(value.as_ptr::<T>(), value.size::<T>());
 
-            self.advance_written(mem::size_of::<T>());
+            self.advance_written(mem::size_of::<U>());
         }
     }
 
     /// Read `T` out of the buffer.
     #[inline]
-    pub fn read<T>(&mut self) -> Option<T>
+    pub fn read<U>(&mut self) -> Option<U>
     where
-        T: AlignableWith<A>,
+        U: AlignableWith<T>,
     {
         if self.remaining() < mem::size_of::<T>() {
             return None;
         }
 
-        let mut value = UninitAlign::<T>::uninit();
+        let mut value = UninitAlign::<U>::uninit();
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
@@ -161,17 +154,17 @@ where
                 .as_ptr()
                 .cast::<u8>()
                 .add(self.read)
-                .cast::<A>()
-                .copy_to_nonoverlapping(value.as_mut_ptr::<A>().cast::<A>(), value.size::<A>());
+                .cast::<T>()
+                .copy_to_nonoverlapping(value.as_mut_ptr::<T>().cast::<T>(), value.size::<T>());
 
-            self.advance_read(mem::size_of::<T>());
+            self.advance_read(mem::size_of::<U>());
             Some(value.assume_init())
         }
     }
 
     /// Read a slice of words from the buffer.
     #[inline]
-    pub(crate) fn read_words(&mut self, size: usize) -> Option<&[A]> {
+    pub fn read_words(&mut self, size: usize) -> Option<&[T]> {
         if size > self.remaining() {
             return None;
         }
@@ -181,7 +174,7 @@ where
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             let value = slice::from_raw_parts(
-                self.data.as_ptr().cast::<u8>().add(self.read).cast::<A>(),
+                self.data.as_ptr().cast::<u8>().add(self.read).cast::<T>(),
                 n,
             );
             self.advance_read(size);
@@ -200,7 +193,7 @@ where
     /// `self.read..self.read + n` is a valid memory region in the buffer that
     /// has previously been written to.
     #[inline]
-    pub(crate) unsafe fn advance_read(&mut self, n: usize) {
+    pub unsafe fn advance_read(&mut self, n: usize) {
         self.read = self.read + n;
 
         if self.read == self.write {
@@ -227,7 +220,7 @@ where
     /// `self.write..self.write + n` is a valid memory region in the buffer that
     /// has previously been written to.
     #[inline]
-    pub(crate) unsafe fn advance_written(&mut self, n: usize) {
+    pub unsafe fn advance_written(&mut self, n: usize) {
         self.write = self.write + n;
 
         debug_assert!(
@@ -283,19 +276,7 @@ where
     }
 }
 
-impl DynamicBuf {
-    /// Read a frame from the current buffer.
-    pub fn frame(&mut self, header: &Header) -> Option<Pod<&[u64]>> {
-        let size = header.size() as usize;
-        debug_assert!(size % Self::WORD_SIZE == 0, "Size of frame is not aligned");
-        Some(Pod::new(self.read_words(size)?))
-    }
-}
-
-impl<A> Drop for DynamicBuf<A>
-where
-    A: Copy,
-{
+impl<A> Drop for DynamicBuf<A> {
     #[inline]
     fn drop(&mut self) {
         if self.cap > 0 {
@@ -313,7 +294,10 @@ where
     }
 }
 
-impl fmt::Debug for DynamicBuf {
+impl<T> fmt::Debug for DynamicBuf<T>
+where
+    T: fmt::Debug,
+{
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_bytes()).finish()

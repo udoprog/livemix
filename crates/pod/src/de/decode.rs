@@ -10,12 +10,12 @@ use alloc::string::String;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-#[cfg(feature = "alloc")]
-use crate::{Bitmap, DecodeUnsized, OwnedBitmap};
 use crate::{
-    Buf, Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type, error::ErrorKind,
+    ArrayBuf, Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type, error::ErrorKind,
     utils::WordBytes,
 };
+#[cfg(feature = "alloc")]
+use crate::{Bitmap, DecodeUnsized, OwnedBitmap};
 
 /// A trait for types that can be decoded.
 pub trait Decode<'de>
@@ -367,7 +367,7 @@ impl<'de, const N: usize> Decode<'de> for [u8; N] {
 
     #[inline]
     fn read_content(reader: impl Reader<'de, u64>, _: usize) -> Result<Self, Error> {
-        let mut buf = Buf::<u8, N>::new();
+        let mut buf = ArrayBuf::<u8, N>::new();
 
         <[u8]>::read_content(reader, N, |data: &[u8]| buf.extend_from_slice(data))??;
 

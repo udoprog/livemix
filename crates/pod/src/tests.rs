@@ -3,9 +3,12 @@ use core::ffi::CStr;
 use alloc::format;
 use alloc::string::String;
 
+use crate::array_buf::CapacityError;
 use crate::error::ErrorKind;
 use crate::utils::{Align, AlignableWith};
-use crate::{AsReader, Bitmap, Buf, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer};
+use crate::{
+    ArrayBuf, AsReader, Bitmap, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type, Writer,
+};
 use crate::{ChoiceType, Reader};
 
 pub(crate) fn read<T, U>(value: T) -> U
@@ -42,7 +45,7 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 
 #[test]
 fn test_push_decode_u64() -> Result<(), Error> {
-    let mut buf = Buf::<u64>::new();
+    let mut buf = ArrayBuf::<u64>::new();
     buf.write(0x1234567890abcdefu64)?;
 
     let mut buf = buf.as_slice();
@@ -67,12 +70,12 @@ fn test_push_decode_u64() -> Result<(), Error> {
 
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
-    let mut pod = Pod::new(Buf::<_, 1>::new());
+    let mut pod = Pod::new(ArrayBuf::<_, 1>::new());
     assert!(pod.as_mut().push_none().is_ok());
 
     assert_eq!(
         pod.as_mut().push_none().unwrap_err().kind(),
-        ErrorKind::CapacityError
+        ErrorKind::CapacityError(CapacityError)
     );
     Ok(())
 }
@@ -96,7 +99,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let buf = Buf::<u64, 3>::from_array([1, 2, 3]);
+    let buf = ArrayBuf::<u64, 3>::from_array([1, 2, 3]);
     let mut buf = buf.as_slice();
 
     assert_eq!(buf.read::<u64>()?, 1);
@@ -476,7 +479,7 @@ fn test_format_buggy() -> Result<(), Error> {
 
 #[test]
 fn test_array_drop() -> Result<(), Error> {
-    let mut array = Buf::<String>::new();
+    let mut array = ArrayBuf::<String>::new();
     array.push(String::from("foo"))?;
     array.push(String::from("bar"))?;
     array.push(String::from("baz"))?;
