@@ -26,7 +26,7 @@ pub(crate) struct File {
 }
 
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
-pub(crate) struct Region<T> {
+pub struct Region<T> {
     file: usize,
     pub size: usize,
     pub ptr: NonNull<T>,

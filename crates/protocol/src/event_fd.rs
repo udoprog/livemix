@@ -3,6 +3,7 @@ use std::mem;
 use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 
 /// Event file descriptor.
+#[derive(Debug)]
 pub struct EventFd {
     fd: OwnedFd,
 }
@@ -25,7 +26,7 @@ impl EventFd {
     }
 
     /// Write a value to the event.
-    pub fn write(&self, n: u64) -> io::Result<()> {
+    pub fn write(&self, n: u64) -> io::Result<bool> {
         // SAFETY: We're just using c-apis as intended.
         unsafe {
             let n = libc::write(self.fd.as_raw_fd(), &n as *const _ as *const _, 8);
@@ -34,11 +35,7 @@ impl EventFd {
                 return Err(io::Error::last_os_error());
             }
 
-            if n != 8 {
-                return Err(io::Error::new(io::ErrorKind::Other, "expected 8 bytes"));
-            }
-
-            Ok(())
+            Ok(n == 8)
         }
     }
 
@@ -71,5 +68,13 @@ impl AsRawFd for EventFd {
     #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fd.as_raw_fd()
+    }
+}
+
+/// Coerce an `OwnedFd` into an `EventFd`.
+impl From<OwnedFd> for EventFd {
+    #[inline]
+    fn from(fd: OwnedFd) -> Self {
+        Self { fd }
     }
 }

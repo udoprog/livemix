@@ -22,3 +22,8 @@ use self::buffer::Buffers;
 
 mod ports;
 use self::ports::{Port, Ports};
+
+mod activation;
+pub use self::activation::Activation;
+
+mod ptr;

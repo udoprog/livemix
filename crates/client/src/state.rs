@@ -10,16 +10,17 @@ use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
 use pod::{Fd, Object, Pod, Struct};
-use protocol::id;
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
 use protocol::types::Header;
 use protocol::{Connection, DynamicBuf};
+use protocol::{EventFd, id};
 use protocol::{consts, flags};
 use slab::Slab;
 use tracing::Level;
 
+use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
 use crate::{Buffers, Client, Memory, Ports, Region, ffi};
 
@@ -64,13 +65,6 @@ struct RegistryState {
 }
 
 #[derive(Debug)]
-struct Activation {
-    #[allow(unused)]
-    fd: OwnedFd,
-    region: Region<ffi::NodeActivation>,
-}
-
-#[derive(Debug)]
 #[allow(unused)]
 struct ClientNodeState {
     id: u32,
@@ -78,7 +72,8 @@ struct ClientNodeState {
     write_token: Token,
     write_fd: Option<OwnedFd>,
     read_token: Token,
-    activation: Option<Activation>,
+    activation: Slab<Activation>,
+    peer_to_activation: BTreeMap<u32, usize>,
     params: BTreeMap<id::Param, Object<Box<[u64]>>>,
     ports: Ports,
     io_clock: Option<Region<ffi::IoClock>>,
@@ -142,7 +137,8 @@ impl ClientNodeState {
             read_fd: None,
             write_token,
             read_token,
-            activation: None,
+            activation: Slab::new(),
+            peer_to_activation: BTreeMap::new(),
             params,
             io_control: None,
             io_clock: None,
@@ -445,6 +441,10 @@ impl State {
                 if let Some(_region) = &port.io_buffers {
                     // std::dbg!(port.id(), unsafe { region.read() });
                 }
+            }
+
+            for (_, activation) in &client.activation {
+                std::dbg!(crate::ptr::volatile!(activation.region, signal_time).read());
             }
         }
 
@@ -1018,14 +1018,17 @@ impl State {
         let object_type = id::CommandType::from_id(obj.object_type());
         let object_id = id::NodeCommand::from_id(obj.object_id());
 
-        if let Some(activation) = &mut node.activation {
-            unsafe {
-                let activation = activation.region.ptr.cast::<ffi::NodeActivation>().read();
-                tracing::warn!(?activation);
+        match object_id {
+            id::NodeCommand::START => {
+                for (_, activation) in &node.activation {
+                    activation.signal()?;
+                }
+            }
+            _ => {
+                tracing::info!(?object_type, ?object_id, ?pod);
             }
         }
 
-        tracing::info!(?object_type, ?object_id, ?pod);
         Ok(())
     }
 
@@ -1229,7 +1232,7 @@ impl State {
     fn client_node_set_activation(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
         let mut st = pod.next_struct()?;
 
-        let _node_id = st.field()?.next::<i32>()?;
+        let peer_id = st.field()?.next::<u32>()?;
         let fd = self.take_fd(st.field()?.next::<Fd>()?)?;
         let mem_id = st.field()?.next::<i32>()?;
         let offset = st.field()?.next::<i32>()? as isize;
@@ -1239,22 +1242,22 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let (Some(fd), Ok(mem_id)) = (fd, u32::try_from(mem_id)) else {
-            if let Some(a) = node.activation.take() {
+        if let Some(index) = node.peer_to_activation.remove(&peer_id) {
+            if let Some(a) = node.activation.try_remove(index) {
                 self.memory.free(a.region);
             }
+        }
 
+        let (Some(fd), Ok(mem_id)) = (fd, u32::try_from(mem_id)) else {
             return Ok(());
         };
 
         let region = self.memory.map(mem_id, offset, size)?;
 
-        assert_eq!(region.size, core::mem::size_of::<ffi::NodeActivation>());
-
-        if let Some(a) = node.activation.replace(Activation { fd, region }) {
-            self.memory.free(a.region);
-        }
-
+        let index = node
+            .activation
+            .insert(Activation::new(peer_id, EventFd::from(fd), region));
+        node.peer_to_activation.insert(peer_id, index);
         Ok(())
     }
 
