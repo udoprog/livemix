@@ -31,6 +31,9 @@ pub use self::poll::Poll;
 mod event_fd;
 pub use self::event_fd::EventFd;
 
+mod timer_fd;
+pub use self::timer_fd::TimerFd;
+
 pub mod consts;
 pub mod op;
 

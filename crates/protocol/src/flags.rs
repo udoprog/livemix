@@ -259,6 +259,23 @@ pod::macros::flags! {
         /// The rate of the clock is only approximate.
         NO_RATE = 1 << 3;
     }
+
+    /// Describes `SPA_STATUS_*`.
+    #[examples = [NEED_DATA]]
+    #[not_set = [HAVE_DATA]]
+    #[module = protocol::flags]
+    pub struct Status(u32) {
+        /// Equivalent of `SPA_STATUS_NEED_OK`.
+        NONE;
+        /// Equivalent of `SPA_STATUS_NEED_DATA`.
+        NEED_DATA = 1 << 0;
+        /// Equivalent of `SPA_STATUS_HAVE_DATA`.
+        HAVE_DATA = 1 << 1;
+        /// Equivalent of `SPA_STATUS_STOPPED`.
+        STOPPED = 1 << 2;
+        /// Equivalent of `SPA_STATUS_DRAINED`.
+        DRAINED = 1 << 3;
+    }
 }
 
 impl Param {

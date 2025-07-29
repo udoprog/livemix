@@ -2,6 +2,9 @@ use core::ffi::CStr;
 use core::fmt;
 use core::mem;
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 use crate::EncodeUnsized;
 use crate::bstr::BStr;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
@@ -15,16 +18,16 @@ use crate::{
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
 pub struct TypedPod<B> {
+    buf: B,
     size: usize,
     ty: Type,
-    buf: B,
 }
 
 impl<B> TypedPod<B> {
     /// Construct a new [`TypedPod`] arround the specified buffer `B`.
     #[inline]
-    pub(crate) const fn new(size: usize, ty: Type, buf: B) -> Self {
-        TypedPod { size, ty, buf }
+    pub(crate) const fn new(buf: B, size: usize, ty: Type) -> Self {
+        TypedPod { buf, size, ty }
     }
 
     /// Get the type of the pod.
@@ -249,7 +252,7 @@ where
     pub fn next_option(self) -> Result<Option<TypedPod<B>>, Error> {
         match self.ty {
             Type::NONE => Ok(None),
-            _ => Ok(Some(TypedPod::new(self.size, self.ty, self.buf))),
+            _ => Ok(Some(TypedPod::new(self.buf, self.size, self.ty))),
         }
     }
 
@@ -464,7 +467,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_pod(|pod| {
+    /// pod.as_mut().push_pod(|pod| {
     ///     pod.as_mut().push_struct(|st| {
     ///         st.field().push(1i32)?;
     ///         st.field().push(2i32)?;
@@ -498,11 +501,35 @@ impl<B> TypedPod<B>
 where
     B: AsReader<u64>,
 {
+    /// Coerce any pod into an owned pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push(10i32)?;
+    ///
+    /// let pod = pod.as_ref().into_typed()?.to_owned();
+    ///
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[cfg(feature = "alloc")]
+    pub fn to_owned(&self) -> TypedPod<Box<[u64]>> {
+        TypedPod {
+            buf: Box::from(self.buf.as_reader().as_slice()),
+            size: self.size,
+            ty: self.ty,
+        }
+    }
+
     /// Convert the [`TypedPod`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
     pub fn as_ref(&self) -> TypedPod<B::AsReader<'_>> {
-        TypedPod::new(self.size, self.ty, self.buf.as_reader())
+        TypedPod::new(self.buf.as_reader(), self.size, self.ty)
     }
 }
 
@@ -578,15 +605,16 @@ where
         };
 
         writer.write([size, self.ty.into_u32()])?;
-        writer.write_words(self.buf.as_reader().as_slice())
+        writer.write_words(self.buf.as_reader().as_slice())?;
+        Ok(())
     }
 }
 
 crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsReader<u64>);
 
-impl<'de, B> fmt::Debug for TypedPod<B>
+impl<B> fmt::Debug for TypedPod<B>
 where
-    B: Reader<'de, u64>,
+    B: AsReader<u64>,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

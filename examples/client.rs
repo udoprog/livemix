@@ -1,13 +1,15 @@
 use std::mem;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use protocol::poll::{ChangeInterest, Interest, PollEvent, Token};
-use protocol::{Connection, DynamicBuf, EventFd, Poll};
+use protocol::{Connection, DynamicBuf, EventFd, Poll, TimerFd};
 
-const CONNECTION: Token = Token::new(100);
-const EVENT: Token = Token::new(200);
+const CONNECTION: Token = Token::new(0);
+const EVENT: Token = Token::new(1);
+const TIMER: Token = Token::new(2);
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt::try_init().map_err(anyhow::Error::msg)?;
@@ -15,13 +17,18 @@ fn main() -> Result<()> {
     let ev = Arc::new(EventFd::new(0)?);
     let mut poll = Poll::new()?;
     let mut c = Connection::open()?;
-
     c.set_nonblocking(true)?;
+
+    let timer = TimerFd::new()?;
+    timer.set_nonblocking(true)?;
 
     let mut recv = DynamicBuf::new();
 
     poll.add(c.as_raw_fd(), CONNECTION, c.interest())?;
     poll.add(ev.as_raw_fd(), EVENT, Interest::READ)?;
+    poll.add(timer.as_raw_fd(), TIMER, Interest::READ)?;
+
+    timer.set_interval(Duration::from_secs(1))?;
 
     let mut events = pod::Buf::<PollEvent, 4>::new();
     let mut state = client::State::new(c);
@@ -48,6 +55,8 @@ fn main() -> Result<()> {
         while let Some(e) = events.pop() {
             match e.token {
                 CONNECTION => {
+                    tracing::trace!(?e.interest, "connection");
+
                     if e.interest.is_read() {
                         let n_fds = state
                             .connection_mut()
@@ -72,7 +81,16 @@ fn main() -> Result<()> {
                         println!("Event: {value}");
                     }
                 }
+                TIMER => {
+                    if let Some(value) = timer.read()?
+                        && value > 0
+                    {
+                        state.tick()?;
+                    }
+                }
                 token => {
+                    tracing::warn!(?e.interest, ?token, "client");
+
                     if e.interest.is_read() {
                         state.handle_read(token)?;
                     }

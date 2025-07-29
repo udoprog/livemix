@@ -74,7 +74,7 @@ impl Connection {
             socket,
             message_sequence: 0,
             outgoing: DynamicBuf::new(),
-            interest: Interest::READ,
+            interest: Interest::READ | Interest::HUP | Interest::ERROR,
             modified: ChangeInterest::Unchanged,
         })
     }

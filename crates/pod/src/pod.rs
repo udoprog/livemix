@@ -190,6 +190,27 @@ impl Pod<Buf<u64>> {
     pub const fn array() -> Self {
         Self::new(Buf::new())
     }
+
+    /// Clear the current builder.
+    ///
+    /// This will clear the buffer and reset the pod to an empty state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push(10i32)?;
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// pod.clear();
+    /// pod.as_mut().push(20i32)?;
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 20i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn clear(&mut self) {
+        self.buf.clear();
+    }
 }
 
 impl<B> Pod<B> {
@@ -602,7 +623,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_pod(|pod| {
+    /// pod.as_mut().push_pod(|pod| {
     ///     pod.as_mut().push_struct(|st| {
     ///         st.field().push(1i32)?;
     ///         st.field().push(2i32)?;
@@ -621,7 +642,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode_pod(
+    pub fn push_pod(
         mut self,
         f: impl FnOnce(&mut Pod<B>) -> Result<(), Error>,
     ) -> Result<(), Error> {
@@ -1056,7 +1077,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_pod(|pod| {
+    /// pod.as_mut().push_pod(|pod| {
     ///     pod.as_mut().push_struct(|st| {
     ///         st.field().push(1i32)?;
     ///         st.field().push(2i32)?;

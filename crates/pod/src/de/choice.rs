@@ -259,7 +259,7 @@ where
         }
 
         let tail = self.buf.split(self.child_size)?;
-        let pod = TypedPod::new(self.child_size, self.child_type, tail);
+        let pod = TypedPod::new(tail, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }

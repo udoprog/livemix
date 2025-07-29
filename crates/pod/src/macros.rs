@@ -188,11 +188,11 @@ macro_rules! __consts {
             #[example = $example:ident]
             #[module = $module:path]
             $ty_vis:vis struct $ty:ident($repr:ty) {
-                $default:ident
-                $(,
+                $default:ident;
+                $(
                     $(#[$($field_meta:meta)*])*
-                    $field:ident = $field_value:expr
-                )* $(,)?
+                    $field:ident = $field_value:expr;
+                )*
             }
         )*
     ) => {
@@ -339,6 +339,7 @@ macro_rules! __flags {
             #[not_set = [$($not_set:ident),* $(,)?]]
             #[module = $module:path]
             $vis:vis struct $ty:ident($repr:ty) {
+                $(#[doc = $none_doc:literal])*
                 $none:ident;
 
                 $(
@@ -357,6 +358,7 @@ macro_rules! __flags {
 
             impl $ty {
                 /// Empty flags.
+                $(#[doc = $none_doc])*
                 $vis const $none: Self = Self(0);
 
                 $(
@@ -571,6 +573,10 @@ macro_rules! __flags {
             impl core::fmt::Debug for $ty {
                 #[inline]
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    if self.0 == 0 {
+                        return write!(f, "{}({})", stringify!($ty), stringify!($none));
+                    }
+
                     write!(f, "{}(", stringify!($ty))?;
 
                     let mut first = true;

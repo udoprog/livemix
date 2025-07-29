@@ -145,11 +145,11 @@ crate::macros::decode_from_sized!(u32);
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10u32)?;
-/// assert_eq!(pod.as_ref().next::<usize>()?, 10u32);
+/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<usize>()?, 10u32);
+/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Decode<'de> for usize {

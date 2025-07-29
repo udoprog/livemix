@@ -1,3 +1,5 @@
+use core::fmt;
+use core::mem;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 
@@ -20,20 +22,40 @@ pub(crate) struct File {
     fd: OwnedFd,
     flags: flags::MemBlock,
     users: u32,
-    region: Option<Region>,
+    region: Option<Region<()>>,
 }
 
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
-#[derive(Debug)]
-pub(crate) struct Region {
+pub(crate) struct Region<T> {
     file: usize,
     pub size: usize,
-    pub ptr: NonNull<()>,
+    pub ptr: NonNull<T>,
 }
 
-impl Region {
+impl<T> Region<T> {
+    /// Read the region.
+    #[inline]
+    pub unsafe fn read(&self) -> T
+    where
+        T: Copy,
+    {
+        unsafe { self.ptr.as_ptr().read_volatile() }
+    }
+
+    /// Erase the type signature of the region.
+    #[inline]
+    pub fn erase(self) -> Region<()> {
+        Region {
+            file: self.file,
+            size: self.size,
+            ptr: self.ptr.cast(),
+        }
+    }
+}
+
+impl Region<()> {
     /// Slice up the region to a smaller size.
-    pub fn slice(&self, offset: isize, size: usize) -> Option<Region> {
+    pub fn slice<T>(&self, offset: isize, size: usize) -> Option<Region<T>> {
         let Ok(offset) = usize::try_from(offset) else {
             return None;
         };
@@ -42,15 +64,24 @@ impl Region {
             return None;
         }
 
+        if mem::size_of::<T>() > 0 {
+            assert_eq!(
+                mem::size_of::<T>(),
+                size,
+                "Size of `{}` must match",
+                core::any::type_name::<T>()
+            );
+        }
+
         Some(Region {
             file: self.file,
             size,
-            ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset)) },
+            ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset).cast()) },
         })
     }
 
     /// Add an offset to the region's pointer.
-    pub fn offset(&self, offset: usize) -> Option<Region> {
+    pub fn offset(&self, offset: usize) -> Option<Region<()>> {
         if offset == 0 {
             return Some(Self {
                 file: self.file,
@@ -66,6 +97,17 @@ impl Region {
             size,
             ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().wrapping_add(offset)) },
         })
+    }
+}
+
+impl<T> fmt::Debug for Region<T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Region")
+            .field("file", &self.file)
+            .field("size", &self.size)
+            .field("ptr", &self.ptr)
+            .finish()
     }
 }
 
@@ -180,19 +222,28 @@ impl Memory {
 
     /// Drop a mapped memory region.
     #[tracing::instrument(skip(self))]
-    pub(crate) fn free(&mut self, region: Region) {
+    pub(crate) fn free<T>(&mut self, region: Region<T>) {
         self.free_file(region.file);
     }
 
     /// Add a user to a memory region.
-    pub(crate) fn track(&mut self, region: &Region) {
+    pub(crate) fn track<T>(&mut self, region: &Region<T>) {
         if let Some(file) = self.files.get_mut(region.file) {
             file.users += 1;
         }
     }
 
     /// Map a memory to a region with accessible memory.
-    pub(crate) fn map(&mut self, mem_id: u32, offset: isize, size: usize) -> Result<Region> {
+    pub(crate) fn map<T>(&mut self, mem_id: u32, offset: isize, size: usize) -> Result<Region<T>> {
+        if mem::size_of::<T>() > 0 {
+            assert_eq!(
+                mem::size_of::<T>(),
+                size,
+                "Size of `{}` must match",
+                core::any::type_name::<T>()
+            );
+        }
+
         let Some(file) = self
             .map
             .get_mut(&mem_id)

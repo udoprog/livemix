@@ -140,7 +140,7 @@ where
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        let pod = TypedPod::new(size, ty, head);
+        let pod = TypedPod::new(head, size, ty);
 
         let Some(size_with_header) = pod.size_with_header() else {
             return Err(Error::new(ErrorKind::SizeOverflow));

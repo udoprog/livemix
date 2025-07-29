@@ -1,8 +1,8 @@
 mod linux;
 pub use self::linux::Poll;
 
-use core::mem;
 use core::ops::BitOrAssign;
+use core::{mem, ops::BitOr};
 use std::fmt;
 
 use libc::{POLLERR, POLLHUP, POLLIN, POLLOUT};
@@ -65,8 +65,10 @@ impl Interest {
     pub const READ: Self = Self::new().read();
     /// Write only interest.
     pub const WRITE: Self = Self::new().write();
-    /// Read / Write interest.
-    pub const READ_WRITE: Self = Self::new().read().write();
+    /// HUP interest.
+    pub const HUP: Self = Self::new().hup();
+    /// Error interest.
+    pub const ERROR: Self = Self::new().error();
 
     /// Construct a new ready set.
     const fn new() -> Self {
@@ -111,6 +113,18 @@ impl Interest {
         Self(self.0 | POLLOUT as u32)
     }
 
+    /// Make a ready set with hup interest.
+    #[inline]
+    const fn hup(self) -> Self {
+        Self(self.0 | POLLHUP as u32)
+    }
+
+    /// Make a ready set with error interest.
+    #[inline]
+    const fn error(self) -> Self {
+        Self(self.0 | POLLERR as u32)
+    }
+
     /// If events are read ready.
     #[inline]
     pub const fn is_read(&self) -> bool {
@@ -123,6 +137,18 @@ impl Interest {
         self.0 & (POLLOUT as u32) != 0
     }
 
+    /// If events are hup ready.
+    #[inline]
+    pub const fn is_hup(&self) -> bool {
+        self.0 & (POLLHUP as u32) != 0
+    }
+
+    /// If events is error ready.
+    #[inline]
+    pub const fn is_error(&self) -> bool {
+        self.0 & (POLLERR as u32) != 0
+    }
+
     /// As raw underlying u32.
     ///
     /// Note that since this is all based on constrained constant values we know
@@ -130,6 +156,15 @@ impl Interest {
     #[inline]
     const fn as_u32(&self) -> u32 {
         self.0
+    }
+}
+
+impl BitOr for Interest {
+    type Output = Self;
+
+    #[inline]
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
     }
 }
 

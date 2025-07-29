@@ -32,8 +32,20 @@ pod::macros::consts! {
     #[example = OUTPUT]
     #[module = protocol::consts]
     pub struct Direction(u32) {
-        UNKNOWN,
-        INPUT = 0,
-        OUTPUT = 1,
+        UNKNOWN;
+        INPUT = 0;
+        OUTPUT = 1;
+    }
+
+    /// Describes `PW_NODE_ACTIVATION_*`.
+    #[example = NOT_TRIGGERED]
+    #[module = protocol::consts]
+    pub struct ActivationStatus(u32) {
+        UNKNOWN;
+        NOT_TRIGGERED = 0;
+        TRIGGERED = 1;
+        AWAKE = 2;
+        FINISHED = 3;
+        INACTIVE = 4;
     }
 }

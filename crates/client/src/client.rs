@@ -1,10 +1,18 @@
+use std::collections::BTreeMap;
+
+use alloc::boxed::Box;
+
 use anyhow::Result;
+use pod::Object;
 use pod::Pod;
 use protocol::Connection;
 use protocol::consts;
 use protocol::flags;
 use protocol::id;
 use protocol::op;
+use tracing::Level;
+
+use crate::ports::PortParam;
 
 #[derive(Debug)]
 pub struct Client {
@@ -166,17 +174,24 @@ impl Client {
     }
 
     /// Update client node.
+    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
     pub fn client_node_update(
         &mut self,
         id: u32,
         max_input_ports: u32,
         max_output_ports: u32,
+        params: &BTreeMap<id::Param, Object<Box<[u64]>>>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
-            (id::Param::PROP_INFO, flags::Param::NONE),
+            (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
+            (id::Param::FORMAT, flags::Param::READWRITE),
+            (id::Param::PROP_INFO, flags::Param::WRITE),
             (id::Param::PROPS, flags::Param::WRITE),
-            (id::Param::ENUM_FORMAT, flags::Param::READ),
-            (id::Param::FORMAT, flags::Param::WRITE),
+            (id::Param::ENUM_PORT_CONFIG, flags::Param::WRITE),
+            (id::Param::PORT_CONFIG, flags::Param::WRITE),
+            (id::Param::LATENCY, flags::Param::WRITE),
+            (id::Param::PROCESS_LATENCY, flags::Param::WRITE),
+            (id::Param::TAG, flags::Param::WRITE),
         ];
 
         const PROPS: &[(&str, &str)] = &[("node.name", "livemix_node")];
@@ -199,33 +214,11 @@ impl Client {
         pod.as_mut().push_struct(|st| {
             st.field().push(change_mask)?;
 
-            st.field().push(2)?;
+            st.field().push(params.len() as u32)?;
 
-            st.field()
-                .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
-
-            st.field()
-                .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
+            for (_, value) in params {
+                st.field().encode(value.as_ref())?;
+            }
 
             if change_mask & flags::ClientNodeUpdate::INFO {
                 st.field().push_struct(|st| {
@@ -253,20 +246,22 @@ impl Client {
     }
 
     /// Update client node port.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
     pub fn client_node_port_update(
         &mut self,
         id: u32,
         direction: consts::Direction,
         port_id: u32,
         name: &str,
+        params: &BTreeMap<id::Param, PortParam>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
-            (id::Param::ENUM_FORMAT, flags::Param::READ),
-            (id::Param::FORMAT, flags::Param::WRITE),
-            (id::Param::META, flags::Param::READ),
-            (id::Param::IO, flags::Param::READ),
-            (id::Param::BUFFERS, flags::Param::NONE),
+            (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
+            (id::Param::META, flags::Param::WRITE),
+            (id::Param::IO, flags::Param::WRITE),
+            (id::Param::FORMAT, flags::Param::READWRITE),
+            (id::Param::BUFFERS, flags::Param::WRITE),
+            (id::Param::LATENCY, flags::Param::WRITE),
         ];
 
         let mut pod = Pod::array();
@@ -286,33 +281,11 @@ impl Client {
             st.encode((direction, port_id, change_mask))?;
 
             // Parameters.
-            st.field().push(2u32)?;
+            st.field().push(params.len() as u32)?;
 
-            st.field()
-                .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
-
-            st.field()
-                .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                    obj.property(id::Format::MEDIA_TYPE, 0)?
-                        .push(id::MediaType::AUDIO)?;
-                    obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                        .push(id::MediaSubType::RAW)?;
-                    obj.property(id::Format::AUDIO_FORMAT, 0)?
-                        .push(id::AudioFormat::S16)?;
-                    obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                    obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
-                    Ok(())
-                })?;
+            for (_, param) in params {
+                st.field().encode(param.value.as_ref())?;
+            }
 
             if change_mask & flags::ClientNodePortUpdate::INFO {
                 st.field().push_struct(|st| {

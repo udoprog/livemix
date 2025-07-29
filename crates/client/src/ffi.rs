@@ -1,16 +1,27 @@
 use core::ffi::c_char;
+use core::fmt;
 
-use libc::c_int;
+use protocol::consts;
 use protocol::flags;
 
 /** the maximum number of segments visible in the future */
 const IO_POSITION_MAX_SEGMENTS: usize = 8;
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(transparent)]
+struct Pad<T>(T);
+
+impl<T> fmt::Debug for Pad<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Pad")
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NodeActivationState {
     /// Current status, the result of spa_node_process().
-    pub status: c_int,
+    pub status: flags::Status,
     /// Required number of signals.
     pub required: u32,
     /// Number of pending signals.
@@ -64,7 +75,7 @@ pub struct IoVideoSize {
     /// the minimum framerate, the cycle duration is always smaller to ensure
     /// there is only one video frame per cycle.
     pub framerate: Fraction,
-    _padding: [u32; 4],
+    _pad: Pad<[u32; 4]>,
 }
 
 /// A segment converts a running time to a segment (stream) position.
@@ -123,7 +134,7 @@ pub struct IoSegmentVideo {
     pub frames: u32,
     /// 0 for progressive, 1 and 2 for interlaced
     pub field_count: u32,
-    _padding: [u32; 11],
+    _pad: Pad<[u32; 11]>,
 }
 
 #[repr(C)]
@@ -156,13 +167,13 @@ pub struct IoSegmentBar {
     pub bpm: f64,
     /// current beat in segment
     pub beat: f64,
-    _padding: [u32; 8],
+    _pad: Pad<[u32; 8]>,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct NodeActivation {
-    pub status: u32,
+    pub status: consts::ActivationStatus,
     /// unsigned int version:1;
     /// A sync is pending.
     /// unsigned int pending_sync:1;
@@ -191,7 +202,7 @@ pub struct NodeActivation {
     pub prev_awake_time: u64,
     pub prev_finish_time: u64,
     /// must be 0.
-    _padding: [u32; 7],
+    _pad: Pad<[u32; 7]>,
     /// Version of client, see above.
     pub client_version: u32,
     /// Version of server, see above.
@@ -224,6 +235,14 @@ pub struct NodeActivation {
     pub command: u32,
     /// owner id with new reposition info, last one to update wins.
     pub reposition_owner: u32,
+}
+
+#[test]
+fn test_layout() {
+    use core::mem;
+
+    assert_eq!(mem::size_of::<NodeActivation>(), 2312);
+    assert_eq!(mem::offset_of!(NodeActivation, client_version), 540);
 }
 
 /// Absolute time reporting.
@@ -287,4 +306,34 @@ pub struct IoClock {
     pub cycle: u32,
     /// Estimated accumulated xrun duration.
     pub xrun: u64,
+}
+
+/// IO area to exchange buffers.
+///
+/// A set of buffers should first be configured on the node/port. Further
+/// references to those buffers will be made by using the id of the buffer.
+///
+/// If status is SPA_STATUS_OK, the host should ignore the io area.
+///
+/// If status is SPA_STATUS_NEED_DATA, the host should:
+/// 1) recycle the buffer in buffer_id, if possible
+/// 2) prepare a new buffer and place the id in buffer_id.
+///
+/// If status is SPA_STATUS_HAVE_DATA, the host should consume the buffer in
+/// buffer_id and set the state to SPA_STATUS_NEED_DATA when new data is
+/// requested.
+///
+/// If status is SPA_STATUS_STOPPED, some error occurred on the port.
+///
+/// If status is SPA_STATUS_DRAINED, data from the io area was used to drain.
+///
+/// Status can also be a negative errno value to indicate errors. such as:
+/// -EINVAL: buffer_id is invalid -EPIPE: no more buffers available
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct IoBuffers {
+    /// the status code.
+    status: flags::Status,
+    /// a buffer id.
+    buffer_id: u32,
 }
