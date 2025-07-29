@@ -1,7 +1,9 @@
 use core::fmt;
 
 use crate::Type;
-use crate::array_buf::CapacityError;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
+use crate::buf::CapacityError;
 
 #[non_exhaustive]
 pub struct Error {
@@ -44,26 +46,59 @@ pub(crate) enum ErrorKind {
     StructUnderflow,
     ObjectUnderflow,
     SizeOverflow,
-    SizeUnderflow { size: usize, sub: usize },
+    SizeUnderflow {
+        size: usize,
+        sub: usize,
+    },
     BufferUnderflow,
     NonTerminatedString,
     NullContainingString,
     NotUtf8,
     NotSupportedRef,
     InvalidArrayLength,
-    UnsizedTypeInArray { ty: Type },
-    Expected { expected: Type, actual: Type },
-    ReservedSizeMismatch { expected: usize, actual: usize },
-    ChildSizeMismatch { expected: usize, actual: usize },
-    InvalidUsize { value: i32 },
-    InvalidIsize { value: i32 },
+    UnsizedTypeInArray {
+        ty: Type,
+    },
+    Expected {
+        expected: Type,
+        actual: Type,
+    },
+    ReservedSizeMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    ReservedOverflow {
+        write: usize,
+        len: usize,
+        capacity: usize,
+    },
+    ChildSizeMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    InvalidUsize {
+        value: i32,
+    },
+    InvalidIsize {
+        value: i32,
+    },
     CapacityError(CapacityError),
+    #[cfg(feature = "alloc")]
+    AllocError(AllocError),
 }
 
 impl From<CapacityError> for ErrorKind {
     #[inline]
     fn from(e: CapacityError) -> Self {
         ErrorKind::CapacityError(e)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl From<AllocError> for ErrorKind {
+    #[inline]
+    fn from(e: AllocError) -> Self {
+        ErrorKind::AllocError(e)
     }
 }
 
@@ -116,6 +151,16 @@ impl fmt::Display for Error {
                     "Expected reserved to write {expected} bytes, but found {actual}"
                 )
             }
+            ErrorKind::ReservedOverflow {
+                write,
+                len,
+                capacity,
+            } => {
+                write!(
+                    f,
+                    "Write {len} bytes at {write} overflows dynamic capacity {capacity}"
+                )
+            }
             ErrorKind::ChildSizeMismatch { expected, actual } => {
                 write!(
                     f,
@@ -129,6 +174,8 @@ impl fmt::Display for Error {
                 write!(f, "Value {value} is a valid isize")
             }
             ErrorKind::CapacityError(ref e) => e.fmt(f),
+            #[cfg(feature = "alloc")]
+            ErrorKind::AllocError(ref e) => e.fmt(f),
         }
     }
 }

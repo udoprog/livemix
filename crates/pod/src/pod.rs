@@ -4,15 +4,13 @@ use core::mem;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
-use crate::DecodeFrom;
-use crate::Encode;
-use crate::EncodeInto;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
+use crate::{ArrayBuf, DecodeFrom, Encode, EncodeInto};
 use crate::{
-    ArrayBuf, AsReader, ChoiceType, Decode, DecodeUnsized, EncodeUnsized, Error, RawId, Reader,
-    Type, TypedPod, Visitor, Writer,
+    AsReader, ChoiceType, Decode, DecodeUnsized, EncodeUnsized, Error, RawId, Reader, Type,
+    TypedPod, Visitor, Writer,
 };
 
 /// An unlimited pod.

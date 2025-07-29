@@ -40,13 +40,12 @@ pub use self::en::{Encode, EncodeUnsized};
 mod de;
 pub use self::de::{Array, Choice, Decode, DecodeUnsized, Object, Sequence, Struct};
 
-mod array_buf;
-pub use self::array_buf::ArrayBuf;
-
+pub mod buf;
+#[doc(inline)]
+pub use self::buf::ArrayBuf;
 #[cfg(feature = "alloc")]
-mod dynamic_buf;
-#[cfg(feature = "alloc")]
-pub use self::dynamic_buf::DynamicBuf;
+#[doc(inline)]
+pub use self::buf::DynamicBuf;
 
 mod writer;
 pub use self::writer::Writer;

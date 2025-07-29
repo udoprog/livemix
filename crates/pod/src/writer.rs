@@ -2,11 +2,14 @@ use crate::Error;
 use crate::utils::{Align, AlignableWith, BytesInhabited};
 
 mod sealed {
-    use crate::ArrayBuf;
-    use crate::Writer;
+    #[cfg(feature = "alloc")]
+    use crate::DynamicBuf;
+    use crate::{ArrayBuf, Writer};
 
     pub trait Sealed<T> {}
     impl<T, const N: usize> Sealed<T> for ArrayBuf<T, N> {}
+    #[cfg(feature = "alloc")]
+    impl<T> Sealed<T> for DynamicBuf<T> {}
     impl<W, T> Sealed<T> for &mut W
     where
         W: ?Sized + Writer<T>,

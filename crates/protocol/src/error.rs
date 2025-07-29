@@ -4,6 +4,9 @@ use core::fmt;
 #[cfg(feature = "std")]
 use std::io;
 
+#[cfg(feature = "alloc")]
+use pod::buf::AllocError;
+
 #[non_exhaustive]
 pub struct Error {
     kind: ErrorKind,
@@ -14,6 +17,24 @@ impl Error {
     #[inline]
     pub(crate) fn new(kind: ErrorKind) -> Self {
         Self { kind }
+    }
+}
+
+impl error::Error for Error {
+    #[inline]
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match &self.kind {
+            ErrorKind::PodError(e) => Some(e),
+            #[cfg(feature = "std")]
+            ErrorKind::ConnectionFailed(e) => Some(e),
+            #[cfg(feature = "std")]
+            ErrorKind::SetNonBlockingFailed(e) => Some(e),
+            #[cfg(feature = "std")]
+            ErrorKind::SendFailed(e) => Some(e),
+            #[cfg(feature = "std")]
+            ErrorKind::ReceiveFailed(e) => Some(e),
+            _ => None,
+        }
     }
 }
 
@@ -28,6 +49,13 @@ impl From<pod::Error> for Error {
     #[inline]
     fn from(e: pod::Error) -> Self {
         Error::new(ErrorKind::PodError(e))
+    }
+}
+
+impl From<AllocError> for Error {
+    #[inline]
+    fn from(e: AllocError) -> Self {
+        Error::new(ErrorKind::AllocError(e))
     }
 }
 
@@ -48,24 +76,8 @@ pub(crate) enum ErrorKind {
     HeaderSizeOverflow {
         size: u32,
     },
-}
-
-impl error::Error for Error {
-    #[inline]
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match &self.kind {
-            ErrorKind::PodError(e) => Some(e),
-            #[cfg(feature = "std")]
-            ErrorKind::ConnectionFailed(e) => Some(e),
-            #[cfg(feature = "std")]
-            ErrorKind::SetNonBlockingFailed(e) => Some(e),
-            #[cfg(feature = "std")]
-            ErrorKind::SendFailed(e) => Some(e),
-            #[cfg(feature = "std")]
-            ErrorKind::ReceiveFailed(e) => Some(e),
-            _ => None,
-        }
-    }
+    #[cfg(feature = "alloc")]
+    AllocError(AllocError),
 }
 
 impl fmt::Debug for Error {
@@ -94,6 +106,8 @@ impl fmt::Display for Error {
             ErrorKind::NoSocket => write!(f, "No socket to connect to found"),
             ErrorKind::SizeOverflow => write!(f, "Size overflow"),
             ErrorKind::HeaderSizeOverflow { size } => write!(f, "Header size {size} overflow"),
+            #[cfg(feature = "alloc")]
+            ErrorKind::AllocError(ref e) => e.fmt(f),
         }
     }
 }

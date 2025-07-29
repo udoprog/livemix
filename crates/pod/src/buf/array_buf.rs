@@ -10,6 +10,7 @@ use crate::{AsReader, Error, Writer};
 
 const DEFAULT_SIZE: usize = 128;
 
+/// Capacity overflow when writing to an [`ArrayBuf`].
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 #[non_exhaustive]
@@ -105,6 +106,41 @@ impl<T, const N: usize> ArrayBuf<T, N> {
         }
 
         self.len += 1;
+        Ok(())
+    }
+
+    /// Extend the buffer with a slice of words.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::ArrayBuf;
+    ///
+    /// let mut buf = ArrayBuf::<u32>::new();
+    /// buf.extend_from_words(&[1, 2, 3, 4])?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn extend_from_words(&mut self, words: &[T]) -> Result<(), CapacityError>
+    where
+        T: BytesInhabited,
+    {
+        let write = self.len.wrapping_add(words.len());
+
+        // Ensure we have enough space in the buffer.
+        if write > N || write < self.len {
+            return Err(CapacityError);
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data
+                .as_mut_ptr()
+                .add(self.len)
+                .copy_from_nonoverlapping(words.as_ptr().cast(), words.len());
+        }
+
+        self.len = write;
         Ok(())
     }
 
@@ -627,22 +663,7 @@ where
 
     #[inline]
     fn write_words(&mut self, words: &[T]) -> Result<(), Error> {
-        let write = self.len.wrapping_add(words.len());
-
-        // Ensure we have enough space in the buffer.
-        if write > N || write < self.len {
-            return Err(Error::new(ErrorKind::CapacityError(CapacityError)));
-        }
-
-        // SAFETY: We are writing to a valid position in the buffer.
-        unsafe {
-            self.data
-                .as_mut_ptr()
-                .add(self.len)
-                .copy_from_nonoverlapping(words.as_ptr().cast(), words.len());
-        }
-
-        self.len = write;
+        self.extend_from_words(words)?;
         Ok(())
     }
 

@@ -11,6 +11,8 @@ mod sealed {
     #[cfg(feature = "alloc")]
     use alloc::vec::Vec;
 
+    #[cfg(feature = "alloc")]
+    use crate::DynamicBuf;
     use crate::{ArrayBuf, AsReader};
 
     pub trait Sealed<T> {}
@@ -21,6 +23,8 @@ mod sealed {
     impl<T> Sealed<T> for Vec<T> where T: 'static {}
     impl<T> Sealed<T> for [T] where T: 'static {}
     impl<T, const N: usize> Sealed<T> for ArrayBuf<T, N> {}
+    #[cfg(feature = "alloc")]
+    impl<T> Sealed<T> for DynamicBuf<T> where T: 'static {}
     impl<R, T> Sealed<T> for &mut R where R: ?Sized + AsReader<T> {}
     impl<R, T> Sealed<T> for &R where R: ?Sized + AsReader<T> {}
 }

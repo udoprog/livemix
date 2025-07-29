@@ -174,7 +174,7 @@ impl Client {
     }
 
     /// Update client node.
-    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::DEBUG))]
     pub fn client_node_update(
         &mut self,
         id: u32,
@@ -246,7 +246,7 @@ impl Client {
     }
 
     /// Update client node port.
-    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::DEBUG))]
     pub fn client_node_port_update(
         &mut self,
         id: u32,

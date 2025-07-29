@@ -25,7 +25,7 @@ pub struct Activation {
 impl Activation {
     /// Construct a new activation record.
     #[inline]
-    #[tracing::instrument(fields(self.version), ret(level = Level::TRACE))]
+    #[tracing::instrument(fields(self.version), ret(level = Level::DEBUG))]
     pub fn new(peer_id: u32, signal_fd: EventFd, region: Region<ffi::NodeActivation>) -> Self {
         let server_version = ptr::volatile!(region, server_version).read();
 
@@ -43,7 +43,7 @@ impl Activation {
     }
 
     /// Signal the activation.
-    #[tracing::instrument(skip(self), fields(self.version), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self), fields(self.version), ret(level = Level::DEBUG))]
     pub fn signal(&self) -> Result<()> {
         match self.version {
             Version::V0 => {

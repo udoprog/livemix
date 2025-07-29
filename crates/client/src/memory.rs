@@ -132,7 +132,7 @@ impl Memory {
     }
 
     /// Insert memory.
-    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self), ret(level = Level::DEBUG))]
     pub(crate) fn insert(
         &mut self,
         mem_id: u32,
@@ -273,7 +273,7 @@ impl Memory {
         Ok(region)
     }
 
-    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self), ret(level = Level::DEBUG))]
     fn free_file(&mut self, file: usize) -> bool {
         let Some(fd) = self.files.get_mut(file) else {
             return false;

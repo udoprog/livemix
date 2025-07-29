@@ -415,7 +415,7 @@ impl State {
                     break 'done;
                 }
 
-                let Some(pod) = frame(recv, &self.header) else {
+                let Some(pod) = frame(recv, &self.header)? else {
                     break 'done;
                 };
 
@@ -451,7 +451,7 @@ impl State {
                 if crate::ptr::volatile!(a, status).read() == consts::ActivationStatus::INACTIVE {
                     tracing::warn!("node is not active");
                     self.c.client_node_set_active(node.id, true)?;
-                    crate::ptr::volatile!(a, status).write(consts::ActivationStatus::FINISHED);
+                    // crate::ptr::volatile!(a, status).write(consts::ActivationStatus::FINISHED);
                 }
 
                 // std::dbg!(unsafe { a.read() });
@@ -1302,11 +1302,27 @@ impl State {
 }
 
 /// Read a frame from the current buffer.
-fn frame<'buf>(buf: &'buf mut DynamicBuf<u64>, header: &Header) -> Option<Pod<&'buf [u64]>> {
+fn frame<'buf>(
+    buf: &'buf mut DynamicBuf<u64>,
+    header: &Header,
+) -> Result<Option<Pod<&'buf [u64]>>> {
     let size = header.size() as usize;
+
+    if size % <DynamicBuf<u64>>::WORD_SIZE != 0 {
+        bail!(
+            "Header size must be aligned to a word size of {} bytes",
+            <DynamicBuf<u64>>::WORD_SIZE
+        );
+    }
+
     debug_assert!(
         size % <DynamicBuf<u64>>::WORD_SIZE == 0,
         "Size of frame is not aligned"
     );
-    Some(Pod::new(buf.read_words(size)?))
+
+    let Some(words) = buf.read_words(size / DynamicBuf::<u64>::WORD_SIZE) else {
+        return Ok(None);
+    };
+
+    Ok(Some(Pod::new(words)))
 }

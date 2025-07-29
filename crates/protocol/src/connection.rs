@@ -4,7 +4,6 @@ use core::ptr;
 
 use std::env;
 use std::io;
-use std::io::Read;
 use std::io::Write;
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
@@ -115,6 +114,7 @@ impl Connection {
 
             let bytes = self.outgoing.as_bytes();
             let bytes = bytes.get(..bytes.len().min(sent)).unwrap_or_default();
+            let remaining_before = bytes.len();
 
             match self.socket.write(bytes) {
                 Ok(0) => {
@@ -129,10 +129,13 @@ impl Connection {
                     // SAFETY: We trust the returned value `n` as the number of
                     // bytes read constained by the number of bytes available.
                     unsafe {
-                        self.outgoing.advance_read(n);
+                        self.outgoing.advance_read_bytes(n);
                     }
 
-                    tracing::trace!(bytes = n, remaining = self.outgoing.remaining(), "sent");
+                    let remaining = self.outgoing.remaining_bytes();
+
+                    tracing::trace!(bytes = n, remaining_before, remaining, "sent");
+
                     sent -= n;
 
                     if sent == 0 {
@@ -146,42 +149,6 @@ impl Connection {
                     return Err(Error::new(ErrorKind::SendFailed(e)));
                 }
             }
-        }
-    }
-
-    /// Receive data from the server.
-    pub fn recv(&mut self, recv: &mut DynamicBuf) -> Result<(), Error> {
-        loop {
-            // SAFETY: This is the only point which writes to the buffer, all
-            // subsequent reads are aligned which only depends on the read cursor.
-            let bytes = unsafe { recv.as_bytes_mut() };
-            let result = self.socket.read(bytes);
-
-            match result {
-                Ok(0) => {
-                    return Err(Error::new(ErrorKind::RemoteClosed));
-                }
-                Ok(n) => {
-                    debug_assert!(
-                        n <= bytes.len(),
-                        "Socket read returned more bytes than available in the buffer"
-                    );
-
-                    // SAFETY: We trust the returned value `n` as the number of bytes
-                    // read and therefore written into the buffer.
-                    unsafe {
-                        recv.advance_written(n);
-                    }
-
-                    tracing::trace!(bytes = n, remaining = recv.remaining(), "received");
-                }
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    return Ok(());
-                }
-                Err(e) => {
-                    return Err(Error::new(ErrorKind::ReceiveFailed(e)));
-                }
-            };
         }
     }
 
@@ -212,7 +179,8 @@ impl Connection {
             unsafe {
                 // SAFETY: This is the only point which writes to the buffer, all
                 // subsequent reads are aligned which only depends on the read cursor.
-                let bytes = recv.as_bytes_mut();
+                let remaining_before = recv.remaining_bytes();
+                let bytes = recv.as_bytes_mut()?;
 
                 iov.iov_base = bytes.as_mut_ptr().cast();
                 iov.iov_len = bytes.len();
@@ -246,9 +214,14 @@ impl Connection {
 
                 // SAFETY: We trust the returned value `n` as the number of bytes
                 // read and therefore written into the buffer.
-                recv.advance_written(n);
+                recv.advance_written_bytes(n);
 
-                tracing::trace!(bytes = n, remaining = recv.remaining(), "received");
+                tracing::trace!(
+                    bytes = n,
+                    remaining_before,
+                    remaining = recv.remaining_bytes(),
+                    "received"
+                );
 
                 // Walk the ancillary data buffer and copy the raw descriptors
                 // from it into the output buffer.
@@ -293,7 +266,7 @@ impl Connection {
     /// Send an outgoing request.
     ///
     /// This will write the request to the outgoing buffer.
-    #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.remaining()), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.len()), ret(level = Level::DEBUG))]
     pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsReader<u64>>) -> Result<(), Error> {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
@@ -309,8 +282,8 @@ impl Connection {
             return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
         };
 
-        self.outgoing.write(header);
-        self.outgoing.extend_from_words(buf.as_slice());
+        self.outgoing.push_bytes(header)?;
+        self.outgoing.extend_from_words(buf.as_slice())?;
         self.modified |= self.interest.set(Interest::WRITE);
         Ok(())
     }
