@@ -96,7 +96,7 @@ impl Client {
     ) -> Result<()> {
         const PROPS: &[(&str, &str)] = &[
             ("node.description", "livemix"),
-            ("node.name", "livemix"),
+            ("node.name", "livemix_node"),
             ("media.class", "Audio/Duplex"),
             ("media.type", "Audio"),
             ("media.category", "Duplex"),
@@ -127,7 +127,10 @@ impl Client {
 
     /// Update client properties.
     pub fn client_update_properties(&mut self) -> Result<()> {
-        const PROPS: &[(&str, &str)] = &[("application.name", "livemix"), ("node.name", "livemix")];
+        const PROPS: &[(&str, &str)] = &[
+            ("application.name", "livemix"),
+            ("node.name", "livemix_node"),
+        ];
 
         let mut pod = Pod::array();
 
@@ -172,7 +175,7 @@ impl Client {
             (id::Param::FORMAT, flags::Param::WRITE),
         ];
 
-        const PROPS: &[(&str, &str)] = &[("node.name", "livemix")];
+        const PROPS: &[(&str, &str)] = &[("node.name", "livemix_node")];
 
         let mut pod = Pod::array();
 
@@ -182,7 +185,10 @@ impl Client {
 
         let mut node_change_mask = flags::NodeChangeMask::FLAGS;
         node_change_mask |= flags::NodeChangeMask::PROPS;
-        node_change_mask |= flags::NodeChangeMask::PARAMS;
+
+        if !PARAMS.is_empty() {
+            node_change_mask |= flags::NodeChangeMask::PARAMS;
+        }
 
         let node_flags = flags::Node::IN_DYNAMIC_PORTS | flags::Node::OUT_DYNAMIC_PORTS;
 
@@ -251,6 +257,14 @@ impl Client {
         port_id: u32,
         name: &str,
     ) -> Result<()> {
+        const PARAMS: &[(id::Param, flags::Param)] = &[
+            (id::Param::ENUM_FORMAT, flags::Param::READ),
+            (id::Param::FORMAT, flags::Param::WRITE),
+            (id::Param::META, flags::Param::READ),
+            (id::Param::IO, flags::Param::READ),
+            (id::Param::BUFFERS, flags::Param::NONE),
+        ];
+
         let mut pod = Pod::array();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
@@ -265,9 +279,7 @@ impl Client {
         let port_flags = flags::Port::NONE;
 
         pod.as_mut().push_struct(|st| {
-            st.field().push(direction)?;
-            st.field().push(port_id)?;
-            st.field().push(change_mask)?;
+            st.encode((direction, port_id, change_mask))?;
 
             // Parameters.
             st.field().push(2u32)?;
@@ -316,21 +328,8 @@ impl Client {
                     st.field().push_unsized("32 bit float mono audio")?;
 
                     // Parameters.
-                    st.field().push(5u32)?;
-                    st.field().push(id::Param::ENUM_FORMAT)?;
-                    st.field().push(flags::Param::READ)?;
-
-                    st.field().push(id::Param::FORMAT)?;
-                    st.field().push(flags::Param::WRITE)?;
-
-                    st.field().push(id::Param::META)?;
-                    st.field().push(flags::Param::READ)?;
-
-                    st.field().push(id::Param::IO)?;
-                    st.field().push(flags::Param::READ)?;
-
-                    st.field().push(id::Param::BUFFERS)?;
-                    st.field().push(flags::Param::NONE)?;
+                    st.field().push(PARAMS.len() as u32)?;
+                    st.encode(PARAMS)?;
                     Ok(())
                 })?;
             } else {
@@ -349,10 +348,7 @@ impl Client {
     pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<()> {
         let mut pod = Pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push(active)?;
-            Ok(())
-        })?;
+        pod.as_mut().push_struct(|st| st.encode(active))?;
 
         self.connection
             .request(id, op::CLIENT_NODE_SET_ACTIVE, pod)?;
