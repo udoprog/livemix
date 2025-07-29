@@ -334,6 +334,7 @@ pub use __consts as consts;
 macro_rules! __flags {
     (
         $(
+            $(#[doc = $ty_doc:literal])*
             #[examples = [$example0:ident $(, $example:ident)* $(,)?]]
             #[not_set = [$($not_set:ident),* $(,)?]]
             #[module = $module:path]
@@ -349,6 +350,7 @@ macro_rules! __flags {
         )*
     ) => {
         $(
+            $(#[doc = $ty_doc])*
             #[derive(Clone, Copy, PartialEq, Eq)]
             #[repr(transparent)]
             $vis struct $ty($repr);

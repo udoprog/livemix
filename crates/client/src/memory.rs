@@ -1,30 +1,71 @@
+use core::mem::MaybeUninit;
+use core::ptr::NonNull;
+
 use std::collections::HashMap;
-use std::ffi::c_void;
 use std::io;
 use std::os::fd::AsRawFd;
 use std::os::fd::OwnedFd;
-use std::ptr::NonNull;
 
 use anyhow::{Result, bail};
+use protocol::flags;
 use protocol::id;
 use slab::Slab;
 
 #[derive(Debug)]
 #[allow(unused)]
 pub(crate) struct File {
-    index: usize,
+    file: usize,
     ty: id::DataType,
     fd: OwnedFd,
-    flags: i32,
+    flags: flags::MemBlock,
     users: u32,
+    region: Option<Region>,
 }
 
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
 #[derive(Debug)]
 pub(crate) struct Region {
-    index: usize,
-    size: usize,
-    ptr: NonNull<c_void>,
+    file: usize,
+    pub size: usize,
+    pub ptr: NonNull<()>,
+}
+
+impl Region {
+    /// Slice up the region to a smaller size.
+    pub fn slice(&self, offset: isize, size: usize) -> Option<Region> {
+        let Ok(offset) = usize::try_from(offset) else {
+            return None;
+        };
+
+        if offset.checked_add(size)? > self.size {
+            return None;
+        }
+
+        Some(Region {
+            file: self.file,
+            size,
+            ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset)) },
+        })
+    }
+
+    /// Add an offset to the region's pointer.
+    pub fn offset(&self, offset: usize) -> Option<Region> {
+        if offset == 0 {
+            return Some(Self {
+                file: self.file,
+                size: self.size,
+                ptr: self.ptr,
+            });
+        }
+
+        let size = self.size.checked_sub(offset)?;
+
+        Some(Region {
+            file: self.file,
+            size,
+            ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().wrapping_add(offset)) },
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -49,24 +90,73 @@ impl Memory {
         mem_id: u32,
         ty: id::DataType,
         fd: OwnedFd,
-        flags: i32,
+        flags: flags::MemBlock,
     ) -> Result<usize> {
-        let index = self.files.vacant_key();
+        if ty != id::DataType::MEM_FD {
+            bail!("Memory {mem_id} is not a memfd type, found {ty:?}");
+        }
+
+        // If the memory is a file descriptor, get the size of the file
+        // since we want to mmap it once.
+        let stat = unsafe {
+            let mut stat = MaybeUninit::<libc::stat>::uninit();
+
+            if libc::fstat(fd.as_raw_fd(), stat.as_mut_ptr().cast()) == -1 {
+                bail!(io::Error::last_os_error());
+            }
+
+            stat.assume_init()
+        };
+
+        let file = self.files.vacant_key();
+        let size = stat.st_size as usize;
+
+        let region = unsafe {
+            let mut prot = 0;
+
+            if flags.contains(flags::MemBlock::READABLE) {
+                prot |= libc::PROT_READ;
+            }
+
+            if flags.contains(flags::MemBlock::WRITABLE) {
+                prot |= libc::PROT_WRITE;
+            }
+
+            let ptr = libc::mmap(
+                std::ptr::null_mut(),
+                size,
+                prot,
+                libc::MAP_SHARED,
+                fd.as_raw_fd(),
+                0,
+            );
+
+            if ptr.addr().cast_signed() == -1isize {
+                bail!(io::Error::last_os_error());
+            }
+
+            Region {
+                file,
+                ptr: NonNull::new_unchecked(ptr.cast()),
+                size,
+            }
+        };
 
         self.files.insert(File {
-            index,
+            file,
             ty,
             fd,
             flags,
             users: 1,
+            region: Some(region),
         });
 
-        if let Some(old) = self.map.insert(mem_id, index) {
-            self.free(old);
+        if let Some(old) = self.map.insert(mem_id, file) {
+            self.free_file(old);
         }
 
-        tracing::info!(index, "inserted");
-        Ok(index)
+        tracing::info!(file, "inserted");
+        Ok(file)
     }
 
     /// Get the data type of a memory region.
@@ -84,53 +174,52 @@ impl Memory {
             return;
         };
 
-        self.free(index);
+        self.free_file(index);
     }
 
     /// Drop a mapped memory region.
     #[tracing::instrument(skip(self))]
-    pub(crate) fn drop(&mut self, region: Region) {
+    pub(crate) fn free(&mut self, region: Region) {
         tracing::info!("dropping region");
-        self.free(region.index);
+        self.free_file(region.file);
+    }
+
+    /// Add a user to a memory region.
+    pub(crate) fn track(&mut self, region: &Region) {
+        if let Some(file) = self.files.get_mut(region.file) {
+            file.users += 1;
+        }
     }
 
     /// Map a memory to a region with accessible memory.
-    pub(crate) fn map(&mut self, mem_id: u32, size: usize, offset: isize) -> Result<Region> {
+    pub(crate) fn map(&mut self, mem_id: u32, offset: isize, size: usize) -> Result<Region> {
         let Some(file) = self
             .map
             .get_mut(&mem_id)
             .and_then(|&mut index| self.files.get_mut(index))
         else {
-            bail!("Missing memory with identifier {mem_id}");
+            bail!("Memory {mem_id} missing");
         };
 
-        unsafe {
-            let ptr = libc::mmap(
-                std::ptr::null_mut(),
-                size,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                file.fd.as_raw_fd(),
-                offset as libc::off_t,
-            );
+        let Some(region) = &file.region else {
+            bail!("Memory {mem_id} is not mapped");
+        };
 
-            if ptr.addr().cast_signed() == -1isize {
-                bail!(io::Error::last_os_error());
-            }
-
-            file.users += 1;
-
-            Ok(Region {
-                index: file.index,
-                ptr: NonNull::new_unchecked(ptr),
-                size,
-            })
+        if file.ty != id::DataType::MEM_FD {
+            bail!("Memory {mem_id} is not a memfd type, found {:?}", file.ty);
         }
+
+        let Some(region) = region.slice(offset, size) else {
+            bail!("Requested offset and size is not valid");
+        };
+
+        file.users += 1;
+        Ok(region)
     }
 
     #[tracing::instrument(skip(self))]
-    fn free(&mut self, index: usize) {
-        let Some(fd) = self.files.get_mut(index) else {
+    fn free_file(&mut self, file: usize) {
+        let Some(fd) = self.files.get_mut(file) else {
             return;
         };
 
@@ -138,7 +227,7 @@ impl Memory {
 
         if fd.users == 0 {
             tracing::info!("freeing file");
-            self.files.remove(index);
+            self.files.remove(file);
         } else {
             tracing::trace!(fd.users, "not freeing file, still in use");
         }

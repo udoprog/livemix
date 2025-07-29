@@ -1,6 +1,12 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::os::fd::OwnedFd;
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use anyhow::{Context, Result, bail};
 use pod::{Fd, Object, Pod, Struct};
 use protocol::id;
@@ -353,12 +359,12 @@ impl State {
             id: new_id,
             input_ports: vec![Port {
                 id: 0,
-                name: "input".to_string(),
+                name: String::from("input"),
                 buffers: None,
             }],
             output_ports: vec![Port {
                 id: 0,
-                name: "output".to_string(),
+                name: String::from("output"),
                 buffers: None,
             }],
             write_fd: None,
@@ -575,7 +581,7 @@ impl State {
     fn core_add_mem_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
         let (id, ty, fd, flags) = pod
             .next_struct()?
-            .decode::<(u32, id::DataType, Fd, i32)>()?;
+            .decode::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
 
         let fd = self.take_fd(fd)?;
 
@@ -656,7 +662,8 @@ impl State {
             }
         }
 
-        tracing::info!(id, ?registry, "Registry global event");
+        tracing::trace!(id, ?registry, "Registry global event");
+
         self.id_to_registry.insert(id, index);
         self.registries.insert(registry);
 
@@ -857,13 +864,16 @@ impl State {
         let mut buffers = Vec::new();
 
         for _ in 0..n_buffers {
-            let (mem_id, offset, size, n_metas) = st.decode::<(u32, u32, u32, u32)>()?;
+            let (mem_id, offset, size, n_metas) = st.decode::<(u32, i32, u32, u32)>()?;
+            let region = self
+                .memory
+                .map(mem_id, offset as isize, size as usize)
+                .context("mapping buffer")?;
 
             let mut metas = Vec::new();
 
             for _ in 0..n_metas {
                 let (ty, size) = st.decode::<(id::MetaType, u32)>()?;
-
                 metas.push(BufferMeta { ty, size });
             }
 
@@ -873,19 +883,39 @@ impl State {
 
             for _ in 0..n_datas {
                 let (ty, data, flags, offset, max_size) =
-                    st.decode::<(id::DataType, u32, flags::DataFlag, u32, u32)>()?;
+                    st.decode::<(id::DataType, u32, flags::DataFlag, i32, u32)>()?;
+
+                let Ok(max_size) = usize::try_from(max_size) else {
+                    bail!("Invalid max size {max_size} for data type {ty:?}");
+                };
+
+                let region = match ty {
+                    id::DataType::MEM_PTR => {
+                        let Some(region) = region.offset(data as usize) else {
+                            bail!("Invalid memory pointer {data} for region {region:?}");
+                        };
+
+                        assert!(region.size <= max_size);
+                        assert!(offset == 0);
+
+                        self.memory.track(&region);
+                        region
+                    }
+                    id::DataType::MEM_FD => self.memory.map(data, offset as isize, max_size)?,
+                    ty => {
+                        bail!("Unsupported data type {ty:?} in use buffers");
+                    }
+                };
 
                 datas.push(BufferData {
                     ty,
-                    data,
+                    region,
                     flags,
-                    offset,
                     max_size,
-                })
+                });
             }
 
             buffers.push(Buffer {
-                mem_type: self.memory.data_type(mem_id),
                 mem_id,
                 offset,
                 size,
@@ -901,24 +931,30 @@ impl State {
             buffers,
         };
 
-        std::dbg!(&buffers);
-
-        match direction {
+        let replaced = match direction {
             consts::Direction::INPUT => {
-                if let Some(port) = node.input_ports.get_mut(port_id as usize) {
-                    port.buffers = Some(buffers);
-                } else {
+                let Some(port) = node.input_ports.get_mut(port_id as usize) else {
                     bail!("Invalid input port id {port_id} for client node {index}");
-                }
+                };
+
+                port.buffers.replace(buffers)
             }
             consts::Direction::OUTPUT => {
-                if let Some(port) = node.output_ports.get_mut(port_id as usize) {
-                    port.buffers = Some(buffers);
-                } else {
+                let Some(port) = node.output_ports.get_mut(port_id as usize) else {
                     bail!("Invalid output port id {port_id} for client node {index}");
+                };
+
+                port.buffers.replace(buffers)
+            }
+            _ => None,
+        };
+
+        if let Some(replaced) = replaced {
+            for buffer in replaced.buffers {
+                for data in buffer.datas {
+                    self.memory.free(data.region);
                 }
             }
-            _ => {}
         }
 
         Ok(())
@@ -961,16 +997,16 @@ impl State {
 
         let (Some(fd), Ok(mem_id)) = (fd, u32::try_from(mem_id)) else {
             if let Some(a) = node.activation.take() {
-                self.memory.drop(a.region);
+                self.memory.free(a.region);
             }
 
             return Ok(());
         };
 
-        let region = self.memory.map(mem_id, size, offset)?;
+        let region = self.memory.map(mem_id, offset, size)?;
 
         if let Some(a) = node.activation.replace(Activation { fd, region }) {
-            self.memory.drop(a.region);
+            self.memory.free(a.region);
         }
 
         Ok(())

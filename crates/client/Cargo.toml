@@ -3,6 +3,11 @@ name = "client"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["std"]
+std = ["alloc", "pod/std", "protocol/std", "libc/std"]
+alloc = ["pod/alloc", "protocol/alloc"]
+
 [dependencies]
 pod = { path = "../pod" }
 protocol = { path = "../protocol" }

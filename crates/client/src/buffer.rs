@@ -1,4 +1,10 @@
-use protocol::{consts, flags, id};
+use alloc::vec::Vec;
+
+use protocol::consts;
+use protocol::flags;
+use protocol::id;
+
+use crate::memory::Region;
 
 #[derive(Debug)]
 pub(crate) struct BufferMeta {
@@ -9,17 +15,15 @@ pub(crate) struct BufferMeta {
 #[derive(Debug)]
 pub(crate) struct BufferData {
     pub(crate) ty: id::DataType,
-    pub(crate) data: u32,
+    pub(crate) region: Region,
     pub(crate) flags: flags::DataFlag,
-    pub(crate) offset: u32,
-    pub(crate) max_size: u32,
+    pub(crate) max_size: usize,
 }
 
 #[derive(Debug)]
 pub(crate) struct Buffer {
-    pub(crate) mem_type: Option<id::DataType>,
     pub(crate) mem_id: u32,
-    pub(crate) offset: u32,
+    pub(crate) offset: i32,
     pub(crate) size: u32,
     pub(crate) metas: Vec<BufferMeta>,
     pub(crate) datas: Vec<BufferData>,

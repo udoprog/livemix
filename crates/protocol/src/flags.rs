@@ -203,9 +203,57 @@ pod::macros::flags! {
         pub const OUT = 1 << 0;
         pub const MAPPED = 1 << 1;
     }
+
+    /// Describes `enum pw_memblock_flags`.
+    #[examples = [OUT]]
+    #[not_set = [MAPPED]]
+    #[module = protocol::flags]
+    pub struct MemBlock(u32) {
+        pub const NONE;
+        /// memory is readable.
+        pub const READABLE = 1 << 0;
+        /// memory is writable.
+        pub const WRITABLE = 1 << 1;
+        /// seal the fd.
+        pub const SEAL = 1 << 2;
+        /// mmap the fd.
+        pub const MAP = 1 << 3;
+        /// don't close fd.
+        pub const DONT_CLOSE = 1 << 4;
+        /// don't notify events.
+        pub const DONT_NOTIFY = 1 << 5;
+        /// the fd can not be mmapped.
+        pub const UNMAPPABLE = 1 << 6;
+    }
+
+    /// Describes `enum pw_memblock_flags`.
+    #[examples = [OUT]]
+    #[not_set = [MAPPED]]
+    #[module = protocol::flags]
+    pub struct MemMap(u32) {
+        pub const NONE;
+        /// map in read mode.
+        pub const READ = 1 << 0;
+        /// map in write mode.
+        pub const WRITE = 1 << 1;
+        /// map the same area twice after each other, creating a circular ringbuffer.
+        pub const TWICE = 1 << 2;
+        /// writes will be private.
+        pub const PRIVATE = 1 << 3;
+        /// lock the memory into RAM.
+        pub const LOCKED = 1 << 4;
+    }
 }
 
 impl Param {
     /// Read and write flags combined.
-    pub const READWRITE: Self = Self(Param::WRITE.0 | Param::READ.0);
+    pub const READWRITE: Self = Self(Self::WRITE.0 | Self::READ.0);
+}
+
+impl MemBlock {
+    pub const READWRITE: Self = Self(Self::READABLE.0 | Self::WRITABLE.0);
+}
+
+impl MemMap {
+    pub const READWRITE: Self = Self(Self::READ.0 | Self::WRITE.0);
 }
