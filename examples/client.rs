@@ -1,6 +1,5 @@
 use std::mem;
-use std::os::fd::FromRawFd;
-use std::os::fd::OwnedFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -21,8 +20,8 @@ fn main() -> Result<()> {
 
     let mut recv = DynamicBuf::new();
 
-    poll.add(&c, CONNECTION, c.interest())?;
-    poll.add(&ev, EVENT, Interest::READ)?;
+    poll.add(c.as_raw_fd(), CONNECTION, c.interest())?;
+    poll.add(ev.as_raw_fd(), EVENT, Interest::READ)?;
 
     let mut events = pod::Buf::<PollEvent, 4>::new();
     let mut state = client::State::new(c);
@@ -33,7 +32,15 @@ fn main() -> Result<()> {
         state.run(&mut recv)?;
 
         if let ChangeInterest::Changed(interest) = state.connection_mut().modified() {
-            poll.modify(state.connection_mut(), CONNECTION, interest)?;
+            poll.modify(state.connection().as_raw_fd(), CONNECTION, interest)?;
+        }
+
+        while let Some((fd, token, interest)) = state.add_interest() {
+            poll.add(fd, token, interest)?;
+        }
+
+        while let Some((fd, token, interest)) = state.modify_interest() {
+            poll.modify(fd, token, interest)?;
         }
 
         poll.poll(&mut events)?;
@@ -65,8 +72,10 @@ fn main() -> Result<()> {
                         println!("Event: {value}");
                     }
                 }
-                other => {
-                    println!("Unknown token: {other:?}");
+                token => {
+                    if e.interest.is_read() {
+                        state.handle_read(token)?;
+                    }
                 }
             }
         }

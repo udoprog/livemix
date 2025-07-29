@@ -161,7 +161,7 @@ macro_rules! __id {
             }
         )*
 
-        #[cfg(test)]
+        #[cfg(all(test, feature = "test-pipewire-sys"))]
         #[test]
         fn test_constants() {
             $($(
@@ -339,12 +339,12 @@ macro_rules! __flags {
             #[not_set = [$($not_set:ident),* $(,)?]]
             #[module = $module:path]
             $vis:vis struct $ty:ident($repr:ty) {
-                $none_vis:vis const $none:ident;
+                $none:ident;
 
                 $(
                     $(#[doc = $field_doc:literal])*
                     $(#[constant = $flag_mod:ident :: $flag_constant:ident])?
-                    $flag_vis:vis const $flag:ident = $value:expr;
+                    $flag:ident = $value:expr;
                 )*
             }
         )*
@@ -357,7 +357,7 @@ macro_rules! __flags {
 
             impl $ty {
                 /// Empty flags.
-                $none_vis const $none: Self = Self(0);
+                $vis const $none: Self = Self(0);
 
                 $(
                     #[doc = concat!("Flag with value `", stringify!($value), "`.")]
@@ -367,7 +367,7 @@ macro_rules! __flags {
                         #[doc = ""]
                         #[doc = concat!("Equivalent to `", stringify!($flag_constant), "`.")]
                     )*
-                    $flag_vis const $flag: Self = Self($value);
+                    $vis const $flag: Self = Self($value);
                 )*
 
                 /// Test if the set contains another set.
@@ -607,7 +607,7 @@ macro_rules! __flags {
             }
         )*
 
-        #[cfg(test)]
+        #[cfg(all(test, feature = "test-pipewire-sys"))]
         #[test]
         fn test_constants() {
             $($(

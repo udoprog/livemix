@@ -19,3 +19,6 @@ use self::memory::{Memory, Region};
 
 mod buffer;
 use self::buffer::Buffers;
+
+mod ports;
+use self::ports::{Port, Ports};

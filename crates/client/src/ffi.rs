@@ -1,6 +1,10 @@
 use core::ffi::c_char;
 
 use libc::c_int;
+use protocol::flags;
+
+/** the maximum number of segments visible in the future */
+const IO_POSITION_MAX_SEGMENTS: usize = 8;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -33,7 +37,7 @@ pub struct NodeActivationState {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct IoPosition {
     /// clock position of driver, always valid and read only
-    pub clock: Ioclock,
+    pub clock: IoClock,
     /// size of the video in the current cycle
     pub video: IoVideoSize,
     /// an offset to subtract from the clock position to get a running time.
@@ -45,56 +49,7 @@ pub struct IoPosition {
     /// number of segments
     pub n_segments: u32,
     /// segments
-    pub segments: [IoSegment; 8],
-}
-
-/// Absolute time reporting.
-///
-/// Nodes that can report clocking information will
-/// receive this io block.
-/// The application sets the id. This is usually set as
-/// part of the
-/// position information but can also be set separately.
-///
-/// The
-/// clock counts the elapsed time according to the clock provider
-/// since the
-/// provider was last started.
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Ioclock {
-    /// clock flags
-    pub flags: u32,
-    /// unique clock id, set by application
-    pub id: u32,
-    /// clock name prefixed with API, set by node. The clock name is unique per
-    /// clock and can be used to check if nodes share the same clock.
-    pub name: [c_char; 64],
-    /// time in nanoseconds against monotonic clock
-    pub nsec: u64,
-    /// rate for position/duration/delay/xrun
-    pub rate: Fraction,
-    /// current position
-    pub position: u64,
-    /// duration of current cycle
-    pub duration: u64,
-    /// delay between position and hardware, positive for capture, negative for
-    /// playback
-    pub delay: i64,
-    /// rate difference between clock and monotonic time
-    pub rate_diff: f64,
-    /// estimated next wakeup time in nanoseconds
-    pub next_nsec: u64,
-    /// target rate of next cycle
-    pub target_rate: Fraction,
-    /// target duration of next cycle
-    pub target_duration: u64,
-    /// seq counter. must be equal at start and end of read and lower bit must
-    /// be 0
-    pub target_seq: u32,
-    _padding: u32,
-    /// estimated accumulated xrun duration
-    pub xrun: u64,
+    pub segments: [IoSegment; IO_POSITION_MAX_SEGMENTS],
 }
 
 #[repr(C)]
@@ -269,4 +224,67 @@ pub struct NodeActivation {
     pub command: u32,
     /// owner id with new reposition info, last one to update wins.
     pub reposition_owner: u32,
+}
+
+/// Absolute time reporting.
+///
+/// Nodes that can report clocking information will receive this io block. The
+/// application sets the id. This is usually set as part of the position
+/// information but can also be set separately.
+///
+/// The clock counts the elapsed time according to the clock provider since the
+/// provider was last started.
+///
+/// Driver nodes are supposed to update the contents of \ref SPA_IO_Clock before
+/// signaling the start of a graph cycle.  These updated clock values become
+/// visible to other nodes in \ref SPA_IO_Position. Non-driver nodes do not need
+/// to update the contents of their \ref SPA_IO_Clock.
+///
+/// The host generally gives each node a separate \ref spa_io_clock in \ref
+/// SPA_IO_Clock, so that updates made by the driver are not visible in the
+/// contents of \ref SPA_IO_Clock of other nodes. Instead, \ref SPA_IO_Position
+/// is used to look up the current graph time.
+///
+/// A node is a driver when \ref spa_io_clock.id in \ref SPA_IO_Clock and \ref
+/// spa_io_position.clock.id in \ref SPA_IO_Position are the same.
+#[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct IoClock {
+    /// Clock flags.
+    pub flags: flags::IoClockFlag,
+    /// Unique clock id, set by host application.
+    pub id: u32,
+    /// Clock name prefixed with API, set by node when it receives \ref
+    /// SPA_IO_Clock. The clock name is unique per clock and can be used to
+    /// check if nodes share the same clock.
+    pub name: [c_char; 64],
+    /// Time in nanoseconds against monotonic clock (CLOCK_MONOTONIC). This
+    /// fields reflects a real time instant in the past. The value may have
+    /// jitter.
+    pub nsec: u64,
+    /// Rate for position/duration/delay/xrun.
+    pub rate: Fraction,
+    /// Current position, in samples `rate`.
+    pub position: u64,
+    /// Duration of current cycle, in samples `rate`.
+    pub duration: u64,
+    /// Delay between position and hardware, in samples `rate`.
+    pub delay: i64,
+    /// Rate difference between clock and monotonic time, as a ratio of clock
+    /// speeds.
+    pub rate_diff: f64,
+    /// Estimated next wakeup time in nanoseconds. This time is a logical start
+    /// time of the next cycle, and is not necessarily in the future.
+    pub next_nsec: u64,
+    /// Target rate of next cycle.
+    pub target_rate: Fraction,
+    /// Target duration of next cycle.
+    pub target_duration: u64,
+    /// Seq counter. must be equal at start and end of read and lower bit must
+    /// be 0.
+    pub target_seq: u32,
+    /// incremented each time the graph is started.
+    pub cycle: u32,
+    /// Estimated accumulated xrun duration.
+    pub xrun: u64,
 }

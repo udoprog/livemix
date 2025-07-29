@@ -7,13 +7,13 @@ use protocol::id;
 use crate::memory::Region;
 
 #[derive(Debug)]
-pub(crate) struct BufferMeta {
+pub(crate) struct Meta {
     pub(crate) ty: id::MetaType,
     pub(crate) size: u32,
 }
 
 #[derive(Debug)]
-pub(crate) struct BufferData {
+pub(crate) struct Data {
     pub(crate) ty: id::DataType,
     pub(crate) region: Region,
     pub(crate) flags: flags::DataFlag,
@@ -25,8 +25,8 @@ pub(crate) struct Buffer {
     pub(crate) mem_id: u32,
     pub(crate) offset: i32,
     pub(crate) size: u32,
-    pub(crate) metas: Vec<BufferMeta>,
-    pub(crate) datas: Vec<BufferData>,
+    pub(crate) metas: Vec<Meta>,
+    pub(crate) datas: Vec<Data>,
 }
 
 #[derive(Debug)]

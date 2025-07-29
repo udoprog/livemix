@@ -21,7 +21,11 @@ impl Client {
         }
     }
 
-    /// Get modified interest in the connection.
+    #[inline]
+    pub fn connection(&self) -> &Connection {
+        &self.connection
+    }
+
     #[inline]
     pub fn connection_mut(&mut self) -> &mut Connection {
         &mut self.connection

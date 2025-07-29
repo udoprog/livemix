@@ -1,18 +1,19 @@
 use core::mem;
 use core::mem::MaybeUninit;
 use core::ptr;
+
 use std::env;
 use std::io;
 use std::io::Read;
 use std::io::Write;
-use std::os::fd::AsRawFd;
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
 use pod::AsReader;
 use pod::Pod;
 use pod::Reader;
+use tracing::Level;
 
 use crate::error::ErrorKind;
 use crate::poll::{ChangeInterest, Interest};
@@ -294,6 +295,7 @@ impl Connection {
     /// Send an outgoing request.
     ///
     /// This will write the request to the outgoing buffer.
+    #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.remaining()), ret(level = Level::TRACE))]
     pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsReader<u64>>) -> Result<(), Error> {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
@@ -309,13 +311,9 @@ impl Connection {
             return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
         };
 
-        let remaining_before = self.outgoing.remaining();
-
         self.outgoing.write(header);
         self.outgoing.extend_from_words(buf.as_slice());
         self.modified |= self.interest.set(Interest::WRITE);
-
-        tracing::info!(?header, ?remaining_before, remaining = ?self.outgoing.remaining(), "Sending");
         Ok(())
     }
 }

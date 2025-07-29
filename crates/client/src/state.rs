@@ -1,10 +1,9 @@
-use std::collections::{BTreeMap, VecDeque};
-use std::os::fd::OwnedFd;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
@@ -12,16 +11,19 @@ use pod::{Fd, Object, Pod, Struct};
 use protocol::id;
 use protocol::ids::Ids;
 use protocol::op;
+use protocol::poll::{Interest, Token};
 use protocol::types::Header;
 use protocol::{Connection, DynamicBuf};
 use protocol::{consts, flags};
 use slab::Slab;
+use tracing::Level;
 
-use crate::buffer::{Buffer, BufferData, BufferMeta};
-use crate::{Buffers, Client, Memory, Region};
+use crate::buffer::{self, Buffer};
+use crate::{Buffers, Client, Memory, Ports, Region};
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
 const GET_REGISTRY_SYNC: u32 = 0x1000;
+const TOKEN_BASE: u32 = 0x10000;
 
 macro_rules! tracing_error {
     ($error:expr, $($tt:tt)*) => {{
@@ -67,22 +69,36 @@ struct Activation {
 }
 
 #[derive(Debug)]
-struct Port {
-    id: u32,
-    name: String,
-    buffers: Option<Buffers>,
-}
-
-#[derive(Default, Debug)]
 #[allow(unused)]
 struct ClientNodeState {
     id: u32,
     read_fd: Option<OwnedFd>,
+    write_token: Token,
     write_fd: Option<OwnedFd>,
+    read_token: Token,
     activation: Option<Activation>,
     params: BTreeMap<id::Param, Object<Box<[u64]>>>,
-    input_ports: Vec<Port>,
-    output_ports: Vec<Port>,
+    ports: Ports,
+    io_control: Option<Region>,
+    io_clock: Option<Region>,
+    io_position: Option<Region>,
+}
+
+impl ClientNodeState {
+    /// Get the control region mutably.
+    fn io_control_mut(&mut self) -> &mut Option<Region> {
+        &mut self.io_control
+    }
+
+    /// Get the clock region mutably.
+    fn io_clock_mut(&mut self) -> &mut Option<Region> {
+        &mut self.io_clock
+    }
+
+    /// Get the position region mutably.
+    fn io_position_mut(&mut self) -> &mut Option<Region> {
+        &mut self.io_position
+    }
 }
 
 #[derive(Debug)]
@@ -103,6 +119,7 @@ enum Op {
     Pong { id: u32, seq: u32 },
     ConstructNode,
     NodeUpdate { client: usize },
+    ReadInterest { client: usize },
 }
 
 #[derive(Debug)]
@@ -150,9 +167,14 @@ pub struct State {
     has_header: bool,
     header: Header,
     ids: Ids,
+    tokens: Ids,
+    read_to_client: HashMap<Token, usize>,
+    write_to_client: HashMap<Token, usize>,
     fds: VecDeque<ReceivedFd>,
     ops: VecDeque<Op>,
     memory: Memory,
+    add_interest: VecDeque<(RawFd, Token, Interest)>,
+    modify_interest: VecDeque<(RawFd, Token, Interest)>,
 }
 
 impl State {
@@ -176,10 +198,30 @@ impl State {
             has_header: false,
             header: Header::default(),
             ids,
+            tokens: Ids::new(),
+            read_to_client: HashMap::new(),
+            write_to_client: HashMap::new(),
             fds: VecDeque::with_capacity(16),
             ops: VecDeque::from([Op::CoreHello]),
             memory: Memory::new(),
+            add_interest: VecDeque::new(),
+            modify_interest: VecDeque::new(),
         }
+    }
+
+    #[inline]
+    pub fn add_interest(&mut self) -> Option<(RawFd, Token, Interest)> {
+        self.add_interest.pop_front()
+    }
+
+    #[inline]
+    pub fn modify_interest(&mut self) -> Option<(RawFd, Token, Interest)> {
+        self.modify_interest.pop_front()
+    }
+
+    #[inline]
+    pub fn connection(&self) -> &Connection {
+        self.c.connection()
     }
 
     #[inline]
@@ -226,22 +268,43 @@ impl State {
                             self.c.client_node_update(client.id, 4, 4)?;
                             self.c.client_node_set_active(client.id, true)?;
 
-                            for port in &client.input_ports {
+                            for port in client.ports.inputs() {
                                 self.c.client_node_port_update(
                                     client.id,
                                     consts::Direction::INPUT,
-                                    port.id,
+                                    port.id(),
                                     &port.name,
                                 )?;
                             }
 
-                            for port in &client.output_ports {
+                            for port in client.ports.outputs() {
                                 self.c.client_node_port_update(
                                     client.id,
                                     consts::Direction::OUTPUT,
-                                    port.id,
+                                    port.id(),
                                     &port.name,
                                 )?;
+                            }
+                        }
+                    }
+                    Op::ReadInterest { client: index } => {
+                        if let Some(client) = self.client_nodes.get(index) {
+                            if let Some(read_fd) = &client.read_fd {
+                                self.read_to_client.insert(client.read_token, index);
+                                self.add_interest.push_back((
+                                    read_fd.as_raw_fd(),
+                                    client.read_token,
+                                    Interest::READ,
+                                ));
+                            }
+
+                            if let Some(write_fd) = &client.write_fd {
+                                self.write_to_client.insert(client.write_token, index);
+                                self.add_interest.push_back((
+                                    write_fd.as_raw_fd(),
+                                    client.write_token,
+                                    Interest::EMPTY,
+                                ));
                             }
                         }
                     }
@@ -268,8 +331,6 @@ impl State {
                     break 'done;
                 };
 
-                tracing::trace!(self.header.id = ?self.header.id(), self.header.op = ?self.header.op(), "Received frame");
-
                 let result = match self.header.id() {
                     consts::CORE_ID => self.core(pod),
                     consts::CLIENT_ID => self.client(pod),
@@ -293,6 +354,23 @@ impl State {
 
             return Ok(());
         }
+    }
+
+    /// Handle read on custom token.
+    #[tracing::instrument(skip(self))]
+    pub fn handle_read(&mut self, token: Token) -> Result<()> {
+        let Some(index) = self.read_to_client.get(&token) else {
+            tracing::warn!(?token, "No client found for token");
+            return Ok(());
+        };
+
+        let Some(client) = self.client_nodes.get_mut(*index) else {
+            tracing::warn!(?index, "No client found for index");
+            return Ok(());
+        };
+
+        tracing::info!(client.id);
+        Ok(())
     }
 
     /// Take a file descriptor from the stored range.
@@ -355,22 +433,30 @@ impl State {
         self.c
             .core_create_object("client-node", type_name, version, new_id)?;
 
+        let mut ports = Ports::new();
+
+        let port = ports.insert(consts::Direction::INPUT)?;
+        port.name = String::from("input");
+
+        let port = ports.insert(consts::Direction::OUTPUT)?;
+        port.name = String::from("output");
+
+        let read_token = Token::new(TOKEN_BASE + self.tokens.alloc().context("ran out of tokens")?);
+        let write_token =
+            Token::new(TOKEN_BASE + self.tokens.alloc().context("ran out of tokens")?);
+
         let index = self.client_nodes.insert(ClientNodeState {
             id: new_id,
-            input_ports: vec![Port {
-                id: 0,
-                name: String::from("input"),
-                buffers: None,
-            }],
-            output_ports: vec![Port {
-                id: 0,
-                name: String::from("output"),
-                buffers: None,
-            }],
+            ports,
             write_fd: None,
             read_fd: None,
+            write_token,
+            read_token,
             activation: None,
             params: BTreeMap::new(),
+            io_control: None,
+            io_clock: None,
+            io_position: None,
         });
 
         self.local_id_to_kind
@@ -675,10 +761,6 @@ impl State {
             match *kind {
                 Kind::Registry => {}
                 Kind::ClientNode(index) => {
-                    tracing::warn!(
-                        index,
-                        "Found interesting client node that was just registered"
-                    );
                     self.ops.push_back(Op::NodeUpdate { client: index });
                 }
             }
@@ -742,6 +824,11 @@ impl State {
 
         node.read_fd = read_fd;
         node.write_fd = write_fd;
+
+        if node.read_fd.is_some() {
+            self.ops.push_back(Op::ReadInterest { client: index });
+        }
+
         Ok(())
     }
 
@@ -788,32 +875,40 @@ impl State {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let Some(..) = self.client_nodes.get_mut(index) else {
+        let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<id::IoType>()?;
         let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<u32>()?;
-        let size = st.field()?.next::<u32>()?;
+        let offset = st.field()?.next::<isize>()?;
+        let size = st.field()?.next::<usize>()?;
 
-        let Ok(mem_id) = u32::try_from(mem_id) else {
-            bail!("Invalid memory id {mem_id}");
-        };
-
-        let data_type = self.memory.data_type(mem_id);
-
-        match id {
-            id::IoType::CONTROL => {}
-            id::IoType::CLOCK => {}
-            id::IoType::POSITION => {}
+        let saved = match id {
+            id::IoType::CONTROL => node.io_control_mut(),
+            id::IoType::CLOCK => node.io_clock_mut(),
+            id::IoType::POSITION => node.io_position_mut(),
             _ => {
                 tracing::warn!(?id, "Unsupported IO type in set IO");
+                return Ok(());
             }
+        };
+
+        let Ok(mem_id) = u32::try_from(mem_id) else {
+            if let Some(region) = saved.take() {
+                self.memory.free(region);
+            }
+
+            return Ok(());
+        };
+
+        let region = self.memory.map(mem_id, offset, size)?;
+
+        if let Some(region) = saved.replace(region) {
+            self.memory.free(region);
         }
 
-        tracing::info!(index, ?id, mem_id, ?data_type, offset, size);
         Ok(())
     }
 
@@ -874,7 +969,7 @@ impl State {
 
             for _ in 0..n_metas {
                 let (ty, size) = st.decode::<(id::MetaType, u32)>()?;
-                metas.push(BufferMeta { ty, size });
+                metas.push(buffer::Meta { ty, size });
             }
 
             let mut datas = Vec::new();
@@ -907,7 +1002,7 @@ impl State {
                     }
                 };
 
-                datas.push(BufferData {
+                datas.push(buffer::Data {
                     ty,
                     region,
                     flags,
@@ -931,23 +1026,10 @@ impl State {
             buffers,
         };
 
-        let replaced = match direction {
-            consts::Direction::INPUT => {
-                let Some(port) = node.input_ports.get_mut(port_id as usize) else {
-                    bail!("Invalid input port id {port_id} for client node {index}");
-                };
-
-                port.buffers.replace(buffers)
-            }
-            consts::Direction::OUTPUT => {
-                let Some(port) = node.output_ports.get_mut(port_id as usize) else {
-                    bail!("Invalid output port id {port_id} for client node {index}");
-                };
-
-                port.buffers.replace(buffers)
-            }
-            _ => None,
-        };
+        let replaced = node
+            .ports
+            .get_mut(direction, port_id)?
+            .replace_buffers(buffers);
 
         if let Some(replaced) = replaced {
             for buffer in replaced.buffers {
@@ -960,9 +1042,8 @@ impl State {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
     fn client_node_port_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let Some(..) = self.client_nodes.get_mut(index) else {
+        let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
@@ -972,8 +1053,36 @@ impl State {
         let mix_id = st.field()?.next::<u32>()?;
         let id = st.field()?.next::<id::IoType>()?;
         let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<u32>()?;
-        let size = st.field()?.next::<u32>()?;
+        let offset = st.field()?.next::<isize>()?;
+        let size = st.field()?.next::<usize>()?;
+        let port = node.ports.get_mut(direction, port_id)?;
+
+        let span = tracing::info_span!("client_node_port_set_io", ?direction, port_id, ?id,);
+        let _span = span.enter();
+
+        let saved = match id {
+            id::IoType::CLOCK => port.io_clock_mut(),
+            id::IoType::POSITION => port.io_position_mut(),
+            id::IoType::BUFFERS => port.io_buffers_mut(),
+            id => {
+                tracing::warn!(?id, "Unsupported IO type in port set IO");
+                return Ok(());
+            }
+        };
+
+        let Ok(mem_id) = u32::try_from(mem_id) else {
+            if let Some(region) = saved.take() {
+                self.memory.free(region);
+            };
+
+            return Ok(());
+        };
+
+        let region = self.memory.map(mem_id, offset, size)?;
+
+        if let Some(region) = saved.replace(region) {
+            self.memory.free(region);
+        };
 
         tracing::info!(?direction, port_id, mix_id, ?id, mem_id, offset, size);
         Ok(())

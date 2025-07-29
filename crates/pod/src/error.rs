@@ -40,6 +40,8 @@ pub(crate) enum ErrorKind {
     Expected { expected: Type, actual: Type },
     ReservedSizeMismatch { expected: usize, actual: usize },
     ChildSizeMismatch { expected: usize, actual: usize },
+    InvalidUsize { value: i32 },
+    InvalidIsize { value: i32 },
 }
 
 #[cfg(test)]
@@ -97,6 +99,12 @@ impl fmt::Display for Error {
                     f,
                     "Expected array element size {expected}, but found {actual}"
                 )
+            }
+            ErrorKind::InvalidUsize { value } => {
+                write!(f, "Value {value} is a valid usize")
+            }
+            ErrorKind::InvalidIsize { value } => {
+                write!(f, "Value {value} is a valid isize")
             }
         }
     }

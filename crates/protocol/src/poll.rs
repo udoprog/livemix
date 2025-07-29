@@ -8,7 +8,7 @@ use std::fmt;
 use libc::{POLLERR, POLLHUP, POLLIN, POLLOUT};
 
 /// The token returned by a poller.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Token(u32);
 

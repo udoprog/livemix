@@ -133,6 +133,78 @@ impl<'de> Decode<'de> for u32 {
 
 crate::macros::decode_from_sized!(u32);
 
+/// [`Decode`] implementation for `usize`.
+///
+/// This is decoded as an `u32`, or `Int` and will be checked that it's in
+/// bounds.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(10u32)?;
+/// assert_eq!(pod.as_ref().next::<usize>()?, 10u32);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(10i32)?;
+/// assert_eq!(pod.as_ref().next::<usize>()?, 10u32);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for usize {
+    const TYPE: Type = Type::INT;
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
+        let value = i32::read_content(reader, size)?;
+
+        let Ok(value) = usize::try_from(value) else {
+            return Err(Error::new(ErrorKind::InvalidUsize { value }));
+        };
+
+        Ok(value)
+    }
+}
+
+crate::macros::decode_from_sized!(usize);
+
+/// [`Decode`] implementation for `isize`.
+///
+/// This is decoded as an `i32`, or `Int` and will be checked that it's in
+/// bounds.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(-10)?;
+/// assert_eq!(pod.as_ref().next::<isize>()?, -10);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(-10)?;
+/// assert_eq!(pod.as_ref().next::<isize>()?, -10);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Decode<'de> for isize {
+    const TYPE: Type = Type::INT;
+
+    #[inline]
+    fn read_content(reader: impl Reader<'de, u64>, size: usize) -> Result<Self, Error> {
+        let value = i32::read_content(reader, size)?;
+
+        let Ok(value) = isize::try_from(value) else {
+            return Err(Error::new(ErrorKind::InvalidIsize { value }));
+        };
+
+        Ok(value)
+    }
+}
+
+crate::macros::decode_from_sized!(isize);
+
 /// [`Decode`] implementation for `i64`.
 ///
 /// # Examples

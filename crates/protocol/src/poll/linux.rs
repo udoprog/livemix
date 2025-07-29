@@ -1,11 +1,11 @@
 use core::mem;
 use std::io;
-use std::os::fd::{FromRawFd, OwnedFd, RawFd};
-use std::os::unix::prelude::AsRawFd;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 
 use libc::{
     EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD, epoll_create1, epoll_ctl, epoll_event, epoll_wait,
 };
+use tracing::Level;
 
 use crate::events::Events;
 use crate::poll::{Interest, PollEvent, Token};
@@ -32,7 +32,8 @@ impl Poll {
     }
 
     /// Add interest for a file descriptor.
-    pub fn add(&mut self, fd: &impl AsRawFd, token: Token, interest: Interest) -> io::Result<()> {
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
+    pub fn add(&mut self, fd: RawFd, token: Token, interest: Interest) -> io::Result<()> {
         // SAFETY: We're just using c-apis as intended.
         unsafe {
             let mut ev: epoll_event = mem::zeroed();
@@ -49,12 +50,8 @@ impl Poll {
     }
 
     /// Modify interest for the given file descriptor.
-    pub fn modify(
-        &mut self,
-        fd: &impl AsRawFd,
-        token: Token,
-        interest: Interest,
-    ) -> io::Result<()> {
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
+    pub fn modify(&mut self, fd: RawFd, token: Token, interest: Interest) -> io::Result<()> {
         // SAFETY: We're just using c-apis as intended.
         unsafe {
             let mut ev: epoll_event = mem::zeroed();
@@ -71,12 +68,8 @@ impl Poll {
     }
 
     /// Delete interest for the given file descriptor.
-    pub fn delete(
-        &mut self,
-        fd: &impl AsRawFd,
-        token: Token,
-        interest: Interest,
-    ) -> io::Result<()> {
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
+    pub fn delete(&mut self, fd: RawFd, token: Token, interest: Interest) -> io::Result<()> {
         // SAFETY: We're just using c-apis as intended.
         unsafe {
             let mut ev: epoll_event = mem::zeroed();

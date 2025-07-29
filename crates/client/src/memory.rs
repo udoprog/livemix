@@ -10,6 +10,7 @@ use anyhow::{Result, bail};
 use protocol::flags;
 use protocol::id;
 use slab::Slab;
+use tracing::Level;
 
 #[derive(Debug)]
 #[allow(unused)]
@@ -84,7 +85,7 @@ impl Memory {
     }
 
     /// Insert memory.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     pub(crate) fn insert(
         &mut self,
         mem_id: u32,
@@ -155,7 +156,6 @@ impl Memory {
             self.free_file(old);
         }
 
-        tracing::info!(file, "inserted");
         Ok(file)
     }
 
@@ -168,6 +168,7 @@ impl Memory {
     }
 
     /// Remove a memory region by its identifier.
+    #[tracing::instrument(skip(self))]
     pub(crate) fn remove(&mut self, mem_id: u32) {
         let Some(index) = self.map.remove(&mem_id) else {
             tracing::warn!("Tried to remove memory with id {mem_id} but it was not found");
@@ -180,7 +181,6 @@ impl Memory {
     /// Drop a mapped memory region.
     #[tracing::instrument(skip(self))]
     pub(crate) fn free(&mut self, region: Region) {
-        tracing::info!("dropping region");
         self.free_file(region.file);
     }
 
@@ -217,19 +217,19 @@ impl Memory {
         Ok(region)
     }
 
-    #[tracing::instrument(skip(self))]
-    fn free_file(&mut self, file: usize) {
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
+    fn free_file(&mut self, file: usize) -> bool {
         let Some(fd) = self.files.get_mut(file) else {
-            return;
+            return false;
         };
 
         fd.users -= 1;
 
-        if fd.users == 0 {
-            tracing::info!("freeing file");
-            self.files.remove(file);
-        } else {
-            tracing::trace!(fd.users, "not freeing file, still in use");
+        if fd.users > 0 {
+            return false;
         }
+
+        self.files.remove(file);
+        true
     }
 }
