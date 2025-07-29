@@ -54,7 +54,7 @@ impl Ids {
     /// assert!(ids.test(0));
     /// assert!(ids.test(2));
     /// assert!(!ids.test(4));
-    /// assert!(ids.unset(2));
+    /// ids.unset(2);
     /// assert!(!ids.test(2));
     /// ```
     pub fn unset(&mut self, index: u32) {

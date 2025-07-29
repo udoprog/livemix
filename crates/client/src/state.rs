@@ -783,9 +783,21 @@ impl State {
 
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<id::IoType>()?;
-        let mem_id = st.field()?.next::<i32>()?;
+        let mem_id = st.field()?.next::<u32>()?;
         let offset = st.field()?.next::<u32>()?;
         let size = st.field()?.next::<u32>()?;
+
+        let Some(memory) = self.memory.get_mut(&mem_id) else {
+            bail!("Missing memory for IO type {mem_id}");
+        };
+
+        match id {
+            id::IoType::CONTROL => {}
+            id::IoType::CLOCK => {}
+            _ => {
+                tracing::warn!(?id, "Unsupported IO type in set IO");
+            }
+        }
 
         tracing::info!(index, ?id, mem_id, offset, size);
         Ok(())

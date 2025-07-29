@@ -30,6 +30,7 @@ pub const INTERFACE_LINK: &str = "PipeWire:Interface:Link";
 pod::macros::consts! {
     /// The direction of a port.
     #[example = OUTPUT]
+    #[module = protocol::consts]
     pub struct Direction(u32) {
         UNKNOWN,
         INPUT = 0,

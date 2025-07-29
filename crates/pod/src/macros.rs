@@ -4,10 +4,12 @@ macro_rules! __id {
         $(
             $(#[doc = $doc:literal])*
             #[example = $example:ident]
+            #[module = $module:path]
             $ty_vis:vis struct $ty:ident {
                 $default:ident
                 $(,
-                    $(#[$($field_meta:meta)*])*
+                    $(#[doc = $field_doc:literal])*
+                    $(#[constant = $field_mod:ident :: $field_constant:ident])?
                     $field:ident = $field_value:expr
                 )* $(,)?
             }
@@ -20,7 +22,11 @@ macro_rules! __id {
 
             impl $ty {
                 $(
-                    $(#[$($field_meta)*])*
+                    $(#[doc = $field_doc])*
+                    $(
+                        #[doc = ""]
+                        #[doc = concat!("Equivalent to `", stringify!($field_constant), "`.")]
+                    )*
                     $ty_vis const $field: Self = Self($field_value);
                 )*
             }
@@ -31,7 +37,7 @@ macro_rules! __id {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.push(", stringify!($ty), "::", stringify!($example), ")?;")]
@@ -60,7 +66,7 @@ macro_rules! __id {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             ///
@@ -81,7 +87,7 @@ macro_rules! __id {
             ///
             /// ```
             /// use pod::{Pod, Id};
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             /// pod.as_mut().push(Id(u32::MAX / 2))?;
@@ -147,6 +153,21 @@ macro_rules! __id {
                 }
             }
         )*
+
+        #[cfg(test)]
+        #[test]
+        fn test_constants() {
+            $($(
+                $(
+                    assert_eq! {
+                        $ty::$field.into_id(), $field_mod::$field_constant,
+                        "{}::{} != {}::{}",
+                        stringify!($ty), stringify!($field),
+                        stringify!($field_mod), stringify!($field_constant)
+                    };
+                )*
+            )*)*
+        }
     };
 }
 
@@ -158,6 +179,7 @@ macro_rules! __consts {
         $(
             $(#[doc = $doc:literal])*
             #[example = $example:ident]
+            #[module = $module:path]
             $ty_vis:vis struct $ty:ident($repr:ty) {
                 $default:ident
                 $(,
@@ -186,7 +208,7 @@ macro_rules! __consts {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.push(", stringify!($ty), "::", stringify!($example), ")?;")]
@@ -215,31 +237,31 @@ macro_rules! __consts {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             ///
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
-            #[doc = concat!(" let id = pod.as_ref().next::<", stringify!($ty), ">()?;")]
-            #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
+            #[doc = concat!(" let flag = pod.as_ref().next::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" assert_eq!(flag, ", stringify!($ty), "::", stringify!($example), ");")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.as_mut().push(", stringify!($ty), "::", stringify!($example), ")?;")]
             ///
-            #[doc = concat!(" let id = pod.as_ref().next::<", stringify!($ty), ">()?;")]
-            #[doc = concat!(" assert_eq!(id, ", stringify!($ty), "::", stringify!($example), ");")]
+            #[doc = concat!(" let flag = pod.as_ref().next::<", stringify!($ty), ">()?;")]
+            #[doc = concat!(" assert_eq!(flag, ", stringify!($ty), "::", stringify!($example), ");")]
             /// # Ok::<_, pod::Error>(())
             /// ```
             ///
             #[doc = concat!(" Unknown identifiers will be decoded as the default value ", stringify!($default), ".")]
             ///
             /// ```
-            /// use pod::{Pod, Id};
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            /// use pod::Pod;
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
-            /// pod.as_mut().push(Id(u32::MAX / 2))?;
+            /// pod.as_mut().push(u32::MAX / 2)?;
             ///
             #[doc = concat!(" let id = pod.as_ref().next::<", stringify!($ty), ">()?;")]
             /// assert!(id.is_invalid());
@@ -300,11 +322,13 @@ macro_rules! __flags {
         $(
             #[examples = [$example0:ident $(, $example:ident)* $(,)?]]
             #[not_set = [$($not_set:ident),* $(,)?]]
+            #[module = $module:path]
             $vis:vis struct $ty:ident($repr:ty) {
                 $none_vis:vis const $none:ident;
 
                 $(
-                    $(#[$($meta:meta)*])*
+                    $(#[doc = $field_doc:literal])*
+                    $(#[constant = $flag_mod:ident :: $flag_constant:ident])?
                     $flag_vis:vis const $flag:ident = $value:expr;
                 )*
             }
@@ -322,7 +346,11 @@ macro_rules! __flags {
                 $(
                     #[doc = concat!("Flag with value `", stringify!($value), "`.")]
                     ///
-                    $(#[$($meta)*])*
+                    $(#[doc = $field_doc])*
+                    $(
+                        #[doc = ""]
+                        #[doc = concat!("Equivalent to `", stringify!($flag_constant), "`.")]
+                    )*
                     $flag_vis const $flag: Self = Self($value);
                 )*
 
@@ -331,7 +359,7 @@ macro_rules! __flags {
                 /// # Examples
                 ///
                 /// ```
-                #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+                #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
                 ///
                 #[doc = concat!(" let flags = ", stringify!($ty), "::", stringify!($example0) $(," | ", stringify!($ty), "::", stringify!($example))*, ";")]
                 #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
@@ -368,7 +396,7 @@ macro_rules! __flags {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.push(", stringify!($ty), "::", stringify!($example0), ")?;")]
@@ -404,7 +432,7 @@ macro_rules! __flags {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             ///
@@ -425,7 +453,7 @@ macro_rules! __flags {
             ///
             /// ```
             /// use pod::Pod;
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = Pod::array();
             #[doc = concat!(" pod.as_mut().push(1 | (1 as ", stringify!($repr), ").rotate_right(1))?;")]
@@ -448,7 +476,7 @@ macro_rules! __flags {
             /// # Examples
             ///
             /// ```
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             #[doc = concat!(" let flags = ", stringify!($ty), "::", stringify!($example0) $(," | ", stringify!($ty), "::", stringify!($example))*, ";")]
             #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
@@ -469,7 +497,7 @@ macro_rules! __flags {
             /// # Examples
             ///
             /// ```
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             #[doc = concat!(" let flags = ", stringify!($ty), "::", stringify!($example0) $(," | ", stringify!($ty), "::", stringify!($example))*, ";")]
             #[doc = concat!(" assert!(flags & ", stringify!($ty), "::", stringify!($example0), ");")]
@@ -490,13 +518,13 @@ macro_rules! __flags {
             /// # Examples
             ///
             /// ```
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             #[doc = concat!(" let mut flags = ", stringify!($ty), "::", stringify!($example0), ";")]
             #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
             $(
                 #[doc = concat!(" assert!(!flags.contains(", stringify!($ty), "::", stringify!($example), "));")]
-                #[doc = concat!(" flags |= ", stringify!($ty), "::", stringify!($example), ");")]
+                #[doc = concat!(" flags |= ", stringify!($ty), "::", stringify!($example), ";")]
                 #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example), "));")]
             )*
             $(#[doc = concat!(" assert!(!flags.contains(", stringify!($ty), "::", stringify!($not_set), "));")])*
@@ -513,7 +541,7 @@ macro_rules! __flags {
             /// # Examples
             ///
             /// ```
-            #[doc = concat!(" use pod::id::", stringify!($ty), ";")]
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             #[doc = concat!(" let flags = ", stringify!($ty), "::", stringify!($example0) $(, " | ", stringify!($ty), "::", stringify!($example))*, ";")]
             #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
@@ -562,6 +590,21 @@ macro_rules! __flags {
                 }
             }
         )*
+
+        #[cfg(test)]
+        #[test]
+        fn test_constants() {
+            $($(
+                $(
+                    assert_eq! {
+                        $ty::$flag.into_raw(), $flag_mod::$flag_constant as $repr,
+                        "{}::{} != {}::{}",
+                        stringify!($ty), stringify!($flag),
+                        stringify!($flag_mod), stringify!($flag_constant)
+                    };
+                )*
+            )*)*
+        }
     }
 }
 
