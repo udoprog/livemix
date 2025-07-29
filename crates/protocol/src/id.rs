@@ -589,6 +589,66 @@ pod::macros::id! {
         #[constant = libspa_sys::SPA_TYPE_COMMAND_Node]
         NODE = 0x30002,
     }
+
+    /// Represents the `enum spa_data_type`.
+    #[example = MEM_FD]
+    #[module = protocol::id]
+    pub struct DataType {
+        UNKNOWN,
+        /// Pointer to memory, the data field in struct spa_data is set.
+        #[constant = libspa_sys::SPA_DATA_MemPtr]
+        MEM_PTR = 1,
+        /// memfd, mmap to get to memory.
+        #[constant = libspa_sys::SPA_DATA_MemFd]
+        MEM_FD = 2,
+        /// fd to dmabuf memory. This might not be readily mappable (unless the
+        /// MAPPABLE flag is set) and should normally be handled with DMABUF
+        /// apis.
+        #[constant = libspa_sys::SPA_DATA_DmaBuf]
+        DMA_BUF = 3,
+        /// Memory is identified with an id. The actual memory can be obtained
+        /// in some other way and can be identified with this id.
+        #[constant = libspa_sys::SPA_DATA_MemId]
+        MEM_ID = 4,
+        /// A syncobj, usually requires a spa_meta_sync_timeline metadata with
+        /// timeline points.
+        #[constant = libspa_sys::SPA_DATA_SyncObj]
+        SYNC_OBJ = 5,
+    }
+
+    /// Represents the `enum spa_meta_type`.
+    #[example = BITMAP]
+    #[module = protocol::id]
+    pub struct MetaType {
+        UNKNOWN,
+        /// struct spa_meta_header.
+        #[constant = libspa_sys::SPA_META_Header]
+        HEADER = 1,
+        /// struct spa_meta_region with cropping data.
+        #[constant = libspa_sys::SPA_META_VideoCrop]
+        VIDEO_CROP = 2,
+        /// array of struct spa_meta_region with damage, where an invalid entry or end-of-array marks the end.
+        #[constant = libspa_sys::SPA_META_VideoDamage]
+        VIDEO_DAMAGE = 3,
+        /// struct spa_meta_bitmap.
+        #[constant = libspa_sys::SPA_META_Bitmap]
+        BITMAP = 4,
+        /// struct spa_meta_cursor.
+        #[constant = libspa_sys::SPA_META_Cursor]
+        CURSOR = 5,
+        /// metadata contains a spa_meta_control associated with the data.
+        #[constant = libspa_sys::SPA_META_Control]
+        CONTROL = 6,
+        /// don't write to buffer when count > 0.
+        #[constant = libspa_sys::SPA_META_Busy]
+        BUSY = 7,
+        /// struct spa_meta_transform.
+        #[constant = libspa_sys::SPA_META_VideoTransform]
+        VIDEO_TRANSFORM = 8,
+        /// struct spa_meta_sync_timeline.
+        #[constant = libspa_sys::SPA_META_SyncTimeline]
+        SYNC_TIMELINE = 9,
+    }
 }
 
 impl AudioFormat {

@@ -1,17 +1,18 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::os::fd::OwnedFd;
 
 use anyhow::{Context, Result, bail};
-use pod::{Fd, Id, Object, Pod, Struct};
-use protocol::consts;
+use pod::{Fd, Object, Pod, Struct};
 use protocol::id;
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::types::Header;
 use protocol::{Connection, DynamicBuf};
+use protocol::{consts, flags};
 use slab::Slab;
 
-use crate::Client;
+use crate::buffer::{Buffer, BufferData, BufferMeta};
+use crate::{Buffers, Client, Memory, Region};
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
 const GET_REGISTRY_SYNC: u32 = 0x1000;
@@ -53,24 +54,29 @@ struct RegistryState {
 }
 
 #[derive(Debug)]
-#[allow(unused)]
 struct Activation {
-    fd: Option<OwnedFd>,
-    mem_id: i32,
-    offset: u32,
-    size: u32,
+    #[allow(unused)]
+    fd: OwnedFd,
+    region: Region,
+}
+
+#[derive(Debug)]
+struct Port {
+    id: u32,
+    name: String,
+    buffers: Option<Buffers>,
 }
 
 #[derive(Default, Debug)]
 #[allow(unused)]
 struct ClientNodeState {
     id: u32,
-    input_ports: u32,
-    output_ports: u32,
     read_fd: Option<OwnedFd>,
     write_fd: Option<OwnedFd>,
     activation: Option<Activation>,
     params: BTreeMap<id::Param, Object<Box<[u64]>>>,
+    input_ports: Vec<Port>,
+    output_ports: Vec<Port>,
 }
 
 #[derive(Debug)]
@@ -90,15 +96,7 @@ enum Op {
     GetRegistry,
     Pong { id: u32, seq: u32 },
     ConstructNode,
-    AddPort { client: usize },
-}
-
-#[derive(Debug)]
-#[allow(unused)]
-struct MemoryState {
-    ty: Id<u32>,
-    fd: Option<OwnedFd>,
-    flags: i32,
+    NodeUpdate { client: usize },
 }
 
 #[derive(Debug)]
@@ -148,7 +146,7 @@ pub struct State {
     ids: Ids,
     fds: VecDeque<ReceivedFd>,
     ops: VecDeque<Op>,
-    memory: HashMap<u32, MemoryState>,
+    memory: Memory,
 }
 
 impl State {
@@ -174,7 +172,7 @@ impl State {
             ids,
             fds: VecDeque::with_capacity(16),
             ops: VecDeque::from([Op::CoreHello]),
-            memory: HashMap::new(),
+            memory: Memory::new(),
         }
     }
 
@@ -215,34 +213,28 @@ impl State {
                             tracing_error!(error, "Failed to construct client node");
                         }
                     }
-                    Op::AddPort { client } => {
+                    Op::NodeUpdate { client } => {
                         tracing::info!("Adding port to client node");
 
                         if let Some(client) = self.client_nodes.get_mut(client) {
                             self.c.client_node_update(client.id, 4, 4)?;
                             self.c.client_node_set_active(client.id, true)?;
 
-                            for _ in 0..4 {
-                                let port = client.input_ports;
-                                client.input_ports += 1;
-
+                            for port in &client.input_ports {
                                 self.c.client_node_port_update(
                                     client.id,
                                     consts::Direction::INPUT,
-                                    port,
-                                    &format!("livemix_{port}"),
+                                    port.id,
+                                    &port.name,
                                 )?;
                             }
 
-                            for _ in 0..4 {
-                                let port = client.output_ports;
-                                client.output_ports += 1;
-
+                            for port in &client.output_ports {
                                 self.c.client_node_port_update(
                                     client.id,
                                     consts::Direction::OUTPUT,
-                                    port,
-                                    &format!("livemix_{port}"),
+                                    port.id,
+                                    &port.name,
                                 )?;
                             }
                         }
@@ -359,8 +351,16 @@ impl State {
 
         let index = self.client_nodes.insert(ClientNodeState {
             id: new_id,
-            input_ports: 0,
-            output_ports: 0,
+            input_ports: vec![Port {
+                id: 0,
+                name: "input".to_string(),
+                buffers: None,
+            }],
+            output_ports: vec![Port {
+                id: 0,
+                name: "output".to_string(),
+                buffers: None,
+            }],
             write_fd: None,
             read_fd: None,
             activation: None,
@@ -573,14 +573,18 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_add_mem_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<u32>()?;
-        let ty = st.field()?.next::<Id<u32>>()?;
-        let fd = self.take_fd(st.field()?.next::<Fd>()?)?;
-        let flags = st.field()?.next::<i32>()?;
+        let (id, ty, fd, flags) = pod
+            .next_struct()?
+            .decode::<(u32, id::DataType, Fd, i32)>()?;
 
-        tracing::info!(id, ?ty, ?fd, flags);
-        self.memory.insert(id, MemoryState { ty, fd, flags });
+        let fd = self.take_fd(fd)?;
+
+        let Some(fd) = fd else {
+            self.memory.remove(id);
+            return Ok(());
+        };
+
+        self.memory.insert(id, ty, fd, flags)?;
         Ok(())
     }
 
@@ -668,7 +672,7 @@ impl State {
                         index,
                         "Found interesting client node that was just registered"
                     );
-                    self.ops.push_back(Op::AddPort { client: index });
+                    self.ops.push_back(Op::NodeUpdate { client: index });
                 }
             }
         }
@@ -783,23 +787,26 @@ impl State {
 
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<id::IoType>()?;
-        let mem_id = st.field()?.next::<u32>()?;
+        let mem_id = st.field()?.next::<i32>()?;
         let offset = st.field()?.next::<u32>()?;
         let size = st.field()?.next::<u32>()?;
 
-        let Some(memory) = self.memory.get_mut(&mem_id) else {
-            bail!("Missing memory for IO type {mem_id}");
+        let Ok(mem_id) = u32::try_from(mem_id) else {
+            bail!("Invalid memory id {mem_id}");
         };
+
+        let data_type = self.memory.data_type(mem_id);
 
         match id {
             id::IoType::CONTROL => {}
             id::IoType::CLOCK => {}
+            id::IoType::POSITION => {}
             _ => {
                 tracing::warn!(?id, "Unsupported IO type in set IO");
             }
         }
 
-        tracing::info!(index, ?id, mem_id, offset, size);
+        tracing::info!(index, ?id, mem_id, ?data_type, offset, size);
         Ok(())
     }
 
@@ -838,12 +845,82 @@ impl State {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_use_buffers(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let Some(..) = self.client_nodes.get_mut(index) else {
+        let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
-        let st = pod.next_struct()?;
-        tracing::info!(?st);
+        let mut st = pod.next_struct()?;
+
+        let (direction, port_id, mix_id, flags, n_buffers) =
+            st.decode::<(consts::Direction, u32, u32, u32, u32)>()?;
+
+        let mut buffers = Vec::new();
+
+        for _ in 0..n_buffers {
+            let (mem_id, offset, size, n_metas) = st.decode::<(u32, u32, u32, u32)>()?;
+
+            let mut metas = Vec::new();
+
+            for _ in 0..n_metas {
+                let (ty, size) = st.decode::<(id::MetaType, u32)>()?;
+
+                metas.push(BufferMeta { ty, size });
+            }
+
+            let mut datas = Vec::new();
+
+            let n_datas = st.decode::<u32>()?;
+
+            for _ in 0..n_datas {
+                let (ty, data, flags, offset, max_size) =
+                    st.decode::<(id::DataType, u32, flags::DataFlag, u32, u32)>()?;
+
+                datas.push(BufferData {
+                    ty,
+                    data,
+                    flags,
+                    offset,
+                    max_size,
+                })
+            }
+
+            buffers.push(Buffer {
+                mem_type: self.memory.data_type(mem_id),
+                mem_id,
+                offset,
+                size,
+                metas,
+                datas,
+            });
+        }
+
+        let buffers = Buffers {
+            direction,
+            mix_id,
+            flags,
+            buffers,
+        };
+
+        std::dbg!(&buffers);
+
+        match direction {
+            consts::Direction::INPUT => {
+                if let Some(port) = node.input_ports.get_mut(port_id as usize) {
+                    port.buffers = Some(buffers);
+                } else {
+                    bail!("Invalid input port id {port_id} for client node {index}");
+                }
+            }
+            consts::Direction::OUTPUT => {
+                if let Some(port) = node.output_ports.get_mut(port_id as usize) {
+                    port.buffers = Some(buffers);
+                } else {
+                    bail!("Invalid output port id {port_id} for client node {index}");
+                }
+            }
+            _ => {}
+        }
+
         Ok(())
     }
 
@@ -873,21 +950,29 @@ impl State {
         let node_id = st.field()?.next::<i32>()?;
         let fd = self.take_fd(st.field()?.next::<Fd>()?)?;
         let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<u32>()?;
-        let size = st.field()?.next::<u32>()?;
+        let offset = st.field()?.next::<i32>()? as isize;
+        let size = st.field()?.next::<u32>()? as usize;
 
-        tracing::info!(index, node_id, ?fd, mem_id, offset, size,);
+        tracing::info!(index, node_id, ?fd, mem_id, offset, size);
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
-        node.activation = Some(Activation {
-            fd,
-            mem_id,
-            offset,
-            size,
-        });
+        let (Some(fd), Ok(mem_id)) = (fd, u32::try_from(mem_id)) else {
+            if let Some(a) = node.activation.take() {
+                self.memory.drop(a.region);
+            }
+
+            return Ok(());
+        };
+
+        let region = self.memory.map(mem_id, size, offset)?;
+
+        if let Some(a) = node.activation.replace(Activation { fd, region }) {
+            self.memory.drop(a.region);
+        }
+
         Ok(())
     }
 

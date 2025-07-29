@@ -194,6 +194,15 @@ pod::macros::flags! {
         pub const READ = 1 << 1;
         pub const WRITE = 1 << 2;
     }
+
+    #[examples = [OUT]]
+    #[not_set = [MAPPED]]
+    #[module = protocol::flags]
+    pub struct DataFlag(u32) {
+        pub const NONE;
+        pub const OUT = 1 << 0;
+        pub const MAPPED = 1 << 1;
+    }
 }
 
 impl Param {

@@ -60,6 +60,13 @@ macro_rules! __id {
                 }
             }
 
+            impl<'de> $crate::DecodeFrom<'de> for $ty {
+                #[inline]
+                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de, u64>, impl $crate::PodKind>) -> Result<Self, $crate::Error> {
+                    pod.next()
+                }
+            }
+
             #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
             ///
             /// # Examples
@@ -228,6 +235,13 @@ macro_rules! __consts {
                 #[inline]
                 fn encode_into(&self, pod: $crate::Pod<impl $crate::Writer<u64>, impl $crate::PodKind>) -> Result<(), $crate::Error> {
                     pod.push(self)
+                }
+            }
+
+            impl<'de> $crate::DecodeFrom<'de> for $ty {
+                #[inline]
+                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de, u64>, impl $crate::PodKind>) -> Result<Self, $crate::Error> {
+                    pod.next()
                 }
             }
 
