@@ -26,7 +26,6 @@ use crate::{Buffers, Client, Memory, Ports, Region, ffi};
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
 const GET_REGISTRY_SYNC: u32 = 0x1000;
-const TOKEN_BASE: u32 = 0x10000;
 
 macro_rules! tracing_error {
     ($error:expr, $($tt:tt)*) => {{
@@ -72,7 +71,11 @@ struct ClientNodeState {
     write_token: Token,
     write_fd: Option<OwnedFd>,
     read_token: Token,
-    activation: Slab<Activation>,
+    /// Activation record for this node.
+    activation: Option<Region<ffi::NodeActivation>>,
+    /// Activation records for dependent nodes.
+    node_activations: Slab<Activation>,
+    /// Map of peer ids to their activation indices.
     peer_to_activation: BTreeMap<u32, usize>,
     params: BTreeMap<id::Param, Object<Box<[u64]>>>,
     ports: Ports,
@@ -137,7 +140,8 @@ impl ClientNodeState {
             read_fd: None,
             write_token,
             read_token,
-            activation: Slab::new(),
+            activation: None,
+            node_activations: Slab::new(),
             peer_to_activation: BTreeMap::new(),
             params,
             io_control: None,
@@ -276,6 +280,14 @@ impl State {
         }
     }
 
+    /// Allocate a unique token.
+    #[inline]
+    pub fn token(&mut self) -> Result<Token> {
+        Ok(Token::new(
+            self.tokens.alloc().context("no more tokens")? as u64
+        ))
+    }
+
     #[inline]
     pub fn add_interest(&mut self) -> Option<(RawFd, Token, Interest)> {
         self.add_interest.pop_front()
@@ -333,8 +345,6 @@ impl State {
                             if client.take_modified() {
                                 self.c.client_node_update(client.id, 4, 4, &client.params)?;
                             }
-
-                            self.c.client_node_set_active(client.id, true)?;
 
                             for port in client.ports.inputs_mut() {
                                 if !port.take_modified() {
@@ -436,15 +446,15 @@ impl State {
 
     /// Process client.
     pub fn tick(&mut self) -> Result<()> {
-        for (_, client) in &mut self.client_nodes {
-            for port in client.ports.inputs() {
-                if let Some(_region) = &port.io_buffers {
-                    // std::dbg!(port.id(), unsafe { region.read() });
+        for (_, node) in &mut self.client_nodes {
+            if let Some(a) = &node.activation {
+                if crate::ptr::volatile!(a, status).read() == consts::ActivationStatus::INACTIVE {
+                    tracing::warn!("node is not active");
+                    self.c.client_node_set_active(node.id, true)?;
+                    crate::ptr::volatile!(a, status).write(consts::ActivationStatus::FINISHED);
                 }
-            }
 
-            for (_, activation) in &client.activation {
-                std::dbg!(crate::ptr::volatile!(activation.region, signal_time).read());
+                // std::dbg!(unsafe { a.read() });
             }
         }
 
@@ -534,8 +544,8 @@ impl State {
         // let port = ports.insert(consts::Direction::OUTPUT)?;
         // port.name = String::from("output");
 
-        let write_token = Token::new(TOKEN_BASE + self.tokens.alloc().context("no more tokens")?);
-        let read_token = Token::new(TOKEN_BASE + self.tokens.alloc().context("no more tokens")?);
+        let write_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
+        let read_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
 
         let index = self.client_nodes.insert(ClientNodeState::new(
             new_id,
@@ -897,11 +907,29 @@ impl State {
         let mut st = pod.next_struct()?;
         let read_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
         let write_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
-        let memfd = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<i32>()?;
-        let size = st.field()?.next::<i32>()?;
+        let mem_id = st.field()?.next::<i32>()?;
+        let offset = st.field()?.next::<isize>()?;
+        let size = st.field()?.next::<usize>()?;
 
-        tracing::debug!(index, ?read_fd, ?write_fd, memfd, offset, size,);
+        let Some(node) = self.client_nodes.get_mut(index) else {
+            bail!("Missing client node {index}");
+        };
+
+        if let Some(a) = node.activation.take() {
+            self.memory.free(a);
+        }
+
+        let Ok(mem_id) = u32::try_from(mem_id) else {
+            return Ok(());
+        };
+
+        let region = self.memory.map(mem_id, offset, size)?;
+
+        if let Some(a) = node.activation.replace(region) {
+            self.memory.free(a);
+        }
+
+        tracing::debug!(index, ?read_fd, ?write_fd, mem_id, offset, size,);
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
@@ -1020,8 +1048,8 @@ impl State {
 
         match object_id {
             id::NodeCommand::START => {
-                for (_, activation) in &node.activation {
-                    activation.signal()?;
+                for (_, activation) in &node.node_activations {
+                    // activation.signal()?;
                 }
             }
             _ => {
@@ -1243,7 +1271,7 @@ impl State {
         };
 
         if let Some(index) = node.peer_to_activation.remove(&peer_id) {
-            if let Some(a) = node.activation.try_remove(index) {
+            if let Some(a) = node.node_activations.try_remove(index) {
                 self.memory.free(a.region);
             }
         }
@@ -1254,9 +1282,9 @@ impl State {
 
         let region = self.memory.map(mem_id, offset, size)?;
 
-        let index = node
-            .activation
-            .insert(Activation::new(peer_id, EventFd::from(fd), region));
+        let index =
+            node.node_activations
+                .insert(Activation::new(peer_id, EventFd::from(fd), region));
         node.peer_to_activation.insert(peer_id, index);
         Ok(())
     }

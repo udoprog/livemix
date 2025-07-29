@@ -138,6 +138,12 @@ impl<T> Volatile<T> {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe { self.ptr.as_ptr().read_volatile() }
     }
+
+    /// Write a value.
+    pub(crate) fn write(&self, value: T) {
+        // SAFETY: We are assuming that the field pointer is valid.
+        unsafe { self.ptr.as_ptr().write_volatile(value) };
+    }
 }
 
 macro_rules! __volatile {

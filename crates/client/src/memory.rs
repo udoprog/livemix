@@ -33,7 +33,12 @@ pub struct Region<T> {
 }
 
 impl<T> Region<T> {
-    /// Read the region.
+    /// Read the whole region.
+    ///
+    /// Since a region might be memory-contested among multiple threads, this
+    /// read is never guaranteed to result in data which is up-to-date or event
+    /// partially so. We do our best regardless and make use of volatile reads
+    /// to try and avoid the reading being optimized away.
     #[inline]
     pub unsafe fn read(&self) -> T
     where

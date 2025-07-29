@@ -72,7 +72,7 @@ fn test_write_overflow() -> Result<(), Error> {
 
     assert_eq!(
         pod.as_mut().push_none().unwrap_err().kind(),
-        ErrorKind::BufferOverflow
+        ErrorKind::CapacityError
     );
     Ok(())
 }

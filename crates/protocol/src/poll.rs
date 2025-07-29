@@ -10,11 +10,11 @@ use libc::{POLLERR, POLLHUP, POLLIN, POLLOUT};
 /// The token returned by a poller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct Token(u32);
+pub struct Token(u64);
 
 impl Token {
     /// Construct a new token with the given value.
-    pub const fn new(value: u32) -> Self {
+    pub const fn new(value: u64) -> Self {
         Self(value)
     }
 }

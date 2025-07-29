@@ -2,12 +2,27 @@ use core::fmt;
 use core::mem::{self, ManuallyDrop, MaybeUninit};
 use core::ptr;
 use core::slice;
+use std::error;
 
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
 use crate::{AsReader, Error, Writer};
 
 const DEFAULT_SIZE: usize = 128;
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+#[non_exhaustive]
+pub struct CapacityError;
+
+impl error::Error for CapacityError {}
+
+impl fmt::Display for CapacityError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Buffer capacity exceeded")
+    }
+}
 
 /// A fixed-size buffer with a flexible read and write position.
 ///
@@ -75,9 +90,9 @@ impl<T, const N: usize> Buf<T, N> {
     /// buf.push("Hello".to_string())?;
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn push(&mut self, value: T) -> Result<(), Error> {
+    pub fn push(&mut self, value: T) -> Result<(), CapacityError> {
         if self.len >= N {
-            return Err(Error::new(ErrorKind::BufferOverflow));
+            return Err(CapacityError);
         }
 
         // SAFETY: We are writing to a valid position in the buffer.
@@ -100,14 +115,14 @@ impl<T, const N: usize> Buf<T, N> {
     /// ```
     /// use pod::Buf;
     /// ```
-    pub fn extend_from_slice(&mut self, slice: &[T]) -> Result<(), Error>
+    pub fn extend_from_slice(&mut self, slice: &[T]) -> Result<(), CapacityError>
     where
         T: BytesInhabited,
     {
         let len = self.len.wrapping_add(slice.len());
 
         if len > N {
-            return Err(Error::new(ErrorKind::BufferOverflow));
+            return Err(CapacityError);
         }
 
         // SAFETY: We are writing to a valid position in the buffer.
@@ -145,10 +160,8 @@ impl<T, const N: usize> Buf<T, N> {
         }
 
         self.len -= 1;
-
         // SAFETY: We are writing to a valid position in the buffer.
         let value = unsafe { self.data.as_mut_ptr().add(self.len).cast::<T>().read() };
-
         Some(value)
     }
 }
@@ -585,7 +598,7 @@ where
 
         // Ensure we have enough space in the buffer.
         if write > N || write < self.len {
-            return Err(Error::new(ErrorKind::BufferOverflow));
+            return Err(Error::new(ErrorKind::CapacityError(CapacityError)));
         }
 
         // SAFETY: We are writing to a valid position in the buffer.
@@ -618,7 +631,7 @@ where
 
         // Ensure we have enough space in the buffer.
         if write > N || write < self.len {
-            return Err(Error::new(ErrorKind::BufferOverflow));
+            return Err(Error::new(ErrorKind::CapacityError(CapacityError)));
         }
 
         // SAFETY: We are writing to a valid position in the buffer.
@@ -668,7 +681,7 @@ where
         let write = self.len.wrapping_add(req);
 
         if !(self.len..=N).contains(&write) {
-            return Err(Error::new(ErrorKind::BufferOverflow));
+            return Err(Error::new(ErrorKind::CapacityError(CapacityError)));
         }
 
         // SAFETY: We are writing to a valid position in the buffer.

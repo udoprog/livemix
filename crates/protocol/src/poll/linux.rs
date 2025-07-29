@@ -75,7 +75,7 @@ impl Poll {
             let mut ev: epoll_event = mem::zeroed();
 
             ev.events = interest.as_u32();
-            ev.u64 = token.0 as u64;
+            ev.u64 = token.0;
 
             if epoll_ctl(self.fd.as_raw_fd(), EPOLL_CTL_DEL, fd.as_raw_fd(), &mut ev) == -1 {
                 return Err(io::Error::last_os_error());
@@ -99,7 +99,7 @@ impl Poll {
 
             for e in events.get(..ready as usize).unwrap_or_default() {
                 out.push(PollEvent {
-                    token: Token(e.u64 as u32),
+                    token: Token(e.u64),
                     interest: Interest(e.events),
                 });
             }

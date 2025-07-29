@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crate::Type;
+use crate::array::CapacityError;
 
 #[non_exhaustive]
 pub struct Error {
@@ -10,8 +11,13 @@ pub struct Error {
 impl Error {
     /// Create a new `Error` with the specified kind.
     #[inline]
-    pub(crate) fn new(kind: ErrorKind) -> Self {
-        Self { kind }
+    pub(crate) fn new<K>(kind: K) -> Self
+    where
+        ErrorKind: From<K>,
+    {
+        Self {
+            kind: ErrorKind::from(kind),
+        }
     }
 
     /// Get the kind of error.
@@ -22,6 +28,16 @@ impl Error {
     }
 }
 
+impl<E> From<E> for Error
+where
+    ErrorKind: From<E>,
+{
+    #[inline]
+    fn from(e: E) -> Self {
+        Self::new(e)
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum ErrorKind {
@@ -29,7 +45,6 @@ pub(crate) enum ErrorKind {
     ObjectUnderflow,
     SizeOverflow,
     SizeUnderflow { size: usize, sub: usize },
-    BufferOverflow,
     BufferUnderflow,
     NonTerminatedString,
     NullContainingString,
@@ -42,6 +57,14 @@ pub(crate) enum ErrorKind {
     ChildSizeMismatch { expected: usize, actual: usize },
     InvalidUsize { value: i32 },
     InvalidIsize { value: i32 },
+    CapacityError(CapacityError),
+}
+
+impl From<CapacityError> for ErrorKind {
+    #[inline]
+    fn from(e: CapacityError) -> Self {
+        ErrorKind::CapacityError(e)
+    }
 }
 
 #[cfg(test)]
@@ -71,7 +94,6 @@ impl fmt::Display for Error {
             ErrorKind::SizeUnderflow { size, sub } => {
                 write!(f, "Size {size} underflowed when subtracting {sub}")
             }
-            ErrorKind::BufferOverflow => write!(f, "Buffer overflow"),
             ErrorKind::BufferUnderflow => write!(f, "Buffer underflow"),
             ErrorKind::NonTerminatedString => write!(f, "Non-terminated c-string"),
             ErrorKind::NullContainingString => write!(
@@ -106,6 +128,7 @@ impl fmt::Display for Error {
             ErrorKind::InvalidIsize { value } => {
                 write!(f, "Value {value} is a valid isize")
             }
+            ErrorKind::CapacityError(ref e) => e.fmt(f),
         }
     }
 }
