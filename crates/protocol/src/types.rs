@@ -2,10 +2,10 @@
 
 use core::fmt;
 
-use pod::utils::BytesInhabited;
+use pod::utils::AlignableWith;
 
 // SAFETY: The header is both word-aligned and word-sized.
-unsafe impl BytesInhabited for Header {}
+unsafe impl AlignableWith for Header {}
 
 #[repr(C, align(8))]
 #[derive(Default, Clone, Copy)]

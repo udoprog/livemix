@@ -264,7 +264,7 @@ impl Connection {
     ///
     /// This will write the request to the outgoing buffer.
     #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.len()), ret(level = Level::DEBUG))]
-    pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsReader<u64>>) -> Result<(), Error> {
+    pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsReader>) -> Result<(), Error> {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
 

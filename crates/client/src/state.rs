@@ -1299,19 +1299,19 @@ impl State {
 fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<&'buf [u64]>>> {
     let size = header.size() as usize;
 
-    if size % <RecvBuf<u64>>::WORD_SIZE != 0 {
+    if size % RecvBuf::WORD_SIZE != 0 {
         bail!(
             "Header size must be aligned to a word size of {} bytes",
-            <RecvBuf<u64>>::WORD_SIZE
+            RecvBuf::WORD_SIZE
         );
     }
 
     debug_assert!(
-        size % <RecvBuf<u64>>::WORD_SIZE == 0,
+        size % RecvBuf::WORD_SIZE == 0,
         "Size of frame is not aligned"
     );
 
-    let Some(words) = buf.read_words(size / RecvBuf::<u64>::WORD_SIZE) else {
+    let Some(words) = buf.read_words(size / RecvBuf::WORD_SIZE) else {
         return Ok(None);
     };
 

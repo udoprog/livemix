@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use crate::buf::ArrayVec;
+use pod::buf::ArrayVec;
 
 /// Trait used for collecting events.
 pub trait Events<T> {

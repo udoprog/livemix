@@ -1,5 +1,6 @@
+use crate::buf::ArrayVec;
 use crate::error::ErrorKind;
-use crate::{ArrayBuf, Error, Pod, Reader};
+use crate::{Error, Pod, Reader};
 
 /// Helper trait to more easily encode values into a [`Pod`].
 ///
@@ -9,7 +10,7 @@ where
     Self: Sized,
 {
     #[doc(hidden)]
-    fn decode_from(pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error>;
+    fn decode_from(pod: Pod<impl Reader<'de>>) -> Result<Self, Error>;
 }
 
 /// Implementation of [`DecodeFrom`] for an optional type.
@@ -28,7 +29,7 @@ where
     T: DecodeFrom<'de>,
 {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
+    fn decode_from(pod: Pod<impl Reader<'de>>) -> Result<Self, Error> {
         match pod.next_option()? {
             Some(pod) => Ok(Some(T::decode_from(pod)?)),
             None => Ok(None),
@@ -46,8 +47,8 @@ where
     T: DecodeFrom<'de>,
 {
     #[inline]
-    fn decode_from(mut pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
-        let mut values = ArrayBuf::<T, N>::new();
+    fn decode_from(mut pod: Pod<impl Reader<'de>>) -> Result<Self, Error> {
+        let mut values = ArrayVec::<T, N>::new();
 
         for _ in 0..N {
             values.push(T::decode_from(pod.as_read_mut())?)?;
@@ -76,7 +77,7 @@ where
 /// ```
 impl<'de> DecodeFrom<'de> for () {
     #[inline]
-    fn decode_from(_: Pod<impl Reader<'de, u64>>) -> Result<(), Error> {
+    fn decode_from(_: Pod<impl Reader<'de>>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -106,7 +107,7 @@ macro_rules! encode_into_tuple {
             $($ident: DecodeFrom<'de>,)*
         {
             #[inline]
-            fn decode_from(mut pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
+            fn decode_from(mut pod: Pod<impl Reader<'de>>) -> Result<Self, Error> {
                 $(let $var = $ident::decode_from(pod.as_read_mut())?;)*
                 Ok(($($var,)*))
             }

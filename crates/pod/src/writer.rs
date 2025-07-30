@@ -1,31 +1,25 @@
 use crate::Error;
-use crate::utils::{Align, AlignableWith, BytesInhabited};
+use crate::utils::{Align, AlignableWith};
 
 mod sealed {
     #[cfg(feature = "alloc")]
     use crate::DynamicBuf;
     use crate::{ArrayBuf, Writer};
 
-    pub trait Sealed<T> {}
-    impl<T, const N: usize> Sealed<T> for ArrayBuf<T, N> {}
+    pub trait Sealed {}
+    impl<const N: usize> Sealed for ArrayBuf<N> {}
     #[cfg(feature = "alloc")]
-    impl<T> Sealed<T> for DynamicBuf<T> {}
-    impl<W, T> Sealed<T> for &mut W
-    where
-        W: ?Sized + Writer<T>,
-        T: Copy,
-    {
-    }
+    impl Sealed for DynamicBuf {}
+    impl<W> Sealed for &mut W where W: ?Sized + Writer {}
 }
 
 /// A type that can have PODs written to it.
-pub trait Writer<T>
+pub trait Writer
 where
-    Self: self::sealed::Sealed<T>,
-    T: Copy,
+    Self: self::sealed::Sealed,
 {
     /// The mutable borrow of a writer.
-    type Mut<'this>: Writer<T>
+    type Mut<'this>: Writer
     where
         Self: 'this;
 
@@ -36,11 +30,11 @@ where
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
 
     /// Reserve space for the given number of words.
-    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error>;
+    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error>;
 
     /// Reserve space for a single value while writing.
     #[inline]
-    fn reserve(&mut self, value: impl AlignableWith<T>) -> Result<Self::Pos, Error> {
+    fn reserve(&mut self, value: impl AlignableWith) -> Result<Self::Pos, Error> {
         self.reserve_words(Align(value).as_words())
     }
 
@@ -49,11 +43,11 @@ where
     fn distance_from(&self, pos: Self::Pos) -> usize;
 
     /// Write a slice of `u32` values to the writer.
-    fn write_words(&mut self, words: &[T]) -> Result<(), Error>;
+    fn write_words(&mut self, words: &[u64]) -> Result<(), Error>;
 
     /// Write a value to the writer.
     #[inline]
-    fn write(&mut self, value: impl AlignableWith<T>) -> Result<(), Error> {
+    fn write(&mut self, value: impl AlignableWith) -> Result<(), Error> {
         self.write_words(Align(value).as_words())
     }
 
@@ -64,24 +58,21 @@ where
     ///
     /// Returns an error if the given number of words written overflows the
     /// reserved space.
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error>;
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error>;
 
     /// Write a value to the specified position in the writer.
     #[inline]
-    fn write_at(&mut self, pos: Self::Pos, value: impl AlignableWith<T>) -> Result<(), Error> {
+    fn write_at(&mut self, pos: Self::Pos, value: impl AlignableWith) -> Result<(), Error> {
         self.write_words_at(pos, Align(value).as_words())
     }
 
     /// Write bytes to the writer.
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
-    where
-        T: BytesInhabited;
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>;
 }
 
-impl<W, T> Writer<T> for &mut W
+impl<W> Writer for &mut W
 where
-    W: ?Sized + Writer<T>,
-    T: Copy,
+    W: ?Sized + Writer,
 {
     type Mut<'this>
         = W::Mut<'this>
@@ -96,7 +87,7 @@ where
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error> {
+    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
         (**self).reserve_words(words)
     }
 
@@ -106,20 +97,17 @@ where
     }
 
     #[inline]
-    fn write_words(&mut self, value: &[T]) -> Result<(), Error> {
+    fn write_words(&mut self, value: &[u64]) -> Result<(), Error> {
         (**self).write_words(value)
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, value: &[T]) -> Result<(), Error> {
+    fn write_words_at(&mut self, pos: Self::Pos, value: &[u64]) -> Result<(), Error> {
         (**self).write_words_at(pos, value)
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
-    where
-        T: BytesInhabited,
-    {
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
         (**self).write_bytes(bytes, pad)
     }
 }

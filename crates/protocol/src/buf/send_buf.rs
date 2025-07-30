@@ -6,13 +6,13 @@ use core::slice;
 
 use alloc::alloc;
 
-use pod::utils::{Align, AlignableWith, BytesInhabited, UninitAlign};
+use pod::utils::{Align, AlignableWith, UninitAlign};
 
 use super::AllocError;
 
 /// A buffer which can be used in combination with a channel.
-pub struct SendBuf<T = u64> {
-    data: ptr::NonNull<T>,
+pub struct SendBuf {
+    data: ptr::NonNull<u64>,
     cap: usize,
     read: usize,
     write: usize,
@@ -20,15 +20,9 @@ pub struct SendBuf<T = u64> {
     partial_read: usize,
 }
 
-impl<T> SendBuf<T> {
+impl SendBuf {
     /// The size in bytes of a word.
-    pub const WORD_SIZE: usize = const {
-        if mem::size_of::<T>() == 0 {
-            panic!("Cannot create a SendBuf with zero-sized type")
-        }
-
-        mem::size_of::<T>()
-    };
+    pub const WORD_SIZE: usize = mem::size_of::<u64>();
 
     /// Construct a new empty buffer.
     ///
@@ -39,7 +33,7 @@ impl<T> SendBuf<T> {
     ///
     /// let expected = u64::to_ne_bytes(0x7f7f7f77f7f7f7ffu64);
     ///
-    /// let mut buf = SendBuf::<u64>::new();
+    /// let mut buf = SendBuf::new();
     /// assert!(buf.is_empty());
     /// buf.push_bytes(0x7f7f7f77f7f7f7ffu64)?;
     /// assert_eq!(buf.len(), 1);
@@ -49,7 +43,7 @@ impl<T> SendBuf<T> {
     #[inline]
     pub const fn new() -> Self {
         SendBuf {
-            data: ptr::NonNull::<T>::dangling().cast(),
+            data: ptr::NonNull::dangling(),
             cap: 0,
             read: 0,
             write: 0,
@@ -64,7 +58,7 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u64>::new();
+    /// let mut buf = SendBuf::new();
     /// assert!(buf.is_empty());
     /// buf.push_bytes(42u64)?;
     /// assert_eq!(buf.len(), 1);
@@ -86,7 +80,7 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u64>::new();
+    /// let mut buf = SendBuf::new();
     /// assert!(buf.is_empty());
     /// buf.push_bytes(42u64)?;
     /// assert_eq!(buf.len(), 1);
@@ -107,10 +101,10 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     /// assert_eq!(buf.len(), 0);
     /// buf.push_bytes(42u64)?;
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     ///
     /// let expected = 42u64.to_ne_bytes();
     /// assert_eq!(buf.remaining_bytes(), 8);
@@ -131,7 +125,7 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     /// assert!(buf.is_empty());
     ///
     /// buf.extend_from_words(&[1, 2])?;
@@ -144,17 +138,8 @@ impl<T> SendBuf<T> {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        let read = mem::take(&mut self.read);
-        let write = mem::take(&mut self.write);
-
-        if mem::needs_drop::<T>() {
-            unsafe {
-                ptr::drop_in_place(slice::from_raw_parts_mut(
-                    self.data.as_ptr().add(read),
-                    write - read,
-                ));
-            }
-        }
+        self.read = 0;
+        self.write = 0;
     }
 
     /// Returns the bytes of the buffer.
@@ -164,10 +149,10 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     /// assert_eq!(buf.len(), 0);
     /// buf.push_bytes(42u64)?;
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     ///
     /// let expected = 42u64.to_ne_bytes();
     /// assert_eq!(buf.remaining_bytes(), 8);
@@ -175,10 +160,7 @@ impl<T> SendBuf<T> {
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn as_bytes(&self) -> &[u8]
-    where
-        T: BytesInhabited,
-    {
+    pub fn as_bytes(&self) -> &[u8] {
         // SAFETY: The buffer is guaranteed to initialized due to invariants.
         unsafe { slice::from_raw_parts(self.as_bytes_ptr(), self.remaining_bytes()) }
     }
@@ -190,7 +172,7 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u64>::new();
+    /// let mut buf = SendBuf::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     ///
     /// buf.extend_from_words(&[42])?;
@@ -198,7 +180,7 @@ impl<T> SendBuf<T> {
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
@@ -210,7 +192,7 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     /// assert!(buf.is_empty());
     /// buf.extend_from_words(&[1, 2, 3, 4]);
     /// assert_eq!(buf.len(), 4);
@@ -219,7 +201,7 @@ impl<T> SendBuf<T> {
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn extend_from_words(&mut self, words: &[T]) -> Result<(), AllocError> {
+    pub fn extend_from_words(&mut self, words: &[u64]) -> Result<(), AllocError> {
         self.reserve(self.write + words.len())?;
 
         // SAFETY: Necessary invariants have been checked above.
@@ -245,10 +227,10 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     /// assert_eq!(buf.len(), 0);
-    /// buf.push_bytes(42u64);
-    /// assert_eq!(buf.len(), 2);
+    /// buf.push_bytes(42u64)?;
+    /// assert_eq!(buf.len(), 1);
     ///
     /// let expected = 42u64.to_ne_bytes();
     /// assert_eq!(buf.as_bytes(), expected);
@@ -257,19 +239,20 @@ impl<T> SendBuf<T> {
     #[inline]
     pub fn push_bytes<U>(&mut self, value: U) -> Result<(), AllocError>
     where
-        U: AlignableWith<T>,
+        U: AlignableWith,
     {
         let value = Align(value);
-        self.reserve(self.write + value.size::<T>())?;
+        self.reserve(self.write + value.size())?;
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             self.data
                 .as_ptr()
                 .add(self.write)
-                .copy_from_nonoverlapping(value.as_ptr::<T>(), value.size::<T>());
+                .cast::<u64>()
+                .copy_from_nonoverlapping(value.as_ptr(), value.size());
 
-            self.advance_written(value.size::<T>());
+            self.advance_written(value.size());
         }
 
         Ok(())
@@ -279,7 +262,7 @@ impl<T> SendBuf<T> {
     #[inline]
     pub fn read<U>(&mut self) -> Option<U>
     where
-        U: AlignableWith<T>,
+        U: AlignableWith,
     {
         if self.is_empty() {
             return None;
@@ -292,9 +275,9 @@ impl<T> SendBuf<T> {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .copy_to_nonoverlapping(value.as_mut_ptr::<T>().cast(), value.size::<T>());
+                .copy_to_nonoverlapping(value.as_mut_ptr().cast(), value.size());
 
-            self.advance_read(value.size::<T>());
+            self.advance_read(value.size());
             Some(value.assume_init())
         }
     }
@@ -308,9 +291,9 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let expected = 42u32;
+    /// let expected = 42u64;
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     ///
     /// buf.push_bytes(expected)?;
     ///
@@ -319,17 +302,14 @@ impl<T> SendBuf<T> {
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn read_words(&mut self, size: usize) -> Option<&[T]>
-    where
-        T: BytesInhabited,
-    {
+    pub fn read_words(&mut self, size: usize) -> Option<&[u64]> {
         if size > self.len() {
             return None;
         }
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
-            let value = slice::from_raw_parts(self.data.as_ptr().add(self.read).cast::<T>(), size);
+            let value = slice::from_raw_parts(self.data.as_ptr().wrapping_add(self.read), size);
             self.advance_read(size);
             Some(value)
         }
@@ -351,10 +331,10 @@ impl<T> SendBuf<T> {
     /// ```
     /// use protocol::buf::SendBuf;
     ///
-    /// let expected = 0x7f7f7f7fu32;
-    /// let bytes = u32::to_ne_bytes(expected);
+    /// let expected = 0x7f7f7f7fu64;
+    /// let bytes = u64::to_ne_bytes(expected);
     ///
-    /// let mut buf = SendBuf::<u32>::new();
+    /// let mut buf = SendBuf::new();
     /// buf.push_bytes(expected)?;
     ///
     /// assert_eq!(buf.as_bytes(), &bytes[..]);
@@ -453,7 +433,7 @@ impl<T> SendBuf<T> {
     }
 
     #[inline]
-    fn as_ptr(&self) -> *const T {
+    fn as_ptr(&self) -> *const u64 {
         let add = self.partial_read.next_multiple_of(Self::WORD_SIZE) / Self::WORD_SIZE;
 
         self.data
@@ -473,7 +453,7 @@ impl<T> SendBuf<T> {
 
         let data = match self.cap {
             0 => unsafe {
-                let layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+                let layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
 
                 let data = alloc::alloc_zeroed(layout);
 
@@ -484,8 +464,8 @@ impl<T> SendBuf<T> {
                 ptr::NonNull::new_unchecked(data)
             },
             _ => unsafe {
-                let old_layout = Layout::array::<T>(self.cap).map_err(|_| AllocError)?;
-                let new_layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+                let old_layout = Layout::array::<u64>(self.cap).map_err(|_| AllocError)?;
+                let new_layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
 
                 let data = alloc::realloc(self.data.as_ptr().cast(), old_layout, new_layout.size());
 
@@ -493,9 +473,10 @@ impl<T> SendBuf<T> {
                     return Err(AllocError);
                 }
 
-                data.cast::<T>()
+                data.cast::<u64>()
                     .wrapping_add(self.cap)
                     .write_bytes(0, new_cap - self.cap);
+
                 ptr::NonNull::new_unchecked(data)
             },
         };
@@ -511,12 +492,12 @@ impl<T> SendBuf<T> {
             unsafe {
                 let layout = Layout::from_size_align_unchecked(
                     self.cap.wrapping_mul(Self::WORD_SIZE),
-                    mem::align_of::<T>(),
+                    mem::align_of::<u64>(),
                 );
                 alloc::dealloc(self.data.as_ptr().cast(), layout);
             }
 
-            self.data = ptr::NonNull::<T>::dangling().cast();
+            self.data = ptr::NonNull::<u64>::dangling().cast();
             self.cap = 0;
             self.read = 0;
             self.write = 0;
@@ -525,7 +506,7 @@ impl<T> SendBuf<T> {
     }
 }
 
-impl<T> Drop for SendBuf<T> {
+impl Drop for SendBuf {
     #[inline]
     fn drop(&mut self) {
         self.clear();
@@ -533,10 +514,7 @@ impl<T> Drop for SendBuf<T> {
     }
 }
 
-impl<T> fmt::Debug for SendBuf<T>
-where
-    T: fmt::Debug,
-{
+impl fmt::Debug for SendBuf {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()

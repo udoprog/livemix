@@ -7,7 +7,7 @@ use crate::{Builder, ChoiceType, Error, Type, Writer};
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, K>
 where
-    W: Writer<u64>,
+    W: Writer,
 {
     writer: W,
     kind: K,
@@ -22,7 +22,7 @@ where
 
 impl<W, K> ChoiceBuilder<W, K>
 where
-    W: Writer<u64>,
+    W: Writer,
     K: PodKind,
 {
     #[inline]

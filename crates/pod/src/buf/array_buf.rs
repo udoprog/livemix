@@ -1,29 +1,13 @@
 use core::fmt;
 use core::mem::{self, ManuallyDrop, MaybeUninit};
-use core::ptr;
 use core::slice;
-use std::error;
 
 use crate::error::ErrorKind;
-use crate::utils::BytesInhabited;
 use crate::{AsReader, Error, SplitReader, Writer};
 
+use super::CapacityError;
+
 const DEFAULT_SIZE: usize = 128;
-
-/// Capacity overflow when writing to an [`ArrayBuf`].
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-#[non_exhaustive]
-pub struct CapacityError;
-
-impl error::Error for CapacityError {}
-
-impl fmt::Display for CapacityError {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Buffer capacity exceeded")
-    }
-}
 
 /// A fixed-size buffer with a flexible read and write position.
 ///
@@ -35,33 +19,20 @@ impl fmt::Display for CapacityError {
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let mut buf = ArrayBuf::<u32, 16>::from_slice(&[1, 2, 3, 4]);
+/// let mut buf = ArrayBuf::<16>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.len(), 4);
-/// buf.push(5)?;
+/// buf.extend_from_words(&[5])?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
-/// assert_eq!(buf.pop(), Some(5));
-/// assert_eq!(buf.len(), 4);
-/// # Ok::<_, pod::Error>(())
-/// ```
-///
-/// Trying to read data from the array in a manner which is *not* correctly
-/// aligned will errors:
-///
-/// ```compile_fail
-/// use pod::{ArrayBuf, Reader};
-///
-/// let mut buf = ArrayBuf::<u64, 16>::from_slice(&[1, 2, 3, 4]);
-/// // This must fail because it's not possible to read half of a word out of the array.
-/// buf.read::<u32>()?;
-/// # Ok::<_, pod::Error>(())
+/// assert_eq!(buf.len(), 5);
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
 #[repr(C, align(8))]
-pub struct ArrayBuf<T = u64, const N: usize = DEFAULT_SIZE> {
-    data: [MaybeUninit<T>; N],
+pub struct ArrayBuf<const N: usize = DEFAULT_SIZE> {
+    data: [MaybeUninit<u64>; N],
     len: usize,
 }
 
-impl<T, const N: usize> ArrayBuf<T, N> {
+impl<const N: usize> ArrayBuf<N> {
     /// Construct a new array buffer with a default size.
     ///
     /// # Examples
@@ -69,7 +40,8 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let buf = ArrayBuf::<u64>::new();
+    /// let buf = ArrayBuf::<3>::new();
+    /// assert_eq!(buf.capacity(), 3);
     /// ```
     #[inline]
     pub const fn new() -> Self {
@@ -80,35 +52,6 @@ impl<T, const N: usize> ArrayBuf<T, N> {
         }
     }
 
-    /// Push a value into the array.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::ArrayBuf;
-    ///
-    /// let mut buf = ArrayBuf::<String>::new();
-    /// buf.push("Hello".to_string())?;
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    pub fn push(&mut self, value: T) -> Result<(), CapacityError> {
-        if self.len >= N {
-            return Err(CapacityError);
-        }
-
-        // SAFETY: We are writing to a valid position in the buffer.
-        unsafe {
-            self.data
-                .as_mut_ptr()
-                .add(self.len)
-                .cast::<T>()
-                .write(value);
-        }
-
-        self.len += 1;
-        Ok(())
-    }
-
     /// Extend the buffer with a slice of words.
     ///
     /// # Examples
@@ -116,15 +59,12 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::<u32>::new();
+    /// let mut buf = ArrayBuf::default();
     /// buf.extend_from_words(&[1, 2, 3, 4])?;
     /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
-    pub fn extend_from_words(&mut self, words: &[T]) -> Result<(), CapacityError>
-    where
-        T: BytesInhabited,
-    {
+    pub fn extend_from_words(&mut self, words: &[u64]) -> Result<(), CapacityError> {
         let write = self.len.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
@@ -143,73 +83,16 @@ impl<T, const N: usize> ArrayBuf<T, N> {
         self.len = write;
         Ok(())
     }
-
-    /// Extend the buffer with a slice of values.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::ArrayBuf;
-    /// ```
-    pub fn extend_from_slice(&mut self, slice: &[T]) -> Result<(), CapacityError>
-    where
-        T: BytesInhabited,
-    {
-        let len = self.len.wrapping_add(slice.len());
-
-        if len > N {
-            return Err(CapacityError);
-        }
-
-        // SAFETY: We are writing to a valid position in the buffer.
-        unsafe {
-            self.data
-                .as_mut_ptr()
-                .add(self.len)
-                .cast::<T>()
-                .copy_from_nonoverlapping(slice.as_ptr(), slice.len());
-        }
-
-        self.len = len;
-        Ok(())
-    }
-
-    /// Push a value from the array.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::ArrayBuf;
-    ///
-    /// let mut buf = ArrayBuf::<String>::new();
-    /// buf.push(String::from("Hello"))?;
-    /// buf.push(String::from("World"))?;
-    ///
-    /// assert_eq!(buf.pop(), Some(String::from("World")));
-    /// assert_eq!(buf.pop(), Some(String::from("Hello")));
-    /// assert_eq!(buf.pop(), None);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 {
-            return None;
-        }
-
-        self.len -= 1;
-        // SAFETY: We are writing to a valid position in the buffer.
-        let value = unsafe { self.data.as_mut_ptr().add(self.len).cast::<T>().read() };
-        Some(value)
-    }
 }
 
-impl<T> Default for ArrayBuf<T> {
+impl Default for ArrayBuf {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T, const N: usize> ArrayBuf<T, N> {
+impl<const N: usize> ArrayBuf<N> {
     /// Construct from an initialized array.
     ///
     /// # Examples
@@ -217,19 +100,19 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let buf = ArrayBuf::<u64, 3>::from_array([1, 2, 3]);
+    /// let buf = ArrayBuf::<3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
-    pub const fn from_array(words: [T; N]) -> Self {
+    pub const fn from_array(words: [u64; N]) -> Self {
         let words = ManuallyDrop::new(words);
 
         // SAFETY: The array is a sequence of initialized elements.
         unsafe {
             Self {
-                data: (&words as *const ManuallyDrop<[T; N]>)
-                    .cast::<[MaybeUninit<T>; N]>()
+                data: (&words as *const ManuallyDrop<[u64; N]>)
+                    .cast::<[MaybeUninit<u64>; N]>()
                     .read(),
                 len: N,
             }
@@ -245,7 +128,7 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```should_panic
     /// use pod::ArrayBuf;
     ///
-    /// ArrayBuf::<u64, 16>::from_slice(&[0; 32]);
+    /// ArrayBuf::<16>::from_slice(&[0; 32]);
     /// ```
     ///
     /// # Examples
@@ -253,20 +136,17 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let buf = ArrayBuf::<u64, 16>::from_slice(&[1, 2, 3]);
+    /// let buf = ArrayBuf::<16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 16);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// ```
-    pub const fn from_slice(words: &[T]) -> Self
-    where
-        T: BytesInhabited,
-    {
+    pub const fn from_slice(words: &[u64]) -> Self {
         assert!(words.len() <= N, "Slice size exceeds buffer size");
 
         // SAFETY: The array is a sequence of initialized elements.
         unsafe {
-            let mut dest: [MaybeUninit<T>; N] = MaybeUninit::uninit().assume_init();
+            let mut dest: [MaybeUninit<u64>; N] = MaybeUninit::uninit().assume_init();
             let mut write = 0;
 
             while write < words.len() {
@@ -288,13 +168,13 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::<u64>::new();
+    /// let mut buf = ArrayBuf::default();
     /// assert!(buf.is_empty());
     /// assert_eq!(buf.len(), 0);
-    /// buf.push(42)?;
+    /// buf.extend_from_words(&[42])?;
     /// assert!(!buf.is_empty());
     /// assert_eq!(buf.len(), 1);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub const fn len(&self) -> usize {
         self.len
@@ -307,13 +187,13 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::<u64>::new();
+    /// let mut buf = ArrayBuf::default();
     /// assert!(buf.is_empty());
     /// assert_eq!(buf.len(), 0);
-    /// buf.push(42)?;
+    /// buf.extend_from_words(&[42])?;
     /// assert!(!buf.is_empty());
     /// assert_eq!(buf.len(), 1);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub const fn is_empty(&self) -> bool {
         self.len == 0
@@ -326,10 +206,10 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let buf = ArrayBuf::<u32, 16>::from_slice(&[1, 2, 3]);
+    /// let buf = ArrayBuf::<16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 16);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub const fn capacity(&self) -> usize {
         N
@@ -345,32 +225,22 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// ```
     /// use pod::{ArrayBuf, Reader};
     ///
-    /// let mut buf = ArrayBuf::<u64, 3>::from_array([1, 2, 3]);
+    /// let mut buf = ArrayBuf::<3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// buf.clear();
     /// assert!(buf.as_slice().is_empty());
     ///
-    /// let mut buf = ArrayBuf::<String, 2>::from_array([String::from("Hello"), String::from("World")]);
+    /// let mut buf = ArrayBuf::from_array([100, 200]);
     /// assert_eq!(buf.len(), 2);
-    /// assert_eq!(buf.as_slice(), &[String::from("Hello"), String::from("World")]);
+    /// assert_eq!(buf.as_slice(), &[100, 200]);
     /// buf.clear();
-    /// assert!(buf.as_slice().is_empty());
-    /// # Ok::<_, pod::Error>(())
+    /// assert!(buf.is_empty());
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        let len = mem::take(&mut self.len);
-
-        if mem::needs_drop::<T>() {
-            // SAFETY: The buffer is guaranteed to be initialized from the
-            // `self.read..self.write` range.
-            unsafe {
-                let slice = slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<T>(), len);
-
-                ptr::drop_in_place(slice);
-            }
-        }
+        self.len = 0;
     }
 
     /// Returns the bytes of the buffer.
@@ -378,15 +248,15 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Writer};
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::<u64>::new();
+    /// let expected = u64::to_ne_bytes(42);
+    ///
+    /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_bytes().len(), 0);
-    ///
-    /// buf.write(42u64)?;
-    /// let expected = 42u64.to_ne_bytes();
+    /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.as_bytes(), &expected[..]);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
@@ -394,7 +264,7 @@ impl<T, const N: usize> ArrayBuf<T, N> {
         unsafe {
             slice::from_raw_parts(
                 self.data.as_ptr().cast(),
-                self.len.wrapping_mul(mem::size_of::<T>()),
+                self.len.wrapping_mul(mem::size_of::<u64>()),
             )
         }
     }
@@ -404,17 +274,16 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Writer};
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::<u64>::new();
+    /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.write(42u64)?;
+    /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.as_slice(), &[42]);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().cast(), self.len) }
     }
@@ -424,35 +293,21 @@ impl<T, const N: usize> ArrayBuf<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, Writer};
+    /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::<u64>::new();
+    /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.write(42u64)?;
+    /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.as_slice(), &[42]);
     ///
     /// buf.as_slice_mut()[0] = 43;
     /// assert_eq!(buf.as_slice(), &[43]);
-    /// # Ok::<_, pod::Error>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
-    pub fn as_slice_mut(&mut self) -> &mut [T] {
+    pub fn as_slice_mut(&mut self) -> &mut [u64] {
         // SAFETY: The buffer is guaranteed to be initialized from the
         // `self.read..self.write` range.
         unsafe { slice::from_raw_parts_mut(self.data.as_mut_ptr().cast(), self.len) }
-    }
-
-    /// Try to coerce into an initialized inner array, checking if it has been
-    /// initialized first.
-    pub(crate) fn into_inner(self) -> Option<[T; N]> {
-        if self.len == N {
-            let this = ManuallyDrop::new(self);
-
-            // SAFETY: The buffer is guaranteed to be initialized.
-            Some(unsafe { ptr::read(&this.data as *const _ as *const [T; N]) })
-        } else {
-            None
-        }
     }
 }
 
@@ -461,18 +316,13 @@ impl<T, const N: usize> ArrayBuf<T, N> {
 /// # Examples
 ///
 /// ```
-/// use pod::{ArrayBuf, Reader};
+/// use pod::ArrayBuf;
 ///
 /// let mut buf = ArrayBuf::from_array([1, 2, 3]);
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
-/// buf.pop();
-/// assert_eq!(format!("{buf:?}"), "[1, 2]");
-/// # Ok::<_, pod::Error>(())
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
-impl<T, const N: usize> fmt::Debug for ArrayBuf<T, N>
-where
-    T: fmt::Debug,
-{
+impl<const N: usize> fmt::Debug for ArrayBuf<N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_slice().fmt(f)
@@ -492,12 +342,9 @@ where
 /// assert_ne!(buf1, buf2);
 /// assert_eq!(buf1, buf1);
 /// ```
-impl<T, U, const A: usize, const B: usize> PartialEq<ArrayBuf<U, B>> for ArrayBuf<T, A>
-where
-    T: PartialEq<U>,
-{
+impl<const A: usize, const B: usize> PartialEq<ArrayBuf<B>> for ArrayBuf<A> {
     #[inline]
-    fn eq(&self, other: &ArrayBuf<U, B>) -> bool {
+    fn eq(&self, other: &ArrayBuf<B>) -> bool {
         self.as_slice() == other.as_slice()
     }
 }
@@ -516,9 +363,9 @@ where
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<[U]> for ArrayBuf<T, N>
+impl<U, const N: usize> PartialEq<[U]> for ArrayBuf<N>
 where
-    T: PartialEq<U>,
+    u64: PartialEq<U>,
 {
     #[inline]
     fn eq(&self, other: &[U]) -> bool {
@@ -540,9 +387,9 @@ where
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<[U; N]> for ArrayBuf<T, N>
+impl<U, const N: usize> PartialEq<[U; N]> for ArrayBuf<N>
 where
-    T: PartialEq<U>,
+    u64: PartialEq<U>,
 {
     #[inline]
     fn eq(&self, other: &[U; N]) -> bool {
@@ -564,9 +411,9 @@ where
 /// assert_eq!(slice1, slice1);
 /// assert_eq!(*slice2, *slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<&[U; N]> for ArrayBuf<T, N>
+impl<U, const N: usize> PartialEq<&[U; N]> for ArrayBuf<N>
 where
-    T: PartialEq<U>,
+    u64: PartialEq<U>,
 {
     #[inline]
     fn eq(&self, other: &&[U; N]) -> bool {
@@ -588,9 +435,9 @@ where
 /// assert_eq!(array1, array1);
 /// assert_eq!(slice2, slice2);
 /// ```
-impl<T, U, const N: usize> PartialEq<&[U]> for ArrayBuf<T, N>
+impl<U, const N: usize> PartialEq<&[U]> for ArrayBuf<N>
 where
-    T: PartialEq<U>,
+    u64: PartialEq<U>,
 {
     #[inline]
     fn eq(&self, other: &&[U]) -> bool {
@@ -598,9 +445,9 @@ where
     }
 }
 
-impl<T, const N: usize> Eq for ArrayBuf<T, N> where T: Eq {}
+impl<const N: usize> Eq for ArrayBuf<N> {}
 
-impl<T, const N: usize> Drop for ArrayBuf<T, N> {
+impl<const N: usize> Drop for ArrayBuf<N> {
     fn drop(&mut self) {
         self.clear();
     }
@@ -612,12 +459,9 @@ pub struct Pos {
     len: usize,
 }
 
-impl<T, const N: usize> Writer<T> for ArrayBuf<T, N>
-where
-    T: BytesInhabited,
-{
+impl<const N: usize> Writer for ArrayBuf<N> {
     type Mut<'this>
-        = &'this mut ArrayBuf<T, N>
+        = &'this mut ArrayBuf<N>
     where
         Self: 'this;
 
@@ -629,7 +473,7 @@ where
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error> {
+    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
         let write = self.len.wrapping_add(words.len());
 
         // Ensure we have enough space in the buffer.
@@ -658,17 +502,17 @@ where
     fn distance_from(&self, pos: Self::Pos) -> usize {
         self.len
             .wrapping_sub(pos.write)
-            .wrapping_mul(mem::size_of::<T>())
+            .wrapping_mul(mem::size_of::<u64>())
     }
 
     #[inline]
-    fn write_words(&mut self, words: &[T]) -> Result<(), Error> {
+    fn write_words(&mut self, words: &[u64]) -> Result<(), Error> {
         self.extend_from_words(words)?;
         Ok(())
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error> {
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error> {
         let Pos { write, len } = pos;
 
         if len < words.len() {
@@ -690,15 +534,12 @@ where
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
-    where
-        T: BytesInhabited,
-    {
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
         let Some(full) = bytes.len().checked_add(pad) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let req = full.div_ceil(mem::size_of::<T>());
+        let req = full.div_ceil(mem::size_of::<u64>());
         let write = self.len.wrapping_add(req);
 
         if !(self.len..=N).contains(&write) {
@@ -709,7 +550,7 @@ where
         unsafe {
             let ptr = self.data.as_mut_ptr().add(self.len).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-            let pad = mem::size_of::<T>() - bytes.len() % mem::size_of::<T>();
+            let pad = mem::size_of::<u64>() - bytes.len() % mem::size_of::<u64>();
             ptr.add(bytes.len()).write_bytes(0, pad);
         }
 
@@ -718,11 +559,8 @@ where
     }
 }
 
-impl<T, const N: usize> AsReader<T> for ArrayBuf<T, N>
-where
-    T: 'static,
-{
-    type AsReader<'this> = &'this [T];
+impl<const N: usize> AsReader for ArrayBuf<N> {
+    type AsReader<'this> = &'this [u64];
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
@@ -730,15 +568,12 @@ where
     }
 }
 
-impl<T, const N: usize> SplitReader<T> for ArrayBuf<T, N>
-where
-    T: 'static,
-{
-    type TakeReader<'this> = &'this [T];
+impl<const N: usize> SplitReader for ArrayBuf<N> {
+    type TakeReader<'this> = &'this [u64];
 
     #[inline]
     fn take_reader(&mut self) -> Self::TakeReader<'_> {
-        let ptr = self.data.as_ptr().cast::<T>();
+        let ptr = self.data.as_ptr().cast::<u64>();
         let len = self.len;
         self.len = 0;
         // SAFETY: The buffer is guaranteed to be initialized up to `len`.

@@ -41,15 +41,15 @@ where
     const ENVELOPE: bool;
 
     #[inline]
-    fn header(&self, _: impl Writer<u64>) -> Result<(), Error> {
+    fn header(&self, _: impl Writer) -> Result<(), Error> {
         Ok(())
     }
 
-    fn push<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: Encode;
 
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized;
 
@@ -61,7 +61,7 @@ where
     #[inline]
     fn check_size<W>(&self, ty: Type, writer: &W, header: W::Pos) -> Result<u32, Error>
     where
-        W: ?Sized + Writer<u64>,
+        W: ?Sized + Writer,
     {
         // This should always hold, since when we reserve space, we always
         // reserve space for the header, which is 64 bits wide.
@@ -89,7 +89,7 @@ impl PodKind for ChildPod {
     const ENVELOPE: bool = false;
 
     #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: Encode,
     {
@@ -98,7 +98,7 @@ impl PodKind for ChildPod {
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
@@ -130,7 +130,7 @@ impl PodKind for EnvelopePod {
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn push<T>(&self, value: T, mut buf: impl Writer<u64>) -> Result<(), Error>
+    fn push<T>(&self, value: T, mut buf: impl Writer) -> Result<(), Error>
     where
         T: Encode,
     {
@@ -143,7 +143,7 @@ impl PodKind for EnvelopePod {
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, mut buf: impl Writer<u64>) -> Result<(), Error>
+    fn push_unsized<T>(&self, value: &T, mut buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
@@ -266,10 +266,10 @@ impl<B> Builder<B> {
     /// ```
     /// use pod::{ArrayBuf, Builder};
     ///
-    /// let mut buf = ArrayBuf::<u64>::new();
+    /// let mut buf = ArrayBuf::default();
     /// _ = Builder::new(&mut buf);
     ///
-    /// _ = Builder::new(ArrayBuf::<u64, 16>::new());
+    /// _ = Builder::new(ArrayBuf::<16>::new());
     /// ```
     #[inline]
     pub const fn new(buf: B) -> Self {
@@ -287,7 +287,7 @@ impl<B> Builder<B> {
 
 impl<B> Builder<B>
 where
-    B: Writer<u64>,
+    B: Writer,
 {
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
@@ -299,7 +299,7 @@ where
 
 impl<B> Builder<B>
 where
-    B: SplitReader<u64>,
+    B: SplitReader,
 {
     /// Split a builder off.
     ///
@@ -325,7 +325,7 @@ where
 
 impl<B> Builder<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -378,7 +378,7 @@ impl<B, K> Builder<B, K> {
     #[inline]
     pub(crate) fn new_with(buf: B, kind: K) -> Self
     where
-        B: Writer<u64>,
+        B: Writer,
     {
         Builder { buf, kind }
     }
@@ -420,7 +420,7 @@ impl<B, K> Builder<B, K> {
 
 impl<B, K> Builder<B, K>
 where
-    B: Writer<u64>,
+    B: Writer,
     K: PodKind,
 {
     /// Conveniently encode a value into the pod.
@@ -852,7 +852,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Builder<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     const TYPE: Type = Type::POD;
 
@@ -862,16 +862,16 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Builder<B> where B: AsReader<u64>);
+crate::macros::encode_into_unsized!(impl [B] Builder<B> where B: AsReader);
 
 impl<B, K> fmt::Debug for Builder<B, K>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

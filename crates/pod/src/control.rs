@@ -107,7 +107,7 @@ impl<B> Control<B> {
 
 impl<'de, B> fmt::Debug for Control<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

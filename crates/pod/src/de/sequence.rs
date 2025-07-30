@@ -69,7 +69,7 @@ impl<B> Sequence<B> {
 
 impl<'de, B> Sequence<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     #[inline]
     pub fn new(buf: B, size: usize, unit: u32, pad: u32) -> Self {
@@ -222,7 +222,7 @@ where
 
 impl<B> Sequence<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     /// Coerce into a borrowed [`Sequence`].
     ///
@@ -289,7 +289,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Sequence<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     const TYPE: Type = Type::SEQUENCE;
 
@@ -300,17 +300,17 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.unit, self.pad])?;
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Sequence<B> where B: AsReader<u64>);
+crate::macros::encode_into_unsized!(impl [B] Sequence<B> where B: AsReader);
 
 impl<B> fmt::Debug for Sequence<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -318,7 +318,7 @@ where
 
         impl<B> fmt::Debug for Controls<'_, B>
         where
-            B: AsReader<u64>,
+            B: AsReader,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -6,15 +6,15 @@ use core::slice;
 
 use alloc::alloc;
 
-use pod::utils::{AlignableWith, BytesInhabited, UninitAlign};
+use pod::utils::{AlignableWith, UninitAlign};
 
 use super::AllocError;
 
 pub(crate) const WANTS_BYTES: usize = 1 << 14;
 
 /// A buffer which can be used in combination with a channel.
-pub struct RecvBuf<T = u64> {
-    data: ptr::NonNull<T>,
+pub struct RecvBuf {
+    data: ptr::NonNull<u64>,
     cap: usize,
     read: usize,
     write: usize,
@@ -22,15 +22,9 @@ pub struct RecvBuf<T = u64> {
     partial_write: usize,
 }
 
-impl<T> RecvBuf<T> {
+impl RecvBuf {
     /// The size in bytes of a word.
-    pub const WORD_SIZE: usize = const {
-        if mem::size_of::<T>() == 0 {
-            panic!("Cannot create a RecvBuf with zero-sized type")
-        }
-
-        mem::size_of::<T>()
-    };
+    pub const WORD_SIZE: usize = mem::size_of::<u64>();
 
     /// The minimum number of words that will be available when calling
     /// `as_bytes_mut`.
@@ -50,7 +44,7 @@ impl<T> RecvBuf<T> {
     ///
     /// let expected = u64::to_ne_bytes(0x7f7f7f7f);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.is_empty());
     /// buf.as_bytes_mut()?[..8].copy_from_slice(&expected[..]);
     ///
@@ -58,14 +52,14 @@ impl<T> RecvBuf<T> {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub const fn new() -> Self {
         RecvBuf {
-            data: ptr::NonNull::<T>::dangling().cast(),
+            data: ptr::NonNull::dangling(),
             cap: 0,
             read: 0,
             write: 0,
@@ -82,7 +76,7 @@ impl<T> RecvBuf<T> {
     ///
     /// let expected = u64::to_ne_bytes(0x7f7f7f7f);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.is_empty());
     /// buf.as_bytes_mut()?[..8].copy_from_slice(&expected[..]);
     ///
@@ -90,7 +84,7 @@ impl<T> RecvBuf<T> {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
@@ -108,7 +102,7 @@ impl<T> RecvBuf<T> {
     ///
     /// let expected = u64::to_ne_bytes(0x7f7f7f7f);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.is_empty());
     /// buf.as_bytes_mut()?[..8].copy_from_slice(&expected[..]);
     ///
@@ -117,7 +111,7 @@ impl<T> RecvBuf<T> {
     /// }
     ///
     /// assert!(!buf.is_empty());
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
@@ -135,7 +129,7 @@ impl<T> RecvBuf<T> {
     ///
     /// let expected = u64::to_ne_bytes(0x7f7f7f7f);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.is_empty());
     /// buf.as_bytes_mut()?[..8].copy_from_slice(&expected[..]);
     ///
@@ -143,7 +137,7 @@ impl<T> RecvBuf<T> {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
@@ -163,7 +157,7 @@ impl<T> RecvBuf<T> {
     ///
     /// let expected = u64::to_ne_bytes(0x7f7f7f7f);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.is_empty());
     /// buf.as_bytes_mut()?[..8].copy_from_slice(&expected[..]);
     ///
@@ -171,7 +165,7 @@ impl<T> RecvBuf<T> {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.len(), 1);
     /// assert_eq!(buf.remaining_bytes(), 8);
     ///
     /// buf.clear();
@@ -183,17 +177,8 @@ impl<T> RecvBuf<T> {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        let read = mem::take(&mut self.read);
-        let write = mem::take(&mut self.write);
-
-        if mem::needs_drop::<T>() {
-            unsafe {
-                ptr::drop_in_place(slice::from_raw_parts_mut(
-                    self.data.as_ptr().add(read),
-                    write - read,
-                ));
-            }
-        }
+        self.read = 0;
+        self.write = 0;
     }
 
     /// Returns the slice of data in the buffer.
@@ -203,22 +188,22 @@ impl<T> RecvBuf<T> {
     /// ```
     /// use protocol::buf::RecvBuf;
     ///
-    /// let expected = u32::to_ne_bytes(0x7f7f7f7fu32);
+    /// let expected = u64::to_ne_bytes(0x123456789abcdef0);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.is_empty());
-    /// buf.as_bytes_mut()?[..4].copy_from_slice(&expected[..]);
+    /// buf.as_bytes_mut()?[..8].copy_from_slice(&expected[..]);
     ///
     /// unsafe {
-    ///     buf.advance_written_bytes(4);
+    ///     buf.advance_written_bytes(8);
     /// }
     ///
     /// assert_eq!(buf.len(), 1);
-    /// assert_eq!(buf.as_slice(), &[0x7f7f7f7fu32]);
+    /// assert_eq!(buf.as_slice(), &[0x123456789abcdef0]);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
@@ -238,9 +223,9 @@ impl<T> RecvBuf<T> {
     /// ```
     /// use protocol::buf::RecvBuf;
     ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
+    /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.as_bytes_mut()?.len() > 0);
     ///
     /// buf.as_bytes_mut()?[..3].copy_from_slice(&[1, 2, 3]);
@@ -251,10 +236,10 @@ impl<T> RecvBuf<T> {
     ///
     /// assert_eq!(buf.as_slice(), &[]);
     ///
-    /// buf.as_bytes_mut()?[..1].copy_from_slice(&[4]);
+    /// buf.as_bytes_mut()?[..5].copy_from_slice(&[4, 5, 6, 7, 8]);
     ///
     /// unsafe {
-    ///     buf.advance_written_bytes(1);
+    ///     buf.advance_written_bytes(5);
     /// }
     ///
     /// assert_eq!(buf.as_slice(), &[expected]);
@@ -273,7 +258,7 @@ impl<T> RecvBuf<T> {
     #[inline]
     pub fn read<U>(&mut self) -> Option<U>
     where
-        U: AlignableWith<T>,
+        U: AlignableWith,
     {
         if self.is_empty() {
             return None;
@@ -286,9 +271,9 @@ impl<T> RecvBuf<T> {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .copy_to_nonoverlapping(value.as_mut_ptr::<T>().cast(), value.size::<T>());
+                .copy_to_nonoverlapping(value.as_mut_ptr().cast(), value.size());
 
-            self.advance_read(value.size::<T>());
+            self.advance_read(value.size());
             Some(value.assume_init())
         }
     }
@@ -302,7 +287,7 @@ impl<T> RecvBuf<T> {
     /// ```
     /// use protocol::buf::RecvBuf;
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.as_bytes_mut()?.len() > 0);
     ///
     /// buf.as_bytes_mut()?[..7].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7]);
@@ -311,36 +296,31 @@ impl<T> RecvBuf<T> {
     ///     buf.advance_written_bytes(7);
     /// }
     ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-    /// let expected2 = u32::from_ne_bytes([5, 6, 7, 8]);
+    /// assert!(buf.read_words(1).is_none());
+    ///
+    /// buf.as_bytes_mut()?[..1].copy_from_slice(&[8]);
+    ///
+    /// unsafe {
+    ///     buf.advance_written_bytes(1);
+    /// }
+    ///
+    /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
     ///
     /// assert_eq!(buf.as_slice(), &[expected]);
     ///
     /// assert!(buf.read_words(2).is_none());
     /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
-    ///
-    /// buf.as_bytes_mut()?[..3].copy_from_slice(&[8, 9, 10]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(3);
-    /// }
-    ///
-    /// assert_eq!(buf.read_words(1), Some(&[expected2][..]));
-    /// assert!(buf.read_words(1).is_none());
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn read_words(&mut self, size: usize) -> Option<&[T]>
-    where
-        T: BytesInhabited,
-    {
+    pub fn read_words(&mut self, size: usize) -> Option<&[u64]> {
         if size > self.len() {
             return None;
         }
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
-            let value = slice::from_raw_parts(self.data.as_ptr().add(self.read).cast::<T>(), size);
+            let value = slice::from_raw_parts(self.data.as_ptr().add(self.read), size);
             self.advance_read(size);
             Some(value)
         }
@@ -361,7 +341,7 @@ impl<T> RecvBuf<T> {
     /// ```
     /// use protocol::buf::RecvBuf;
     ///
-    /// let mut buf = RecvBuf::<u32>::new();
+    /// let mut buf = RecvBuf::new();
     /// assert!(buf.as_bytes_mut()?.len() > 0);
     ///
     /// buf.as_bytes_mut()?[..7].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7]);
@@ -370,29 +350,23 @@ impl<T> RecvBuf<T> {
     ///     buf.advance_written_bytes(7);
     /// }
     ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-    /// let expected2 = u32::from_ne_bytes([5, 6, 7, 8]);
+    /// assert_eq!(buf.as_slice(), &[]);
+    /// assert!(buf.read_words(1).is_none());
     ///
-    /// assert_eq!(buf.as_slice(), &[expected]);
+    /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
     ///
-    /// assert!(buf.read_words(2).is_none());
-    /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
-    ///
-    /// buf.as_bytes_mut()?[..3].copy_from_slice(&[8, 9, 10]);
+    /// buf.as_bytes_mut()?[..1].copy_from_slice(&[8]);
     ///
     /// unsafe {
-    ///     buf.advance_written_bytes(3);
+    ///     buf.advance_written_bytes(1);
     /// }
     ///
-    /// assert_eq!(buf.read_words(1), Some(&[expected2][..]));
-    /// assert!(buf.read_words(1).is_none());
+    /// assert_eq!(buf.as_slice(), &[expected]);
+    /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub unsafe fn advance_written_bytes(&mut self, n: usize)
-    where
-        T: BytesInhabited,
-    {
+    pub unsafe fn advance_written_bytes(&mut self, n: usize) {
         let n = n + mem::take(&mut self.partial_write);
         let w = n / Self::WORD_SIZE;
         let p = n % Self::WORD_SIZE;
@@ -456,7 +430,7 @@ impl<T> RecvBuf<T> {
     }
 
     #[inline]
-    fn as_ptr(&self) -> *const T {
+    fn as_ptr(&self) -> *const u64 {
         self.data.as_ptr().wrapping_add(self.read).cast_const()
     }
 
@@ -470,7 +444,7 @@ impl<T> RecvBuf<T> {
 
         let data = match self.cap {
             0 => unsafe {
-                let layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+                let layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
 
                 let data = alloc::alloc_zeroed(layout);
 
@@ -481,8 +455,8 @@ impl<T> RecvBuf<T> {
                 ptr::NonNull::new_unchecked(data)
             },
             _ => unsafe {
-                let old_layout = Layout::array::<T>(self.cap).map_err(|_| AllocError)?;
-                let new_layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+                let old_layout = Layout::array::<u64>(self.cap).map_err(|_| AllocError)?;
+                let new_layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
 
                 let data = alloc::realloc(self.data.as_ptr().cast(), old_layout, new_layout.size());
 
@@ -490,7 +464,7 @@ impl<T> RecvBuf<T> {
                     return Err(AllocError);
                 }
 
-                data.cast::<T>()
+                data.cast::<u64>()
                     .wrapping_add(self.cap)
                     .write_bytes(0, new_cap - self.cap);
                 ptr::NonNull::new_unchecked(data)
@@ -508,12 +482,12 @@ impl<T> RecvBuf<T> {
             unsafe {
                 let layout = Layout::from_size_align_unchecked(
                     self.cap.wrapping_mul(Self::WORD_SIZE),
-                    mem::align_of::<T>(),
+                    mem::align_of::<u64>(),
                 );
                 alloc::dealloc(self.data.as_ptr().cast(), layout);
             }
 
-            self.data = ptr::NonNull::<T>::dangling().cast();
+            self.data = ptr::NonNull::dangling();
             self.cap = 0;
             self.read = 0;
             self.write = 0;
@@ -522,7 +496,7 @@ impl<T> RecvBuf<T> {
     }
 }
 
-impl<T> Drop for RecvBuf<T> {
+impl Drop for RecvBuf {
     #[inline]
     fn drop(&mut self) {
         self.clear();
@@ -530,10 +504,7 @@ impl<T> Drop for RecvBuf<T> {
     }
 }
 
-impl<T> fmt::Debug for RecvBuf<T>
-where
-    T: fmt::Debug,
-{
+impl fmt::Debug for RecvBuf {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()

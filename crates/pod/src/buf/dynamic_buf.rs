@@ -9,7 +9,6 @@ use alloc::alloc;
 
 use crate::SplitReader;
 use crate::error::ErrorKind;
-use crate::utils::BytesInhabited;
 use crate::{AsReader, Error, Writer};
 
 /// An allocation error has occured when trying to reserve space in the [`DynamicBuf`].
@@ -28,22 +27,13 @@ impl fmt::Display for AllocError {
 }
 
 /// A buffer which can be used in combination with a channel.
-pub struct DynamicBuf<T = u64> {
-    data: ptr::NonNull<T>,
+pub struct DynamicBuf {
+    data: ptr::NonNull<u64>,
     cap: usize,
     len: usize,
 }
 
-impl<T> DynamicBuf<T> {
-    /// The size in bytes of a word.
-    pub const WORD_SIZE: usize = const {
-        if mem::size_of::<T>() == 0 {
-            panic!("Cannot create a DynamicBuf with zero-sized type")
-        }
-
-        mem::size_of::<T>()
-    };
-
+impl DynamicBuf {
     /// Construct a new empty buffer.
     ///
     /// # Examples
@@ -51,7 +41,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::{DynamicBuf, Writer};
     ///
-    /// let mut buf = DynamicBuf::<u64>::new();
+    /// let mut buf = DynamicBuf::new();
     /// assert!(buf.is_empty());
     /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.len(), 1);
@@ -60,7 +50,7 @@ impl<T> DynamicBuf<T> {
     #[inline]
     pub const fn new() -> Self {
         DynamicBuf {
-            data: ptr::NonNull::<T>::dangling().cast(),
+            data: ptr::NonNull::<u64>::dangling(),
             cap: 0,
             len: 0,
         }
@@ -73,7 +63,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::{DynamicBuf, Writer};
     ///
-    /// let mut buf = DynamicBuf::<u64>::new();
+    /// let mut buf = DynamicBuf::new();
     /// assert_eq!(buf.len(), 0);
     /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.len(), 1);
@@ -91,7 +81,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::{DynamicBuf, Writer};
     ///
-    /// let mut buf = DynamicBuf::<u64>::new();
+    /// let mut buf = DynamicBuf::new();
     /// assert!(buf.is_empty());
     /// buf.extend_from_words(&[42])?;
     /// assert!(!buf.is_empty());
@@ -109,7 +99,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::DynamicBuf;
     ///
-    /// let mut buf = DynamicBuf::<u32>::new();
+    /// let mut buf = DynamicBuf::new();
     ///
     /// buf.extend_from_words(&[1, 2])?;
     /// assert_eq!(buf.as_slice(), &[1, 2]);
@@ -119,13 +109,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        let write = mem::take(&mut self.len);
-
-        if mem::needs_drop::<T>() {
-            unsafe {
-                ptr::drop_in_place(slice::from_raw_parts_mut(self.data.as_ptr(), write));
-            }
-        }
+        self.len = 0;
     }
 
     /// Returns the slice of data in the buffer.
@@ -135,14 +119,14 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::DynamicBuf;
     ///
-    /// let mut buf = DynamicBuf::<u64>::new();
+    /// let mut buf = DynamicBuf::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     /// buf.extend_from_words(&[1, 2, 3, 4])?;
     /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().cast_const(), self.len()) }
     }
@@ -154,7 +138,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::DynamicBuf;
     ///
-    /// let mut buf = DynamicBuf::<u64>::new();
+    /// let mut buf = DynamicBuf::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     /// buf.extend_from_words(&[1, 2, 3, 4])?;
     /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
@@ -163,7 +147,7 @@ impl<T> DynamicBuf<T> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_slice_mut(&mut self) -> &mut [T] {
+    pub fn as_slice_mut(&mut self) -> &mut [u64] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts_mut(self.data.as_ptr(), self.len()) }
     }
@@ -175,19 +159,15 @@ impl<T> DynamicBuf<T> {
     /// ```
     /// use pod::DynamicBuf;
     ///
-    /// let mut buf = DynamicBuf::<u32>::new();
+    /// let mut buf = DynamicBuf::new();
     /// assert!(buf.is_empty());
     /// buf.extend_from_words(&[1, 2, 3, 4]);
     /// assert_eq!(buf.len(), 4);
-    ///
     /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn extend_from_words(&mut self, words: &[T]) -> Result<(), AllocError>
-    where
-        T: BytesInhabited,
-    {
+    pub fn extend_from_words(&mut self, words: &[u64]) -> Result<(), AllocError> {
         self.reserve(self.len + words.len())?;
 
         // SAFETY: Necessary invariants have been checked above.
@@ -234,7 +214,7 @@ impl<T> DynamicBuf<T> {
 
         let data = match self.cap {
             0 => unsafe {
-                let layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+                let layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
 
                 let data = alloc::alloc(layout);
 
@@ -245,8 +225,8 @@ impl<T> DynamicBuf<T> {
                 ptr::NonNull::new_unchecked(data)
             },
             _ => unsafe {
-                let old_layout = Layout::array::<T>(self.cap).map_err(|_| AllocError)?;
-                let new_layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
+                let old_layout = Layout::array::<u64>(self.cap).map_err(|_| AllocError)?;
+                let new_layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
 
                 let data = alloc::realloc(self.data.as_ptr().cast(), old_layout, new_layout.size());
 
@@ -268,20 +248,20 @@ impl<T> DynamicBuf<T> {
             // SAFETY: The buffer is guaranteed to be allocated with the same alignment as `A`.
             unsafe {
                 let layout = Layout::from_size_align_unchecked(
-                    self.cap.wrapping_mul(Self::WORD_SIZE),
-                    mem::align_of::<T>(),
+                    self.cap.wrapping_mul(mem::size_of::<u64>()),
+                    mem::align_of::<u64>(),
                 );
                 alloc::dealloc(self.data.as_ptr().cast(), layout);
             }
 
-            self.data = ptr::NonNull::<T>::dangling().cast();
+            self.data = ptr::NonNull::<u64>::dangling().cast();
             self.cap = 0;
             self.len = 0;
         }
     }
 }
 
-impl<T> Drop for DynamicBuf<T> {
+impl Drop for DynamicBuf {
     #[inline]
     fn drop(&mut self) {
         self.clear();
@@ -289,11 +269,8 @@ impl<T> Drop for DynamicBuf<T> {
     }
 }
 
-impl<T> AsReader<T> for DynamicBuf<T>
-where
-    T: 'static,
-{
-    type AsReader<'this> = &'this [T];
+impl AsReader for DynamicBuf {
+    type AsReader<'this> = &'this [u64];
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
@@ -301,11 +278,8 @@ where
     }
 }
 
-impl<T> SplitReader<T> for DynamicBuf<T>
-where
-    T: 'static,
-{
-    type TakeReader<'this> = &'this [T];
+impl SplitReader for DynamicBuf {
+    type TakeReader<'this> = &'this [u64];
 
     #[inline]
     fn take_reader(&mut self) -> Self::TakeReader<'_> {
@@ -323,12 +297,9 @@ pub struct Pos {
     len: usize,
 }
 
-impl<T> Writer<T> for DynamicBuf<T>
-where
-    T: BytesInhabited,
-{
+impl Writer for DynamicBuf {
     type Mut<'this>
-        = &'this mut DynamicBuf<T>
+        = &'this mut DynamicBuf
     where
         Self: 'this;
 
@@ -340,7 +311,7 @@ where
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error> {
+    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
         let write = self.len.wrapping_add(words.len());
 
         self.reserve(write)?;
@@ -366,17 +337,17 @@ where
     fn distance_from(&self, pos: Self::Pos) -> usize {
         self.len
             .wrapping_sub(pos.write)
-            .wrapping_mul(Self::WORD_SIZE)
+            .wrapping_mul(mem::size_of::<u64>())
     }
 
     #[inline]
-    fn write_words(&mut self, words: &[T]) -> Result<(), Error> {
+    fn write_words(&mut self, words: &[u64]) -> Result<(), Error> {
         self.extend_from_words(words)?;
         Ok(())
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error> {
+    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error> {
         let Pos { write, len } = pos;
 
         if len < words.len() {
@@ -406,15 +377,12 @@ where
     }
 
     #[inline]
-    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>
-    where
-        T: BytesInhabited,
-    {
+    fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
         let Some(full) = bytes.len().checked_add(pad) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let write = self.len.wrapping_add(full.div_ceil(Self::WORD_SIZE));
+        let write = self.len.wrapping_add(full.div_ceil(mem::size_of::<u64>()));
 
         self.reserve(write)?;
 
@@ -422,7 +390,7 @@ where
         unsafe {
             let ptr = self.data.as_ptr().wrapping_add(self.len).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-            let pad = Self::WORD_SIZE - bytes.len() % Self::WORD_SIZE;
+            let pad = mem::size_of::<u64>() - bytes.len() % mem::size_of::<u64>();
             ptr.wrapping_add(bytes.len()).write_bytes(0, pad);
         }
 
@@ -431,10 +399,7 @@ where
     }
 }
 
-impl<T> fmt::Debug for DynamicBuf<T>
-where
-    T: fmt::Debug,
-{
+impl fmt::Debug for DynamicBuf {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_slice()).finish()

@@ -87,7 +87,7 @@ impl<B> Property<B> {
 
 impl<'de, B> fmt::Debug for Property<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Property")

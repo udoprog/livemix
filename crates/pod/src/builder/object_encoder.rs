@@ -32,12 +32,12 @@ where
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn header(&self, mut buf: impl Writer<u64>) -> Result<(), Error> {
+    fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
         buf.write([self.key.into_id(), self.flags])
     }
 
     #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: crate::Encode,
     {
@@ -45,7 +45,7 @@ where
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + crate::EncodeUnsized,
     {
@@ -56,7 +56,7 @@ where
 /// An encoder for an object.
 pub struct ObjectBuilder<W, P>
 where
-    W: Writer<u64>,
+    W: Writer,
 {
     writer: W,
     kind: P,
@@ -69,7 +69,7 @@ where
 
 impl<W, P> ObjectBuilder<W, P>
 where
-    W: Writer<u64>,
+    W: Writer,
     P: PodKind,
 {
     #[inline]

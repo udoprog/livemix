@@ -22,7 +22,7 @@ impl<B> Struct<B> {
 
 impl<'de, B> Struct<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     #[inline]
     pub(crate) fn new(buf: B, size: usize) -> Self {
@@ -193,7 +193,7 @@ where
 
 impl<B> Struct<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     /// Coerce into an owned [`Struct`].
     ///
@@ -255,7 +255,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Struct<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     const TYPE: Type = Type::STRUCT;
 
@@ -265,23 +265,23 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader<u64>);
+crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader);
 
 impl<'de> DecodeFrom<'de> for Struct<&'de [u64]> {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
+    fn decode_from(pod: Pod<impl Reader<'de>>) -> Result<Self, Error> {
         Ok(pod.next_struct()?.into_slice())
     }
 }
 
 impl<B> fmt::Debug for Struct<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -289,7 +289,7 @@ where
 
         impl<B> fmt::Debug for Fields<'_, B>
         where
-            B: AsReader<u64>,
+            B: AsReader,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

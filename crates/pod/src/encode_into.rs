@@ -6,7 +6,7 @@ use crate::{Builder, Error, Writer};
 /// This is used through the [`Builder::encode`] and similar methods.
 pub trait EncodeInto {
     #[doc(hidden)]
-    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error>;
+    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error>;
 }
 
 impl<T> EncodeInto for &T
@@ -14,7 +14,7 @@ where
     T: ?Sized + EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
         (*self).encode_into(pod)
     }
 }
@@ -31,7 +31,7 @@ where
     T: EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
         let mut pod = pod.into_envelope()?;
 
         for item in self {
@@ -51,7 +51,7 @@ where
     T: EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
         let mut pod = pod.into_envelope()?;
 
         for item in self.iter() {
@@ -80,7 +80,7 @@ where
 /// ```
 impl EncodeInto for () {
     #[inline]
-    fn encode_into(&self, _: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, _: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -112,7 +112,7 @@ macro_rules! encode_into_tuple {
             $($ident: EncodeInto,)*
         {
             #[inline]
-            fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+            fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
                 let ($(ref $var,)*) = *self;
                 let mut pod = pod.into_envelope()?;
                 $($var.encode_into(pod.as_mut())?;)*

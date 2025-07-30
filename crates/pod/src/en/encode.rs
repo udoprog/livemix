@@ -13,7 +13,7 @@ where
     const SIZE: usize;
 
     /// Write the content of a type.
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
 }
 
 /// [`Encode`] implementation for `i32`.
@@ -31,7 +31,7 @@ impl Encode for bool {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([if *self { 1u32 } else { 0u32 }, 0u32])
     }
 }
@@ -58,7 +58,7 @@ where
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.0.into_id(), 0])
     }
 }
@@ -80,7 +80,7 @@ impl Encode for i32 {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.cast_unsigned(), 0])
     }
 }
@@ -102,7 +102,7 @@ impl Encode for isize {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         let Ok(value) = i32::try_from(*self) else {
             return Err(Error::new(ErrorKind::InvalidIsizeInt { value: *self }));
         };
@@ -132,7 +132,7 @@ impl Encode for u32 {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         self.cast_signed().write_content(writer)
     }
 }
@@ -158,7 +158,7 @@ impl Encode for usize {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         let Ok(value) = u32::try_from(*self) else {
             return Err(Error::new(ErrorKind::InvalidUsizeInt { value: *self }));
         };
@@ -184,7 +184,7 @@ impl Encode for i64 {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(self.cast_unsigned())
     }
 }
@@ -210,7 +210,7 @@ impl Encode for u64 {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         self.cast_signed().write_content(writer)
     }
 }
@@ -231,7 +231,7 @@ impl Encode for f32 {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.to_bits(), 0])
     }
 }
@@ -253,7 +253,7 @@ impl Encode for f64 {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(self.to_bits())
     }
 }
@@ -277,7 +277,7 @@ impl Encode for Rectangle {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.width, self.height])
     }
 }
@@ -301,7 +301,7 @@ impl Encode for Fraction {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.num, self.denom])
     }
 }
@@ -325,7 +325,7 @@ impl<const N: usize> Encode for [u8; N] {
     const SIZE: usize = N;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         <[u8]>::write_content(self, writer)
     }
 }
@@ -351,7 +351,7 @@ impl Encode for Pointer {
     const SIZE: usize = 16;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         let mut bytes = WordBytes::new();
         bytes.write_usize(self.pointer());
 
@@ -380,7 +380,7 @@ impl Encode for Fd {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(self.fd().cast_unsigned())?;
         Ok(())
     }
@@ -408,7 +408,7 @@ where
     const SIZE: usize = T::SIZE;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         <T as Encode>::write_content(self, writer)
     }
 }

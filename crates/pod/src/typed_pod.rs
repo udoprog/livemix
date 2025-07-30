@@ -82,7 +82,7 @@ impl<B> TypedPod<B> {
 
 impl<'de, B> TypedPod<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
@@ -499,7 +499,7 @@ where
 
 impl<B> TypedPod<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -586,7 +586,7 @@ where
 /// ```
 impl<B> EncodeUnsized for TypedPod<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     const TYPE: Type = Type::POD;
 
@@ -597,7 +597,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         let Ok(size) = u32::try_from(self.size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
@@ -608,11 +608,11 @@ where
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsReader<u64>);
+crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsReader);
 
 impl<B> fmt::Debug for TypedPod<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

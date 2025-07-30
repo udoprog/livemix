@@ -15,27 +15,27 @@ mod sealed {
     use crate::DynamicBuf;
     use crate::{ArrayBuf, AsReader};
 
-    pub trait Sealed<T> {}
+    pub trait Sealed {}
 
     #[cfg(feature = "alloc")]
-    impl<T> Sealed<T> for Box<[T]> where T: 'static {}
+    impl Sealed for Box<[u64]> {}
     #[cfg(feature = "alloc")]
-    impl<T> Sealed<T> for Vec<T> where T: 'static {}
-    impl<T> Sealed<T> for [T] where T: 'static {}
-    impl<T, const N: usize> Sealed<T> for ArrayBuf<T, N> {}
+    impl Sealed for Vec<u64> {}
+    impl Sealed for [u64] {}
+    impl<const N: usize> Sealed for ArrayBuf<N> {}
     #[cfg(feature = "alloc")]
-    impl<T> Sealed<T> for DynamicBuf<T> where T: 'static {}
-    impl<R, T> Sealed<T> for &mut R where R: ?Sized + AsReader<T> {}
-    impl<R, T> Sealed<T> for &R where R: ?Sized + AsReader<T> {}
+    impl Sealed for DynamicBuf {}
+    impl<R> Sealed for &mut R where R: ?Sized + AsReader {}
+    impl<R> Sealed for &R where R: ?Sized + AsReader {}
 }
 
 /// Base trait to convert something into a reader which borrows from `&self`.
-pub trait AsReader<T>
+pub trait AsReader
 where
-    Self: self::sealed::Sealed<T>,
+    Self: self::sealed::Sealed,
 {
     /// A clone of the reader.
-    type AsReader<'this>: Reader<'this, T>
+    type AsReader<'this>: Reader<'this>
     where
         Self: 'this;
 
@@ -44,12 +44,9 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl<T> AsReader<T> for Box<[T]>
-where
-    T: 'static,
-{
+impl AsReader for Box<[u64]> {
     type AsReader<'this>
-        = &'this [T]
+        = &'this [u64]
     where
         Self: 'this;
 
@@ -60,12 +57,9 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl<T> AsReader<T> for Vec<T>
-where
-    T: 'static,
-{
+impl AsReader for Vec<u64> {
     type AsReader<'this>
-        = &'this [T]
+        = &'this [u64]
     where
         Self: 'this;
 
@@ -75,12 +69,9 @@ where
     }
 }
 
-impl<T> AsReader<T> for [T]
-where
-    T: 'static,
-{
+impl AsReader for [u64] {
     type AsReader<'this>
-        = &'this [T]
+        = &'this [u64]
     where
         Self: 'this;
 
@@ -90,9 +81,9 @@ where
     }
 }
 
-impl<R, T> AsReader<T> for &mut R
+impl<R> AsReader for &mut R
 where
-    R: ?Sized + AsReader<T>,
+    R: ?Sized + AsReader,
 {
     type AsReader<'this>
         = R::AsReader<'this>
@@ -105,9 +96,9 @@ where
     }
 }
 
-impl<R, T> AsReader<T> for &R
+impl<R> AsReader for &R
 where
-    R: ?Sized + AsReader<T>,
+    R: ?Sized + AsReader,
 {
     type AsReader<'this>
         = R::AsReader<'this>

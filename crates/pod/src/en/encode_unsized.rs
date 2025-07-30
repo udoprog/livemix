@@ -17,7 +17,7 @@ pub trait EncodeUnsized {
     fn size(&self) -> usize;
 
     #[doc(hidden)]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error>;
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
 }
 
 /// [`EncodeUnsized`] implementation for an unsized `[u8]`.
@@ -40,7 +40,7 @@ impl EncodeUnsized for [u8] {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_bytes(self, 0)
     }
 }
@@ -68,7 +68,7 @@ impl EncodeUnsized for CStr {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_bytes(self.to_bytes_with_nul(), 0)?;
         Ok(())
     }
@@ -110,7 +110,7 @@ impl EncodeUnsized for str {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         let bytes = self.as_bytes();
 
         if bytes.contains(&0) {
@@ -151,7 +151,7 @@ impl EncodeUnsized for String {
     }
 
     #[inline]
-    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
         str::write_content(self, writer)
     }
 }
@@ -180,7 +180,7 @@ impl EncodeUnsized for Bitmap {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_bytes(self.as_bytes(), 0)?;
         Ok(())
     }

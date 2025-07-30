@@ -138,7 +138,7 @@ impl<B> Choice<B> {
 
 impl<'de, B> Choice<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     #[inline]
     pub fn new(
@@ -311,7 +311,7 @@ where
 
 impl<B> Choice<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     /// Coerce into a borrowed [`Choice`].
     ///
@@ -395,7 +395,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Choice<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     const TYPE: Type = Type::CHOICE;
 
@@ -406,7 +406,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         let Ok(child_size) = u32::try_from(self.child_size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
@@ -422,11 +422,11 @@ where
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Choice<B> where B: AsReader<u64>);
+crate::macros::encode_into_unsized!(impl [B] Choice<B> where B: AsReader);
 
 impl<B> fmt::Debug for Choice<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -434,7 +434,7 @@ where
 
         impl<B> fmt::Debug for Entries<'_, B>
         where
-            B: AsReader<u64>,
+            B: AsReader,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

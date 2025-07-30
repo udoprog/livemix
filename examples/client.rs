@@ -3,7 +3,8 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use protocol::buf::{ArrayVec, RecvBuf};
+use pod::buf::ArrayVec;
+use protocol::buf::RecvBuf;
 use protocol::poll::{ChangeInterest, Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd};
 

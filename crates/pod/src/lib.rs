@@ -106,7 +106,7 @@ pub use self::builder::Builder;
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[inline]
-pub fn array() -> Builder<ArrayBuf<u64>> {
+pub fn array() -> Builder<ArrayBuf> {
     Builder::array()
 }
 
@@ -122,6 +122,6 @@ pub fn array() -> Builder<ArrayBuf<u64>> {
 /// ```
 #[inline]
 #[cfg(feature = "alloc")]
-pub fn dynamic() -> Builder<DynamicBuf<u64>> {
+pub fn dynamic() -> Builder<DynamicBuf> {
     Builder::dynamic()
 }

@@ -7,9 +7,6 @@ pub use self::recv_buf::RecvBuf;
 mod send_buf;
 pub use self::send_buf::SendBuf;
 
-mod array_vec;
-pub use self::array_vec::ArrayVec;
-
 use core::error;
 use core::fmt;
 

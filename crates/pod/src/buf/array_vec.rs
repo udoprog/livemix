@@ -15,7 +15,7 @@ const DEFAULT_SIZE: usize = 128;
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let mut buf = ArrayVec::<u32, 16>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.len(), 4);
@@ -23,19 +23,19 @@ const DEFAULT_SIZE: usize = 128;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
 /// assert_eq!(buf.pop(), Some(5));
 /// assert_eq!(buf.len(), 4);
-/// # Ok::<_, protocol::buf::CapacityError>(())
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
 ///
 /// Trying to read data from the array in a manner which is *not* correctly
 /// aligned will errors:
 ///
 /// ```compile_fail
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let mut buf = ArrayVec::<u64, 16>::from_slice(&[1, 2, 3, 4]);
 /// // This must fail because it's not possible to read half of a word out of the array.
 /// buf.read::<u32>()?;
-/// # Ok::<_, protocol::buf::CapacityError>(())
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
 pub struct ArrayVec<T, const N: usize = DEFAULT_SIZE> {
     data: [MaybeUninit<T>; N],
@@ -48,7 +48,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let buf = ArrayVec::<u64>::new();
     /// ```
@@ -66,11 +66,11 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<String>::new();
     /// buf.push("Hello".to_string())?;
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub fn push(&mut self, value: T) -> Result<(), CapacityError> {
         if self.len >= N {
@@ -90,12 +90,47 @@ impl<T, const N: usize> ArrayVec<T, N> {
         Ok(())
     }
 
+    /// Extend the buffer with a slice of values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::buf::ArrayVec;
+    ///
+    /// let mut buf = ArrayVec::<u64, 5>::new();
+    /// buf.extend_from_slice(&[1, 2, 3])?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
+    /// # Ok::<_, pod::buf::CapacityError>(())
+    /// ```
+    pub fn extend_from_slice(&mut self, slice: &[T]) -> Result<(), CapacityError>
+    where
+        T: Copy,
+    {
+        let len = self.len.wrapping_add(slice.len());
+
+        if len > N {
+            return Err(CapacityError);
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data
+                .as_mut_ptr()
+                .add(self.len)
+                .cast::<T>()
+                .copy_from_nonoverlapping(slice.as_ptr(), slice.len());
+        }
+
+        self.len = len;
+        Ok(())
+    }
+
     /// Push a value from the array.
     ///
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<String>::new();
     /// buf.push(String::from("Hello"))?;
@@ -104,7 +139,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(buf.pop(), Some(String::from("World")));
     /// assert_eq!(buf.pop(), Some(String::from("Hello")));
     /// assert_eq!(buf.pop(), None);
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub fn pop(&mut self) -> Option<T> {
         if self.len == 0 {
@@ -122,7 +157,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let buf = ArrayVec::<u64, 3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
@@ -150,7 +185,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// Panics if the length of the slice exceeds the buffer size.
     ///
     /// ```should_panic
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// ArrayVec::<u64, 16>::from_slice(&[0; 32]);
     /// ```
@@ -158,7 +193,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let buf = ArrayVec::<u64, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
@@ -193,7 +228,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<u64>::new();
     /// assert!(buf.is_empty());
@@ -201,7 +236,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// buf.push(42)?;
     /// assert!(!buf.is_empty());
     /// assert_eq!(buf.len(), 1);
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub const fn len(&self) -> usize {
         self.len
@@ -212,7 +247,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<u64>::new();
     /// assert!(buf.is_empty());
@@ -220,7 +255,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// buf.push(42)?;
     /// assert!(!buf.is_empty());
     /// assert_eq!(buf.len(), 1);
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub const fn is_empty(&self) -> bool {
         self.len == 0
@@ -231,12 +266,12 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let buf = ArrayVec::<u32, 16>::from_slice(&[1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 16);
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub const fn capacity(&self) -> usize {
         N
@@ -250,7 +285,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<u64, 3>::from_array([1, 2, 3]);
     /// assert_eq!(buf.len(), 3);
@@ -263,7 +298,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// assert_eq!(buf.as_slice(), &[String::from("Hello"), String::from("World")]);
     /// buf.clear();
     /// assert!(buf.as_slice().is_empty());
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
     pub fn clear(&mut self) {
@@ -285,13 +320,13 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
     /// buf.push(42)?;
     /// assert_eq!(buf.as_slice(), &[42]);
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
     pub fn as_slice(&self) -> &[T] {
@@ -304,7 +339,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     /// # Examples
     ///
     /// ```
-    /// use protocol::buf::ArrayVec;
+    /// use pod::buf::ArrayVec;
     ///
     /// let mut buf = ArrayVec::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
@@ -314,7 +349,7 @@ impl<T, const N: usize> ArrayVec<T, N> {
     ///
     /// buf.as_slice_mut()[0] = 43;
     /// assert_eq!(buf.as_slice(), &[43]);
-    /// # Ok::<_, protocol::buf::CapacityError>(())
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub fn as_slice_mut(&mut self) -> &mut [T] {
         // SAFETY: The buffer is guaranteed to be initialized from the
@@ -348,13 +383,13 @@ impl<T> Default for ArrayVec<T> {
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let mut buf = ArrayVec::from_array([1, 2, 3]);
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
 /// buf.pop();
 /// assert_eq!(format!("{buf:?}"), "[1, 2]");
-/// # Ok::<_, protocol::buf::CapacityError>(())
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
 impl<T, const N: usize> fmt::Debug for ArrayVec<T, N>
 where
@@ -371,7 +406,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let buf1 = ArrayVec::from_array([1, 2, 3]);
 /// let buf2 = ArrayVec::from_array([1, 2, 3, 4]);
@@ -394,7 +429,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let array1 = ArrayVec::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
@@ -418,7 +453,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let array1 = ArrayVec::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
@@ -442,7 +477,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let slice1 = ArrayVec::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];
@@ -466,7 +501,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use protocol::buf::ArrayVec;
+/// use pod::buf::ArrayVec;
 ///
 /// let array1 = ArrayVec::from_array([1, 2, 3]);
 /// let slice2: &[u64] = &[1, 2, 3, 4][..];

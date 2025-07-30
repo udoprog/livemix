@@ -39,7 +39,7 @@ use crate::{Builder, Error, Type, Writer};
 /// ```
 pub struct ArrayBuilder<W, K>
 where
-    W: Writer<u64>,
+    W: Writer,
 {
     writer: W,
     kind: K,
@@ -50,7 +50,7 @@ where
 
 impl<W, K> ArrayBuilder<W, K>
 where
-    W: Writer<u64>,
+    W: Writer,
     K: PodKind,
 {
     #[inline]

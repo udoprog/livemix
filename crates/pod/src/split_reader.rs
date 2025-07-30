@@ -14,22 +14,22 @@ mod sealed {
     use crate::DynamicBuf;
     use crate::{ArrayBuf, SplitReader};
 
-    pub trait Sealed<T> {}
+    pub trait Sealed {}
 
-    impl<T, const N: usize> Sealed<T> for ArrayBuf<T, N> where T: 'static {}
-    impl<T> Sealed<T> for DynamicBuf<T> where T: 'static {}
-    impl<T> Sealed<T> for Vec<T> where T: 'static {}
-    impl<T> Sealed<T> for &[T] where T: 'static {}
-    impl<R, T> Sealed<T> for &mut R where R: ?Sized + SplitReader<T> {}
+    impl<const N: usize> Sealed for ArrayBuf<N> {}
+    impl Sealed for DynamicBuf {}
+    impl Sealed for Vec<u64> {}
+    impl Sealed for &[u64] {}
+    impl<R> Sealed for &mut R where R: ?Sized + SplitReader {}
 }
 
 /// Base trait to convert something into a reader which borrows from `&self`.
-pub trait SplitReader<T>
+pub trait SplitReader
 where
-    Self: self::sealed::Sealed<T>,
+    Self: self::sealed::Sealed,
 {
     /// A clone of the reader.
-    type TakeReader<'this>: Reader<'this, T>
+    type TakeReader<'this>: Reader<'this>
     where
         Self: 'this;
 
@@ -38,12 +38,9 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl<T> SplitReader<T> for Vec<T>
-where
-    T: 'static,
-{
+impl SplitReader for Vec<u64> {
     type TakeReader<'this>
-        = &'this [T]
+        = &'this [u64]
     where
         Self: 'this;
 
@@ -57,12 +54,9 @@ where
     }
 }
 
-impl<T> SplitReader<T> for &[T]
-where
-    T: 'static,
-{
+impl SplitReader for &[u64] {
     type TakeReader<'this>
-        = &'this [T]
+        = &'this [u64]
     where
         Self: 'this;
 
@@ -74,9 +68,9 @@ where
     }
 }
 
-impl<R, T> SplitReader<T> for &mut R
+impl<R> SplitReader for &mut R
 where
-    R: ?Sized + SplitReader<T>,
+    R: ?Sized + SplitReader,
 {
     type TakeReader<'this>
         = R::TakeReader<'this>

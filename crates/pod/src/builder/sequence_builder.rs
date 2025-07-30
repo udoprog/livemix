@@ -36,12 +36,12 @@ impl PodKind for ControlChild {
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn header(&self, mut buf: impl Writer<u64>) -> Result<(), Error> {
+    fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
         buf.write([self.offset, self.ty])
     }
 
     #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: crate::Encode,
     {
@@ -49,7 +49,7 @@ impl PodKind for ControlChild {
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
+    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + crate::EncodeUnsized,
     {
@@ -66,7 +66,7 @@ impl PodKind for ControlChild {
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
 pub struct SequenceBuilder<W, K>
 where
-    W: Writer<u64>,
+    W: Writer,
 {
     writer: W,
     kind: K,
@@ -77,7 +77,7 @@ where
 
 impl<W, K> SequenceBuilder<W, K>
 where
-    W: Writer<u64>,
+    W: Writer,
     K: PodKind,
 {
     #[inline]

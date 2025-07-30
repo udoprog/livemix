@@ -9,28 +9,26 @@ use crate::error::ErrorKind;
 
 /// Trait implemented for types which are word-sized and can inhabit all bit
 /// patterns.
-pub trait AlignableWith<T>
+pub unsafe trait AlignableWith
 where
     Self: Sized,
-    T: Sized,
 {
     /// The size of the word in the alignment.
     #[doc(hidden)]
     const WORD_SIZE: usize = {
-        assert!(mem::size_of::<Self>() >= mem::size_of::<T>());
-        assert!(mem::size_of::<Self>() % mem::size_of::<T>() == 0);
+        assert!(mem::size_of::<Self>() >= mem::size_of::<u64>());
+        assert!(mem::size_of::<Self>() % mem::size_of::<u64>() == 0);
         // Helper types to deal with alignment assumes that alignment is less than or equal to 8.
         assert!(mem::align_of::<Self>() <= 8);
-        mem::size_of::<Self>() / mem::size_of::<T>()
+        mem::size_of::<Self>() / mem::size_of::<u64>()
     };
 }
 
-impl<T, U> AlignableWith<U> for T
-where
-    T: BytesInhabited,
-    U: BytesInhabited,
-{
-}
+unsafe impl AlignableWith for u64 {}
+unsafe impl<const N: usize> AlignableWith for [u64; N] {}
+unsafe impl AlignableWith for [u32; 2] {}
+unsafe impl AlignableWith for [u32; 4] {}
+unsafe impl AlignableWith for [u32; 6] {}
 
 /// Indicates a type which has all bit patterns inhabited.
 pub unsafe trait BytesInhabited
@@ -56,9 +54,9 @@ pub struct Align<T>(pub T);
 impl<T> Align<T> {
     /// Coerce a value into a slice of words.
     #[inline]
-    pub fn as_words<U>(&self) -> &[U]
+    pub fn as_words(&self) -> &[u64]
     where
-        T: AlignableWith<U>,
+        T: AlignableWith,
     {
         // SAFETY: The value must be word-aligned and packed.
         unsafe { slice::from_raw_parts(self.as_ptr(), T::WORD_SIZE) }
@@ -66,18 +64,18 @@ impl<T> Align<T> {
 
     /// Get a pointer to the word representation of the value.
     #[inline]
-    pub fn as_ptr<U>(&self) -> *const U
+    pub fn as_ptr(&self) -> *const u64
     where
-        T: AlignableWith<U>,
+        T: AlignableWith,
     {
-        &self.0 as *const T as *const U
+        (&self.0 as *const T).cast()
     }
 
     /// Get the size of the region in word.
     #[inline]
-    pub fn size<U>(&self) -> usize
+    pub fn size(&self) -> usize
     where
-        T: AlignableWith<U>,
+        T: AlignableWith,
     {
         T::WORD_SIZE
     }
@@ -95,7 +93,7 @@ where
 
 impl<T> Copy for Align<T> where T: Copy {}
 
-impl<T> Align<T> where T: AlignableWith<u64> {}
+impl<T> Align<T> where T: AlignableWith {}
 
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
@@ -105,13 +103,13 @@ pub struct UninitAlign<T>(MaybeUninit<T>);
 impl<T> UninitAlign<T> {
     /// Get a mutable slice of the aligned value.
     #[inline]
-    pub fn as_mut_slice<U>(&mut self) -> &mut [MaybeUninit<U>]
+    pub fn as_mut_slice(&mut self) -> &mut [MaybeUninit<u64>]
     where
-        T: AlignableWith<U>,
+        T: AlignableWith,
     {
         unsafe {
             slice::from_raw_parts_mut(
-                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<U>>(),
+                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<u64>>(),
                 T::WORD_SIZE,
             )
         }
@@ -119,18 +117,18 @@ impl<T> UninitAlign<T> {
 
     /// Get a pointer to the word representation of the value.
     #[inline]
-    pub fn as_mut_ptr<U>(&mut self) -> *mut MaybeUninit<U>
+    pub fn as_mut_ptr(&mut self) -> *mut MaybeUninit<u64>
     where
-        T: AlignableWith<U>,
+        T: AlignableWith,
     {
-        &mut self.0 as *mut MaybeUninit<T> as *mut MaybeUninit<U>
+        (&mut self.0 as *mut MaybeUninit<T>).cast()
     }
 
     /// Get the size of the region in word.
     #[inline]
-    pub fn size<U>(&self) -> usize
+    pub fn size(&self) -> usize
     where
-        T: AlignableWith<U>,
+        T: AlignableWith,
     {
         T::WORD_SIZE
     }

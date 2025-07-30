@@ -37,7 +37,7 @@ impl<B> Object<B> {
 
 impl<'de, B> Object<B>
 where
-    B: Reader<'de, u64>,
+    B: Reader<'de>,
 {
     #[inline]
     fn new(buf: B, size: usize, object_type: u32, object_id: u32) -> Self {
@@ -231,7 +231,7 @@ where
 
 impl<B> Object<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     /// Coerce into a borrowed [`Object`].
     ///
@@ -329,7 +329,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Object<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     const TYPE: Type = Type::OBJECT;
 
@@ -340,17 +340,17 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer<u64>) -> Result<(), Error> {
+    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write([self.object_type, self.object_id])?;
         writer.write_words(self.buf.as_reader().as_slice())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Object<B> where B: AsReader<u64>);
+crate::macros::encode_into_unsized!(impl [B] Object<B> where B: AsReader);
 
 impl<'de, B> fmt::Debug for Object<B>
 where
-    B: AsReader<u64>,
+    B: AsReader,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -358,7 +358,7 @@ where
 
         impl<B> fmt::Debug for Properties<'_, B>
         where
-            B: AsReader<u64>,
+            B: AsReader,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
