@@ -37,7 +37,7 @@ impl PodKind for ControlChild {
 
     #[inline]
     fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
-        buf.write([self.offset, self.ty])
+        buf.write(&[self.offset, self.ty])
     }
 
     #[inline]
@@ -83,7 +83,7 @@ where
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
         // Reserve space for the header of the sequence which includes its size that will be determined later.
-        let header = writer.reserve([
+        let header = writer.reserve(&[
             mem::size_of::<[u32; 2]>() as u32,
             Type::SEQUENCE.into_u32(),
             0,
@@ -128,7 +128,7 @@ where
 
         self.writer.write_at(
             self.header,
-            [size, Type::SEQUENCE.into_u32(), self.unit, self.pad],
+            &[size, Type::SEQUENCE.into_u32(), self.unit, self.pad],
         )?;
 
         Ok(())

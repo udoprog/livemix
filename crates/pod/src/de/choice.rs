@@ -411,14 +411,14 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        writer.write([
+        writer.write(&[
             self.choice_type.into_u32(),
             self.flags,
             child_size,
             self.child_type.into_u32(),
         ])?;
 
-        writer.write_words(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_slice())
     }
 }
 

@@ -329,8 +329,11 @@ impl Writer for DynamicBuf {
     }
 
     #[inline]
-    fn reserve_words(&mut self, words: &[u64]) -> Result<Self::Pos, Error> {
-        let words_len = words.len().wrapping_mul(mem::size_of::<u64>());
+    fn reserve<T>(&mut self, words: &[T]) -> Result<Self::Pos, Error>
+    where
+        T: BytesInhabited,
+    {
+        let words_len = words.len().wrapping_mul(mem::size_of::<T>());
         let len = self.len.wrapping_add(words_len);
 
         self.reserve(len)?;
@@ -358,16 +361,22 @@ impl Writer for DynamicBuf {
     }
 
     #[inline]
-    fn write_words(&mut self, words: &[u64]) -> Result<(), Error> {
+    fn write<T>(&mut self, words: &[T]) -> Result<(), Error>
+    where
+        T: BytesInhabited,
+    {
         self.extend_from_words(words)?;
         Ok(())
     }
 
     #[inline]
-    fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error> {
+    fn write_at<T>(&mut self, pos: Self::Pos, words: &[T]) -> Result<(), Error>
+    where
+        T: BytesInhabited,
+    {
         let Pos { at, len } = pos;
 
-        let words_len = words.len().wrapping_mul(mem::size_of::<u64>());
+        let words_len = words.len().wrapping_mul(mem::size_of::<T>());
 
         if len < words_len {
             return Err(Error::new(ErrorKind::ReservedSizeMismatch {

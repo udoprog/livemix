@@ -32,7 +32,7 @@ impl Encode for bool {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([if *self { 1u32 } else { 0u32 }, 0u32])
+        writer.write(&[if *self { 1u32 } else { 0u32 }, 0u32])
     }
 }
 
@@ -59,7 +59,7 @@ where
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([self.0.into_id(), 0])
+        writer.write(&[self.0.into_id(), 0])
     }
 }
 
@@ -81,7 +81,7 @@ impl Encode for i32 {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([self.cast_unsigned(), 0])
+        writer.write(&[self.cast_unsigned(), 0])
     }
 }
 
@@ -185,7 +185,7 @@ impl Encode for i64 {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.cast_unsigned())
+        writer.write(&[self.cast_unsigned()])
     }
 }
 
@@ -232,7 +232,7 @@ impl Encode for f32 {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([self.to_bits(), 0])
+        writer.write(&[self.to_bits(), 0])
     }
 }
 
@@ -254,7 +254,7 @@ impl Encode for f64 {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.to_bits())
+        writer.write(&[self.to_bits()])
     }
 }
 
@@ -278,7 +278,7 @@ impl Encode for Rectangle {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([self.width, self.height])
+        writer.write(&[self.width, self.height])
     }
 }
 
@@ -302,7 +302,7 @@ impl Encode for Fraction {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([self.num, self.denom])
+        writer.write(&[self.num, self.denom])
     }
 }
 
@@ -355,8 +355,8 @@ impl Encode for Pointer {
         let mut bytes = WordBytes::new();
         bytes.write_usize(self.pointer());
 
-        writer.write([self.ty(), 0])?;
-        writer.write_words(bytes.as_array())?;
+        writer.write(&[self.ty(), 0])?;
+        writer.write(bytes.as_array())?;
         Ok(())
     }
 }
@@ -381,7 +381,7 @@ impl Encode for Fd {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.fd().cast_unsigned())?;
+        writer.write(&[self.fd().cast_unsigned()])?;
         Ok(())
     }
 }

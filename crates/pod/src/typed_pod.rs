@@ -602,8 +602,8 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        writer.write([size, self.ty.into_u32()])?;
-        writer.write_words(self.buf.as_reader().as_slice())?;
+        writer.write(&[size, self.ty.into_u32()])?;
+        writer.write(self.buf.as_reader().as_slice())?;
         Ok(())
     }
 }

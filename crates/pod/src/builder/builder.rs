@@ -138,7 +138,7 @@ impl PodKind for EnvelopePod {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        buf.write([size, T::TYPE.into_u32()])?;
+        buf.write(&[size, T::TYPE.into_u32()])?;
         value.write_content(buf)
     }
 
@@ -151,7 +151,7 @@ impl PodKind for EnvelopePod {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        buf.write([size, T::TYPE.into_u32()])?;
+        buf.write(&[size, T::TYPE.into_u32()])?;
         value.write_content(buf)
     }
 
@@ -496,7 +496,7 @@ where
         self.kind.check(Type::NONE, 0)?;
 
         if K::ENVELOPE {
-            self.buf.write([0, Type::NONE.into_u32()])?;
+            self.buf.write(&[0, Type::NONE.into_u32()])?;
         }
 
         Ok(())
@@ -783,7 +783,7 @@ where
 
         // Reserve space for the header of the choice which includes its size
         // that will be determined later.
-        let header = self.buf.reserve([0, Type::POD.into_u32()])?;
+        let header = self.buf.reserve(&[0, Type::POD.into_u32()])?;
 
         let mut pod = Builder::new(self.buf);
 
@@ -800,7 +800,7 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        pod.buf.write_at(header, [size, Type::POD.into_u32()])?;
+        pod.buf.write_at(header, &[size, Type::POD.into_u32()])?;
         Ok(())
     }
 
@@ -863,7 +863,7 @@ where
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write_words(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_slice())
     }
 }
 

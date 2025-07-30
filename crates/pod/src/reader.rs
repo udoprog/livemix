@@ -67,8 +67,7 @@ where
     ///
     /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_bytes().len(), 0);
-    ///
-    /// buf.write(42u64)?;
+    /// buf.write(&[42u64])?;
     /// let expected = 42u64.to_ne_bytes();
     /// assert_eq!(buf.as_bytes(), &expected[..]);
     /// # Ok::<_, pod::Error>(())
@@ -104,8 +103,7 @@ where
     ///
     /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.write(42u64)?;
+    /// buf.write(&[42u64])?;
     /// assert_eq!(buf.as_slice(), &[42]);
     /// # Ok::<_, pod::Error>(())
     /// ```

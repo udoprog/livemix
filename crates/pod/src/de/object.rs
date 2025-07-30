@@ -341,8 +341,8 @@ where
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write([self.object_type, self.object_id])?;
-        writer.write_words(self.buf.as_reader().as_slice())
+        writer.write(&[self.object_type, self.object_id])?;
+        writer.write(self.buf.as_reader().as_slice())
     }
 }
 

@@ -33,7 +33,7 @@ where
 
     #[inline]
     fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
-        buf.write([self.key.into_id(), self.flags])
+        buf.write(&[self.key.into_id(), self.flags])
     }
 
     #[inline]
@@ -81,7 +81,7 @@ where
     ) -> Result<Self, Error> {
         // Reserve space for the header of the struct which includes its size
         // that will be determined later.
-        let header = writer.reserve([
+        let header = writer.reserve(&[
             mem::size_of::<[u32; 2]>() as u32,
             Type::OBJECT.into_u32(),
             object_type,
@@ -143,7 +143,7 @@ where
             .check_size(Type::OBJECT, &self.writer, self.header)?;
 
         self.writer
-            .write_at(self.header, [size, Type::OBJECT.into_u32()])?;
+            .write_at(self.header, &[size, Type::OBJECT.into_u32()])?;
 
         Ok(())
     }

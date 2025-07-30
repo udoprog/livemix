@@ -20,7 +20,7 @@ where
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
         // Reserve space for the header of the struct which includes its size that will be determined later.
-        let header = writer.reserve([0, Type::STRUCT.into_u32()])?;
+        let header = writer.reserve(&[0, Type::STRUCT.into_u32()])?;
 
         Ok(Self {
             writer,
@@ -79,7 +79,7 @@ where
             .check_size(Type::STRUCT, &self.writer, self.header)?;
 
         self.writer
-            .write_at(self.header, [size, Type::STRUCT.into_u32()])?;
+            .write_at(self.header, &[size, Type::STRUCT.into_u32()])?;
         Ok(())
     }
 }

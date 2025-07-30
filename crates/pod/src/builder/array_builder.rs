@@ -59,7 +59,7 @@ where
             return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
         };
 
-        let header = writer.reserve([
+        let header = writer.reserve(&[
             mem::size_of::<[u32; 2]>() as u32,
             Type::ARRAY.into_u32(),
             child_size as u32,
@@ -96,7 +96,7 @@ where
                 return Err(Error::new(ErrorKind::SizeOverflow));
             };
 
-            writer.reserve([
+            writer.reserve(&[
                 mem::size_of::<[u32; 2]>() as u32,
                 Type::ARRAY.into_u32(),
                 child_size,
@@ -139,7 +139,7 @@ where
             .check_size(Type::ARRAY, &self.writer, self.header)?;
 
         self.writer
-            .write_at(self.header, [size, Type::ARRAY.into_u32()])?;
+            .write_at(self.header, &[size, Type::ARRAY.into_u32()])?;
         Ok(())
     }
 }

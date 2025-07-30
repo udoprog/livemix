@@ -43,7 +43,7 @@ where
                 return Err(Error::new(ErrorKind::SizeOverflow));
             };
 
-            writer.reserve([
+            writer.reserve(&[
                 mem::size_of::<[u32; 4]>() as u32,
                 Type::CHOICE.into_u32(),
                 choice.into_u32(),
@@ -90,7 +90,7 @@ where
             .check_size(Type::CHOICE, &self.writer, self.header)?;
 
         self.writer
-            .write_at(self.header, [size, Type::CHOICE.into_u32()])?;
+            .write_at(self.header, &[size, Type::CHOICE.into_u32()])?;
 
         Ok(())
     }

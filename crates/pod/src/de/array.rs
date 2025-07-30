@@ -357,8 +357,8 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        writer.write([child_size, self.child_type.into_u32()])?;
-        writer.write_words(self.buf.as_reader().as_slice())
+        writer.write(&[child_size, self.child_type.into_u32()])?;
+        writer.write(self.buf.as_reader().as_slice())
     }
 }
 

@@ -5,19 +5,15 @@ use alloc::string::String;
 
 use crate::buf::{ArrayVec, CapacityError};
 use crate::error::ErrorKind;
-use crate::utils::{Align, AlignableWith};
 use crate::{
     ArrayBuf, AsReader, Bitmap, Builder, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle,
     Type, Writer,
 };
 use crate::{ChoiceType, Reader};
 
-pub(crate) fn read<T>(value: T) -> u64
-where
-    T: AlignableWith,
-{
-    // SAFETY: The value must be word-aligned and packed.
-    unsafe { Align(value).as_ptr().cast::<u64>().read() }
+pub(crate) fn read(value: [u32; 2]) -> u64 {
+    // SAFETY: Same size, same supported bit patterns.
+    unsafe { (&[value] as *const [u32; 2]).cast::<u64>().read_unaligned() }
 }
 
 #[test]
@@ -47,7 +43,7 @@ fn expected(expected: Type, actual: Type) -> ErrorKind {
 #[test]
 fn test_push_decode_u64() -> Result<(), Error> {
     let mut buf = ArrayBuf::<128>::new();
-    buf.write(0x1234567890abcdefu64)?;
+    buf.write(&[0x1234567890abcdefu64])?;
 
     let mut buf = buf.as_slice();
 
