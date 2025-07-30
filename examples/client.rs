@@ -3,7 +3,7 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use protocol::buf::RecvBuf;
+use protocol::buf::{ArrayVec, RecvBuf};
 use protocol::poll::{ChangeInterest, Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd};
 
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
 
     timer.set_interval(Duration::from_secs(1))?;
 
-    let mut events = pod::ArrayBuf::<PollEvent, 4>::new();
+    let mut events = ArrayVec::<PollEvent, 4>::new();
 
     loop {
         state.run(&mut recv)?;

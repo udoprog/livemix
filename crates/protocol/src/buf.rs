@@ -7,6 +7,9 @@ pub use self::recv_buf::RecvBuf;
 mod send_buf;
 pub use self::send_buf::SendBuf;
 
+mod array_vec;
+pub use self::array_vec::ArrayVec;
+
 use core::error;
 use core::fmt;
 
@@ -22,5 +25,20 @@ impl fmt::Display for AllocError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Allocation error")
+    }
+}
+
+/// Capacity overflow when writing to an [`ArrayVec`].
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+#[non_exhaustive]
+pub struct CapacityError;
+
+impl error::Error for CapacityError {}
+
+impl fmt::Display for CapacityError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Buffer capacity exceeded")
     }
 }
