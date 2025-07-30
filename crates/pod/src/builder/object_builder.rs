@@ -1,57 +1,9 @@
 use core::mem;
 
-use crate::builder::{EnvelopePod, PodKind};
+use crate::builder::PodKind;
 use crate::{Builder, Error, RawId, Type, Writer};
 
-pub struct PropertyChild<K> {
-    key: K,
-    flags: u32,
-}
-
-impl<K> PropertyChild<K> {
-    #[inline]
-    fn new(key: K) -> Self {
-        Self { key, flags: 0 }
-    }
-}
-
-impl<B, K> Builder<B, PropertyChild<K>> {
-    /// Modify the flags of a property.
-    pub fn flags(mut self, flags: u32) -> Self {
-        self.kind.flags = flags;
-        self
-    }
-}
-
-impl<K> crate::builder::builder::sealed::Sealed for PropertyChild<K> {}
-
-impl<K> PodKind for PropertyChild<K>
-where
-    K: RawId,
-{
-    const ENVELOPE: bool = true;
-
-    #[inline]
-    fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
-        buf.write(&[self.key.into_id(), self.flags])
-    }
-
-    #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
-    where
-        T: crate::Encode,
-    {
-        EnvelopePod.push(value, buf)
-    }
-
-    #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
-    where
-        T: ?Sized + crate::EncodeUnsized,
-    {
-        EnvelopePod.push_unsized(value, buf)
-    }
-}
+use super::PropertyChild;
 
 /// An encoder for an object.
 pub struct ObjectBuilder<W, P>

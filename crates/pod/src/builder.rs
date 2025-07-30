@@ -1,8 +1,11 @@
 //! Helper types for building POD objects.
 
+mod pod_kind;
+pub use self::pod_kind::{ChildPod, ControlChild, EnvelopePod, PodKind, PropertyChild};
+
 mod builder;
 #[doc(inline)]
-pub use self::builder::{Builder, ChildPod, EnvelopePod, PodKind};
+pub use self::builder::Builder;
 
 mod array_builder;
 pub use self::array_builder::ArrayBuilder;

@@ -1,8 +1,9 @@
 use core::mem;
 
-use crate::builder::{ChildPod, PodKind};
 use crate::error::ErrorKind;
 use crate::{Builder, ChoiceType, Error, Type, Writer};
+
+use super::{ChildPod, PodKind};
 
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, P>
