@@ -644,3 +644,58 @@ fn choice_format() -> Result<(), Error> {
     );
     Ok(())
 }
+
+#[test]
+fn build_struct() -> Result<(), Error> {
+    let factory_name = "client-node";
+    let ty = "audio";
+    let version = 1;
+    let new_id = 2;
+
+    const PROPS: &[(&str, &str)] = &[
+        ("node.description", "livemix"),
+        ("node.name", "livemix_node"),
+        ("media.class", "Audio/Duplex"),
+        ("media.type", "Audio"),
+        ("media.category", "Duplex"),
+        ("media.role", "DSP"),
+    ];
+
+    let mut pod = crate::array();
+
+    pod.as_mut().push_struct(|st| {
+        st.field().push_unsized(factory_name)?;
+        st.field().push_unsized(ty)?;
+        st.field().push(version)?;
+
+        st.field().push_struct(|props| {
+            for &(key, value) in PROPS {
+                props.field().push_unsized(key)?;
+                props.field().push_unsized(value)?;
+            }
+
+            Ok(())
+        })?;
+
+        st.field().push(new_id)?;
+        Ok(())
+    })?;
+
+    let mut st = pod.as_ref().next_struct()?;
+
+    assert_eq!(st.field()?.next_borrowed::<str>()?, factory_name);
+    assert_eq!(st.field()?.next_borrowed::<str>()?, ty);
+    assert_eq!(st.field()?.next::<i32>()?, version);
+
+    let mut inner = st.field()?.next_struct()?;
+
+    for &(k, v) in PROPS {
+        let key = inner.field()?.next_borrowed::<str>()?;
+        let value = inner.field()?.next_borrowed::<str>()?;
+        assert_eq!(key, k);
+        assert_eq!(value, v);
+    }
+
+    // std::dbg!(pod.as_ref());
+    Ok(())
+}

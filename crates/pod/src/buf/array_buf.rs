@@ -485,7 +485,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
 
         let pos = Pos {
             at: self.len,
-            len: words.len(),
+            len: words_len,
         };
 
         self.len = len;
@@ -507,6 +507,8 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     fn write_words_at(&mut self, pos: Self::Pos, words: &[u64]) -> Result<(), Error> {
         let Pos { at, len } = pos;
 
+        let words_len = words.len().wrapping_mul(mem::size_of::<u64>());
+
         if len < words.len() {
             return Err(Error::new(ErrorKind::ReservedSizeMismatch {
                 expected: len,
@@ -523,7 +525,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
             self.data
                 .as_mut_ptr()
                 .add(at)
-                .copy_from_nonoverlapping(words.as_ptr().cast(), words.len());
+                .copy_from_nonoverlapping(words.as_ptr().cast(), words_len);
         }
 
         Ok(())
