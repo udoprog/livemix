@@ -22,9 +22,9 @@ impl<B> Property<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1)?.push(1i32)?;
+    ///     obj.property(1).push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -45,9 +45,9 @@ impl<B> Property<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+    ///     obj.property(1).flags(0b001).push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -68,9 +68,9 @@ impl<B> Property<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1)?.push(1i32)?;
+    ///     obj.property(1).push(1i32)?;
     ///     Ok(())
     /// })?;
     ///

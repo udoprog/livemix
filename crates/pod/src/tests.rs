@@ -7,8 +7,8 @@ use crate::buf::CapacityError;
 use crate::error::ErrorKind;
 use crate::utils::{Align, AlignableWith};
 use crate::{
-    ArrayBuf, AsReader, Bitmap, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle, Type,
-    Writer,
+    ArrayBuf, AsReader, Bitmap, Builder, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle,
+    Type, Writer,
 };
 use crate::{ChoiceType, Reader};
 
@@ -22,7 +22,7 @@ where
 
 #[test]
 fn sandbox() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_unsized(Bitmap::new(b"hello world"))?;
 
     assert_eq!(
@@ -34,9 +34,9 @@ fn sandbox() -> Result<(), Error> {
 
 #[inline]
 fn push_none() -> Result<Pod<impl AsReader<u64>>, Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_none()?;
-    Ok(pod)
+    Ok(pod.into_pod())
 }
 
 #[inline]
@@ -71,7 +71,7 @@ fn test_push_decode_u64() -> Result<(), Error> {
 
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
-    let mut pod = Pod::new(ArrayBuf::<_, 1>::new());
+    let mut pod = Builder::new(ArrayBuf::<_, 1>::new());
     assert!(pod.as_mut().push_none().is_ok());
 
     assert_eq!(
@@ -260,7 +260,7 @@ fn test_bitmap() -> Result<(), Error> {
 
 #[test]
 fn test_array() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
 
     pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
         array.child().push_unsized("foo")?;
@@ -285,7 +285,7 @@ fn test_array() -> Result<(), Error> {
 
 #[test]
 fn test_decode_complex_struct() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_struct(|st| {
         st.field().push(1i32)?;
         st.field().push(2i32)?;
@@ -322,7 +322,7 @@ fn test_decode_complex_struct() -> Result<(), Error> {
 
 #[test]
 fn test_decode_struct() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_struct(|st| {
         st.field().push(1i32)?;
         st.field().push(2i32)?;
@@ -342,7 +342,7 @@ fn test_decode_struct() -> Result<(), Error> {
 
 #[test]
 fn test_format_struct() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_struct(|st| {
         st.field().push(1i32)?;
         st.field().push(2i32)?;
@@ -364,13 +364,13 @@ fn test_format_struct() -> Result<(), Error> {
 
 #[test]
 fn test_format_object() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
 
     pod.as_mut().push_object(10, 20, |obj| {
-        obj.property_with_flags(1, 0b100)?.push(1i32)?;
-        obj.property_with_flags(2, 0b010)?.push(2i32)?;
+        obj.property(1).flags(0b100).push(1i32)?;
+        obj.property(2).flags(0b010).push(2i32)?;
 
-        obj.property_with_flags(3, 0b001)?.push_struct(|st| {
+        obj.property(3).flags(0b001).push_struct(|st| {
             st.field().push(*b"hello world")?;
             st.field().push(Rectangle::new(800, 600))?;
             st.field().push(*b"goodbye world")?;
@@ -405,7 +405,7 @@ fn test_format_object() -> Result<(), Error> {
 
 #[test]
 fn test_format_array() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
 
     pod.as_mut().push_array(Type::INT, |array| {
         array.child().push(1i32)?;
@@ -423,7 +423,7 @@ fn test_format_array() -> Result<(), Error> {
 
 #[test]
 fn test_format_l1_struct() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_struct(|st| {
         st.field().push(*b"a")?;
         st.field().push(*b"b")?;
@@ -439,7 +439,7 @@ fn test_format_l1_struct() -> Result<(), Error> {
 
 #[test]
 fn test_format_choice() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut()
         .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
             choice.child().push(10i32)?;
@@ -457,7 +457,7 @@ fn test_format_choice() -> Result<(), Error> {
 
 #[test]
 fn test_format_buggy() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut()
         .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
             choice.child().push(10i32)?;
@@ -489,7 +489,7 @@ fn test_array_drop() -> Result<(), Error> {
 
 #[test]
 fn test_struct_decoding() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_struct(|st| st.encode((1, 2, 3)))?;
 
     let mut st = pod.as_ref().next_struct()?;
@@ -500,7 +500,7 @@ fn test_struct_decoding() -> Result<(), Error> {
 
 #[test]
 fn test_struct_unit() -> Result<(), Error> {
-    let mut pod = Pod::array();
+    let mut pod = Builder::array();
     pod.as_mut().push_struct(|st| st.encode(()))?;
 
     let st = pod.as_ref().next_struct()?;

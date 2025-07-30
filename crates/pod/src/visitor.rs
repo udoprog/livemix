@@ -11,9 +11,7 @@ use super::error::ErrorKind;
 /// This is implemented for functions or closures like `|value: &T| -> U`:
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(&b"hello world"[..])?;
 ///
 /// let pod = pod.as_ref();

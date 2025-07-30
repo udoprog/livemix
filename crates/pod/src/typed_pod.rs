@@ -37,7 +37,7 @@ impl<B> TypedPod<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -57,7 +57,7 @@ impl<B> TypedPod<B> {
     /// ```
     /// use pod::{Pod, TypedPod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -91,7 +91,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -111,7 +111,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     ///
     /// pod.as_mut().push_array(Type::INT, |array| {
     ///     array.child().push(10i32)?;
@@ -139,7 +139,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -168,7 +168,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -198,7 +198,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -230,13 +230,13 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_none()?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     /// assert!(pod.next_option()?.is_none());
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push(true)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
@@ -263,7 +263,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     ///
     /// pod.as_mut().push_array(Type::INT, |array| {
     ///     array.child().push(1i32)?;
@@ -304,7 +304,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -338,11 +338,11 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+    ///     obj.property(1).flags(0b001).push(1i32)?;
+    ///     obj.property(2).flags(0b010).push(2i32)?;
+    ///     obj.property(3).flags(0b100).push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -385,11 +385,11 @@ where
     /// ```
     /// use pod::{Pod, TypedPod, Type};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.push(1i32)?;
-    ///     seq.control(2, 20)?.push(2i32)?;
-    ///     seq.control(3, 30)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().offset(1).ty(10).push(1i32)?;
+    ///     seq.control().offset(2).ty(20).push(2i32)?;
+    ///     seq.control().offset(3).ty(30).push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -432,7 +432,7 @@ where
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -466,7 +466,7 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_pod(|pod| {
     ///     pod.as_mut().push_struct(|st| {
     ///         st.field().push(1i32)?;
@@ -506,9 +506,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?.to_owned();
@@ -554,15 +552,15 @@ where
 /// ```
 /// use pod::{Pod, Type};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_object(10, 20, |obj| {
-///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+///     obj.property(1).flags(0b001).push(1i32)?;
+///     obj.property(2).flags(0b010).push(2i32)?;
+///     obj.property(3).flags(0b100).push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut pod2 = Pod::array();
+/// let mut pod2 = pod::array();
 /// pod2.as_mut().encode(pod.as_ref().into_typed()?)?;
 ///
 /// let mut obj = pod2.as_ref().next_pod()?.next_object()?;

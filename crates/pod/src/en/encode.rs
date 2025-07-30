@@ -21,9 +21,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(true)?;
 /// assert_eq!(pod.as_ref().next::<bool>()?, true);
 /// # Ok::<_, pod::Error>(())
@@ -47,7 +45,7 @@ crate::macros::encode_into_sized!(bool);
 /// ```
 /// use pod::{Pod, Id};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(Id(142u32))?;
 /// assert_eq!(pod.as_ref().next::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
@@ -72,9 +70,7 @@ crate::macros::encode_into_sized!(impl [I] Id<I> where I: RawId);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10i32)?;
 /// assert_eq!(pod.as_ref().next::<i32>()?, 10);
 /// # Ok::<_, pod::Error>(())
@@ -96,9 +92,7 @@ crate::macros::encode_into_sized!(i32);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10isize)?;
 /// assert_eq!(pod.as_ref().next::<isize>()?, 10);
 /// # Ok::<_, pod::Error>(())
@@ -124,13 +118,11 @@ crate::macros::encode_into_sized!(isize);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10u32)?;
 /// assert_eq!(pod.as_ref().next::<u32>()?, 10);
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10i32)?;
 /// assert_eq!(pod.as_ref().next::<u32>()?, 10);
 /// # Ok::<_, pod::Error>(())
@@ -152,13 +144,11 @@ crate::macros::encode_into_sized!(u32);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10usize)?;
 /// assert_eq!(pod.as_ref().next::<usize>()?, 10);
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10i32)?;
 /// assert_eq!(pod.as_ref().next::<usize>()?, 10);
 /// # Ok::<_, pod::Error>(())
@@ -184,9 +174,7 @@ crate::macros::encode_into_sized!(usize);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10i64)?;
 /// assert_eq!(pod.as_ref().next::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
@@ -208,13 +196,11 @@ crate::macros::encode_into_sized!(i64);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10u64)?;
 /// assert_eq!(pod.as_ref().next::<u64>()?, 10);
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(10i64)?;
 /// assert_eq!(pod.as_ref().next::<u64>()?, 10);
 /// # Ok::<_, pod::Error>(())
@@ -235,9 +221,7 @@ crate::macros::encode_into_sized!(u64);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(42.42f32)?;
 /// assert_eq!(pod.as_ref().next::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
@@ -259,9 +243,7 @@ crate::macros::encode_into_sized!(f32);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(42.42f64)?;
 /// assert_eq!(pod.as_ref().next::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
@@ -285,7 +267,7 @@ crate::macros::encode_into_sized!(f64);
 /// ```
 /// use pod::{Pod, Rectangle};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(Rectangle::new(100, 200))?;
 /// assert_eq!(pod.as_ref().next::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
@@ -309,7 +291,7 @@ crate::macros::encode_into_sized!(Rectangle);
 /// ```
 /// use pod::{Pod, Fraction};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(Fraction::new(800, 600))?;
 /// assert_eq!(pod.as_ref().next::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
@@ -333,7 +315,7 @@ crate::macros::encode_into_sized!(Fraction);
 /// ```
 /// use pod::{Pod, Fraction};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(*b"hello world")?;
 /// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
@@ -359,7 +341,7 @@ crate::macros::encode_into_sized!(impl [const N: usize] [u8; N]);
 ///
 /// let value = 1u32;
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(Pointer::new((&value as *const u32).addr()))?;
 /// assert_eq!(pod.as_ref().next::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
 /// # Ok::<_, pod::Error>(())
@@ -388,7 +370,7 @@ crate::macros::encode_into_sized!(Pointer);
 /// ```
 /// use pod::{Pod, Fd};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(Fd::new(4))?;
 /// assert_eq!(pod.as_ref().next::<Fd>()?, Fd::new(4));
 /// # Ok::<_, pod::Error>(())
@@ -411,11 +393,9 @@ crate::macros::encode_into_sized!(Fd);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
 /// let value = 42u32;
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push(&value)?;
 /// assert_eq!(pod.as_ref().next::<u32>()?, value);
 /// # Ok::<_, pod::Error>(())

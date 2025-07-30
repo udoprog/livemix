@@ -9,9 +9,9 @@ use crate::{Reader, TypedPod};
 /// ```
 /// use pod::{Pod, Type};
 ///
-/// let mut pod = Pod::array();
-/// pod.as_mut().encode_sequence(|seq| {
-///     seq.control(1, 10)?.push(1i32)?;
+/// let mut pod = pod::array();
+/// pod.as_mut().push_sequence(|seq| {
+///     seq.control().offset(1).ty(10).push(1i32)?;
 ///     Ok(())
 /// })?;
 ///
@@ -42,15 +42,15 @@ impl<B> Control<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.push(1i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().offset(42).push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
     /// let mut seq = pod.as_ref().next_sequence()?;
     /// let c = seq.control()?;
-    /// assert_eq!(c.offset(), 1);
+    /// assert_eq!(c.offset(), 42);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -65,9 +65,9 @@ impl<B> Control<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.push(1i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().ty(10).push(1i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -88,9 +88,9 @@ impl<B> Control<B> {
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 10)?.push(1i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
     ///     Ok(())
     /// })?;
     ///

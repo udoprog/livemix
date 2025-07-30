@@ -12,6 +12,7 @@ use anyhow::{Context, Result, bail};
 use pod::{Fd, Object, Pod, Struct};
 use protocol::Connection;
 use protocol::buf::RecvBuf;
+use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
@@ -78,7 +79,7 @@ struct ClientNodeState {
     node_activations: Slab<Activation>,
     /// Map of peer ids to their activation indices.
     peer_to_activation: BTreeMap<u32, usize>,
-    params: BTreeMap<id::Param, Object<Box<[u64]>>>,
+    params: BTreeMap<Param, Object<Box<[u64]>>>,
     ports: Ports,
     io_clock: Option<Region<ffi::IoClock>>,
     io_control: Option<Region<()>>,
@@ -94,43 +95,39 @@ impl ClientNodeState {
         read_token: Token,
     ) -> Result<Self> {
         let mut params = BTreeMap::new();
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut()
-            .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                obj.property(id::Format::MEDIA_TYPE)?
-                    .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE)?
-                    .push(id::MediaSubType::RAW)?;
-                obj.property(id::Format::AUDIO_FORMAT)?
-                    .push(id::AudioFormat::S16)?;
-                obj.property(id::Format::AUDIO_CHANNELS)?.push(1u32)?;
-                obj.property(id::Format::AUDIO_RATE)?.push(44100u32)?;
+            .push_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_SUB_TYPE)
+                    .push(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
+                obj.property(Format::AUDIO_RATE).push(44100u32)?;
                 Ok(())
             })?;
 
         params.insert(
-            id::Param::ENUM_FORMAT,
+            Param::ENUM_FORMAT,
             pod.as_ref().into_typed()?.next_object()?.to_owned(),
         );
 
         pod.clear();
 
         pod.as_mut()
-            .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                obj.property(id::Format::MEDIA_TYPE)?
-                    .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE)?
-                    .push(id::MediaSubType::RAW)?;
-                obj.property(id::Format::AUDIO_FORMAT)?
-                    .push(id::AudioFormat::S16)?;
-                obj.property(id::Format::AUDIO_CHANNELS)?.push(1u32)?;
-                obj.property(id::Format::AUDIO_RATE)?.push(44100u32)?;
+            .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_SUB_TYPE)
+                    .push(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
+                obj.property(Format::AUDIO_RATE).push(44100u32)?;
                 Ok(())
             })?;
 
         params.insert(
-            id::Param::FORMAT,
+            Param::FORMAT,
             pod.as_ref().into_typed()?.next_object()?.to_owned(),
         );
 
@@ -154,14 +151,14 @@ impl ClientNodeState {
 
     /// Set a parameter for the node.
     #[inline]
-    fn set_param(&mut self, param: id::Param, value: Object<Box<[u64]>>) {
+    fn set_param(&mut self, param: Param, value: Object<Box<[u64]>>) {
         self.params.insert(param, value);
         self.modified = true;
     }
 
     /// Remove a parameter for the node.
     #[inline]
-    fn remove_param(&mut self, param: id::Param) {
+    fn remove_param(&mut self, param: Param) {
         self.params.remove(&param);
         self.modified = true;
     }
@@ -953,7 +950,7 @@ impl State {
         };
 
         let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<id::Param>()?;
+        let id = st.field()?.next::<Param>()?;
         let _flags = st.field()?.next::<i32>()?;
 
         if let Some(obj) = st.field()?.next_option()? {
@@ -1070,7 +1067,7 @@ impl State {
         let mut st = pod.next_struct()?;
         let direction = consts::Direction::from_raw(st.field()?.next::<u32>()?);
         let port_id = st.field()?.next::<u32>()?;
-        let id = st.field()?.next::<id::Param>()?;
+        let id = st.field()?.next::<Param>()?;
         let flags = st.field()?.next::<u32>()?;
 
         let port = node.ports.get_mut(direction, port_id)?;

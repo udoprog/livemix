@@ -1,14 +1,65 @@
 use core::mem;
 
-use crate::{Error, Pod, PodKind, RawId, Type, Writer};
+use crate::builder::{EnvelopePod, PodKind};
+use crate::{Builder, Error, RawId, Type, Writer};
+
+pub struct PropertyChild<K> {
+    key: K,
+    flags: u32,
+}
+
+impl<K> PropertyChild<K> {
+    #[inline]
+    fn new(key: K) -> Self {
+        Self { key, flags: 0 }
+    }
+}
+
+impl<B, K> Builder<B, PropertyChild<K>> {
+    /// Modify the flags of a property.
+    pub fn flags(mut self, flags: u32) -> Self {
+        self.kind.flags = flags;
+        self
+    }
+}
+
+impl<K> crate::builder::builder::sealed::Sealed for PropertyChild<K> {}
+
+impl<K> PodKind for PropertyChild<K>
+where
+    K: RawId,
+{
+    const ENVELOPE: bool = true;
+
+    #[inline]
+    fn header(&self, mut buf: impl Writer<u64>) -> Result<(), Error> {
+        buf.write([self.key.into_id(), self.flags])
+    }
+
+    #[inline]
+    fn push<T>(&self, value: T, buf: impl Writer<u64>) -> Result<(), Error>
+    where
+        T: crate::Encode,
+    {
+        EnvelopePod.push(value, buf)
+    }
+
+    #[inline]
+    fn push_unsized<T>(&self, value: &T, buf: impl Writer<u64>) -> Result<(), Error>
+    where
+        T: ?Sized + crate::EncodeUnsized,
+    {
+        EnvelopePod.push_unsized(value, buf)
+    }
+}
 
 /// An encoder for an object.
-pub struct ObjectBuilder<W, K>
+pub struct ObjectBuilder<W, P>
 where
     W: Writer<u64>,
 {
     writer: W,
-    kind: K,
+    kind: P,
     header: W::Pos,
     #[allow(unused)]
     object_type: u32,
@@ -16,15 +67,15 @@ where
     object_id: u32,
 }
 
-impl<W, K> ObjectBuilder<W, K>
+impl<W, P> ObjectBuilder<W, P>
 where
     W: Writer<u64>,
-    K: PodKind,
+    P: PodKind,
 {
     #[inline]
     pub(crate) fn to_writer(
         mut writer: W,
-        kind: K,
+        kind: P,
         object_type: u32,
         object_id: u32,
     ) -> Result<Self, Error> {
@@ -53,44 +104,36 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1)?.push(1i32)?;
-    ///     obj.property(2)?.push(2i32)?;
-    ///     obj.property(3)?.push(3i32)?;
+    ///     obj.property(1).push(1i32)?;
+    ///     obj.property(2).push(2i32)?;
+    ///     obj.property(3).push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
-    #[inline]
-    pub fn property(&mut self, key: impl RawId) -> Result<Pod<W::Mut<'_>>, Error> {
-        self.property_with_flags(key, 0)
-    }
-
-    /// Encode a property with flags into the object.
     ///
-    /// # Examples
+    /// With flags:
     ///
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b1001)?.push(1i32)?;
-    ///     obj.property_with_flags(2, 0b1001)?.push(2i32)?;
-    ///     obj.property_with_flags(3, 0b1001)?.push(3i32)?;
+    ///     obj.property(1).flags(0b1001).push(1i32)?;
+    ///     obj.property(2).flags(0b1001).push(2i32)?;
+    ///     obj.property(3).flags(0b1001).push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property_with_flags(
-        &mut self,
-        key: impl RawId,
-        flags: u32,
-    ) -> Result<Pod<W::Mut<'_>>, Error> {
-        self.writer.write([key.into_id(), flags])?;
-        Ok(Pod::new(self.writer.borrow_mut()))
+    pub fn property<K>(&mut self, key: K) -> Builder<W::Mut<'_>, PropertyChild<K>>
+    where
+        K: RawId,
+    {
+        Builder::new_with(self.writer.borrow_mut(), PropertyChild::new(key))
     }
 
     #[inline]

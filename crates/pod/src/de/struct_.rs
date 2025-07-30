@@ -4,9 +4,7 @@ use core::fmt;
 use alloc::boxed::Box;
 
 use crate::error::ErrorKind;
-use crate::{
-    AsReader, DecodeFrom, EncodeUnsized, Error, Pod, PodKind, Reader, Type, TypedPod, Writer,
-};
+use crate::{AsReader, DecodeFrom, EncodeUnsized, Error, Pod, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a struct.
 pub struct Struct<B> {
@@ -36,9 +34,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -65,9 +61,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -109,9 +103,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -162,9 +154,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -212,9 +202,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -243,9 +231,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_struct(|st| {
 ///     st.field().push(1i32)?;
 ///     st.field().push(2i32)?;
@@ -255,7 +241,7 @@ where
 ///
 /// let st = pod.as_ref().next_struct()?;
 ///
-/// let mut pod2 = Pod::array();
+/// let mut pod2 = pod::array();
 /// pod2.as_mut().encode(st)?;
 ///
 /// let mut st = pod2.as_ref().next_struct()?;
@@ -288,7 +274,7 @@ crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader<u64>);
 
 impl<'de> DecodeFrom<'de> for Struct<&'de [u64]> {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error> {
+    fn decode_from(pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
         Ok(pod.next_struct()?.into_slice())
     }
 }

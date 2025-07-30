@@ -1,11 +1,12 @@
-use crate::{Error, Pod, PodKind, Writer};
+use crate::builder::PodKind;
+use crate::{Builder, Error, Writer};
 
-/// Helper trait to more easily encode values into a [`Pod`].
+/// Helper trait to more easily encode values into a [`Builder`].
 ///
-/// This is used through the [`Pod::encode`] and similar methods.
+/// This is used through the [`Builder::encode`] and similar methods.
 pub trait EncodeInto {
     #[doc(hidden)]
-    fn encode_into(&self, pod: Pod<impl Writer<u64>, impl PodKind>) -> Result<(), Error>;
+    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error>;
 }
 
 impl<T> EncodeInto for &T
@@ -13,7 +14,7 @@ where
     T: ?Sized + EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Pod<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
         (*self).encode_into(pod)
     }
 }
@@ -23,14 +24,16 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
+/// use pod::Builder;
 /// ```
 impl<T, const N: usize> EncodeInto for [T; N]
 where
     T: EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, mut pod: Pod<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+        let mut pod = pod.into_envelope()?;
+
         for item in self {
             item.encode_into(pod.as_mut())?;
         }
@@ -48,7 +51,9 @@ where
     T: EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, mut pod: Pod<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+        let mut pod = pod.into_envelope()?;
+
         for item in self.iter() {
             item.encode_into(pod.as_mut())?;
         }
@@ -63,9 +68,9 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
+/// use pod::Builder;
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = Builder::array();
 /// pod.as_mut().push_struct(|st| st.encode(()))?;
 ///
 /// let mut pod = pod.as_ref();
@@ -75,7 +80,7 @@ where
 /// ```
 impl EncodeInto for () {
     #[inline]
-    fn encode_into(&self, _: Pod<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, _: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -87,9 +92,9 @@ macro_rules! encode_into_tuple {
         /// # Examples
         ///
         /// ```
-        /// use pod::Pod;
+        /// use pod::Builder;
         ///
-        /// let mut pod = Pod::array();
+        /// let mut pod = Builder::array();
         /// pod.as_mut().push_struct(|st| st.encode((10i32, "hello world", [1u32, 2u32])))?;
         ///
         /// let mut pod = pod.as_ref();
@@ -107,8 +112,9 @@ macro_rules! encode_into_tuple {
             $($ident: EncodeInto,)*
         {
             #[inline]
-            fn encode_into(&self, mut pod: Pod<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
+            fn encode_into(&self, pod: Builder<impl Writer<u64>, impl PodKind>) -> Result<(), Error> {
                 let ($(ref $var,)*) = *self;
+                let mut pod = pod.into_envelope()?;
                 $($var.encode_into(pod.as_mut())?;)*
                 Ok(())
             }

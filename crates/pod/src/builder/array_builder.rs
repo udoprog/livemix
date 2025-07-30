@@ -1,17 +1,17 @@
 use core::mem;
 
+use crate::builder::{ChildPod, PodKind};
 use crate::error::ErrorKind;
-use crate::pod::{ChildPod, PodKind};
-use crate::{Error, Pod, Type, Writer};
+use crate::{Builder, Error, Type, Writer};
 
 /// An encoder for an array.
 ///
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
+/// use pod::{Builder, Type};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = Builder::array();
 ///
 /// pod.as_mut().push_array(Type::INT, |array| {
 ///     array.child().push(1i32)?;
@@ -25,9 +25,9 @@ use crate::{Error, Pod, Type, Writer};
 /// Encoding an array of unsized values:
 ///
 /// ```
-/// use pod::{Pod, Type};
+/// use pod::{Builder, Type};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = Builder::array();
 ///
 /// pod.push_unsized_array(Type::STRING, 4, |array| {
 ///     array.child().push_unsized("foo")?;
@@ -118,9 +118,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::{Builder, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = Builder::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
     ///     array.child().push(1i32)?;
     ///     Ok(())
@@ -128,8 +128,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn child(&mut self) -> Pod<W::Mut<'_>, ChildPod> {
-        Pod::new_child(self.writer.borrow_mut(), self.child_size, self.child_type)
+    pub fn child(&mut self) -> Builder<W::Mut<'_>, ChildPod> {
+        Builder::new_child(self.writer.borrow_mut(), self.child_size, self.child_type)
     }
 
     #[inline]

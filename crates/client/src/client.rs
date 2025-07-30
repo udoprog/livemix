@@ -4,7 +4,6 @@ use alloc::boxed::Box;
 
 use anyhow::Result;
 use pod::Object;
-use pod::Pod;
 use protocol::Connection;
 use protocol::consts;
 use protocol::flags;
@@ -41,18 +40,18 @@ impl Client {
 
     /// Send client hello.
     pub fn core_hello(&mut self) -> Result<()> {
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
         pod.as_mut()
             .push_struct(|st| st.field().push(consts::VERSION))?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_HELLO, pod)?;
+            .request(consts::CORE_ID, op::CORE_HELLO, pod.as_ref())?;
         Ok(())
     }
 
     /// Get registry.
     pub fn core_get_registry(&mut self, new_id: u32) -> Result<()> {
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
             st.field().push(consts::REGISTRY_VERSION as i32)?;
@@ -61,7 +60,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_GET_REGISTRY, pod)?;
+            .request(consts::CORE_ID, op::CORE_GET_REGISTRY, pod.as_ref())?;
         Ok(())
     }
 
@@ -70,7 +69,7 @@ impl Client {
         let sync_sequence = self.sync_sequence;
         self.sync_sequence = self.sync_sequence.wrapping_add(1);
 
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
             st.field().push(id)?;
@@ -79,13 +78,13 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_SYNC, pod)?;
+            .request(consts::CORE_ID, op::CORE_SYNC, pod.as_ref())?;
         Ok(sync_sequence)
     }
 
     /// Send a pong response to a ping.
     pub fn core_pong(&mut self, id: u32, seq: u32) -> Result<()> {
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
             st.field().push(id)?;
@@ -94,7 +93,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_PONG, pod)?;
+            .request(consts::CORE_ID, op::CORE_PONG, pod.as_ref())?;
         Ok(())
     }
 
@@ -115,7 +114,7 @@ impl Client {
             ("media.role", "DSP"),
         ];
 
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
             st.field().push_unsized(factory_name)?;
@@ -133,7 +132,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_CREATE_OBJECT, pod)?;
+            .request(consts::CORE_ID, op::CORE_CREATE_OBJECT, pod.as_ref())?;
         Ok(())
     }
 
@@ -144,7 +143,7 @@ impl Client {
             ("node.name", "livemix_node"),
         ];
 
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
             st.field().push_struct(|props| {
@@ -154,14 +153,17 @@ impl Client {
             })
         })?;
 
-        self.connection
-            .request(consts::CLIENT_ID, op::CLIENT_UPDATE_PROPERTIES, pod)?;
+        self.connection.request(
+            consts::CLIENT_ID,
+            op::CLIENT_UPDATE_PROPERTIES,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
     /// Bind to client node.
     pub fn client_node_get_node(&mut self, id: u32, version: u32, new_id: u32) -> Result<()> {
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
             st.field().push(version)?;
@@ -169,7 +171,8 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection.request(id, op::CLIENT_NODE_GET_NODE, pod)?;
+        self.connection
+            .request(id, op::CLIENT_NODE_GET_NODE, pod.as_ref())?;
         Ok(())
     }
 
@@ -196,7 +199,7 @@ impl Client {
 
         const PROPS: &[(&str, &str)] = &[("node.name", "livemix_node")];
 
-        let mut pod = Pod::dynamic();
+        let mut pod = pod::dynamic();
 
         let mut change_mask = flags::ClientNodeUpdate::NONE;
         change_mask |= flags::ClientNodeUpdate::PARAMS;
@@ -241,7 +244,8 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection.request(id, op::CLIENT_NODE_UPDATE, pod)?;
+        self.connection
+            .request(id, op::CLIENT_NODE_UPDATE, pod.as_ref())?;
         Ok(())
     }
 
@@ -264,7 +268,7 @@ impl Client {
             (id::Param::LATENCY, flags::Param::WRITE),
         ];
 
-        let mut pod = Pod::dynamic();
+        let mut pod = pod::dynamic();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
         change_mask |= flags::ClientNodePortUpdate::PARAMS;
@@ -317,18 +321,18 @@ impl Client {
         })?;
 
         self.connection
-            .request(id, op::CLIENT_NODE_PORT_UPDATE, pod)?;
+            .request(id, op::CLIENT_NODE_PORT_UPDATE, pod.as_ref())?;
         Ok(())
     }
 
     /// Update the client.
     pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<()> {
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| st.encode(active))?;
 
         self.connection
-            .request(id, op::CLIENT_NODE_SET_ACTIVE, pod)?;
+            .request(id, op::CLIENT_NODE_SET_ACTIVE, pod.as_ref())?;
         Ok(())
     }
 }

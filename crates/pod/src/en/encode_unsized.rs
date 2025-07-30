@@ -25,9 +25,7 @@ pub trait EncodeUnsized {
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(&b"hello world"[..])?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
@@ -55,9 +53,7 @@ crate::macros::encode_into_unsized!([u8]);
 ///
 /// ```
 /// use core::ffi::CStr;
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(c"hello world")?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.next_borrowed::<CStr>()?, c"hello world");
@@ -89,9 +85,7 @@ crate::macros::encode_into_unsized!(CStr);
 /// length must be determined by a terminating null.
 ///
 /// ```should_panic
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_unsized("hello\0world")?;
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -99,9 +93,7 @@ crate::macros::encode_into_unsized!(CStr);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_unsized("hello world")?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.next_borrowed::<str>()?, "hello world");
@@ -137,9 +129,7 @@ crate::macros::encode_into_unsized!(str);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 ///
 /// pod.as_mut().push_unsized(&String::from("hello world"))?;
 /// pod.as_mut().push_unsized(&String::from("this is right"))?;
@@ -175,7 +165,7 @@ crate::macros::encode_into_unsized!(String);
 /// ```
 /// use pod::{Bitmap, Pod};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.next_borrowed::<Bitmap>()?, b"asdfasdf");

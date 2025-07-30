@@ -76,11 +76,11 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+    ///     obj.property(1).flags(0b001).push(1i32)?;
+    ///     obj.property(2).flags(0b010).push(2i32)?;
+    ///     obj.property(3).flags(0b100).push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -117,11 +117,11 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+    ///     obj.property(1).flags(0b001).push(1i32)?;
+    ///     obj.property(2).flags(0b010).push(2i32)?;
+    ///     obj.property(3).flags(0b100).push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -186,11 +186,11 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+    ///     obj.property(1).flags(0b001).push(1i32)?;
+    ///     obj.property(2).flags(0b010).push(2i32)?;
+    ///     obj.property(3).flags(0b100).push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -242,11 +242,11 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+    ///     obj.property(1).flags(0b001).push(1i32)?;
+    ///     obj.property(2).flags(0b010).push(2i32)?;
+    ///     obj.property(3).flags(0b100).push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -291,17 +291,17 @@ where
 /// ```
 /// use pod::{Pod, Type};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_object(10, 20, |obj| {
-///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
-///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
-///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
+///     obj.property(1).flags(0b001).push(1i32)?;
+///     obj.property(2).flags(0b010).push(2i32)?;
+///     obj.property(3).flags(0b100).push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
 /// let obj = pod.as_ref().next_object()?.to_owned();
 ///
-/// let mut pod2 = Pod::array();
+/// let mut pod2 = pod::array();
 /// pod2.as_mut().encode(obj)?;
 ///
 /// let obj = pod2.as_ref().next_object()?;

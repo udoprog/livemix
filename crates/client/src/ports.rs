@@ -7,8 +7,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
-use pod::{Object, Pod};
-use protocol::{consts, id};
+use pod::Object;
+use protocol::{
+    consts,
+    id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamMeta},
+};
 use tracing::Level;
 
 use crate::{Buffers, Region, ffi};
@@ -35,7 +38,7 @@ pub struct Port {
     pub io_clock: Option<Region<ffi::IoClock>>,
     pub io_position: Option<Region<ffi::IoPosition>>,
     pub io_buffers: Option<Region<ffi::IoBuffers>>,
-    params: BTreeMap<id::Param, PortParam>,
+    params: BTreeMap<Param, PortParam>,
 }
 
 impl Port {
@@ -55,7 +58,7 @@ impl Port {
     #[inline]
     pub(crate) fn set_param(
         &mut self,
-        id: id::Param,
+        id: Param,
         value: Object<Box<[u64]>>,
         flags: u32,
     ) -> Result<()> {
@@ -66,14 +69,14 @@ impl Port {
 
     /// Remove a parameter from the port.
     #[inline]
-    pub(crate) fn remove_param(&mut self, id: id::Param) -> Result<()> {
+    pub(crate) fn remove_param(&mut self, id: Param) -> Result<()> {
         self.params.remove(&id);
         self.modified = true;
         Ok(())
     }
 
     /// Get parameters from the port.
-    pub(crate) fn params(&self) -> &BTreeMap<id::Param, PortParam> {
+    pub(crate) fn params(&self) -> &BTreeMap<Param, PortParam> {
         &self.params
     }
 
@@ -138,58 +141,54 @@ impl Ports {
             params: BTreeMap::new(),
         };
 
-        let mut pod = Pod::array();
+        let mut pod = pod::array();
 
         pod.as_mut()
-            .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                obj.property(id::Format::MEDIA_TYPE)?
-                    .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE)?
-                    .push(id::MediaSubType::RAW)?;
-                obj.property(id::Format::AUDIO_FORMAT)?
-                    .push(id::AudioFormat::S16)?;
-                obj.property(id::Format::AUDIO_CHANNELS)?.push(1u32)?;
-                obj.property(id::Format::AUDIO_RATE)?.push(44100u32)?;
+            .push_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_SUB_TYPE)
+                    .push(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
+                obj.property(Format::AUDIO_RATE).push(44100u32)?;
                 Ok(())
             })?;
 
         port.params.insert(
-            id::Param::ENUM_FORMAT,
+            Param::ENUM_FORMAT,
             PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
         );
 
         pod.clear();
 
         pod.as_mut()
-            .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                obj.property(id::Format::MEDIA_TYPE)?
-                    .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE)?
-                    .push(id::MediaSubType::RAW)?;
-                obj.property(id::Format::AUDIO_FORMAT)?
-                    .push(id::AudioFormat::S16)?;
-                obj.property(id::Format::AUDIO_CHANNELS)?.push(1u32)?;
-                obj.property(id::Format::AUDIO_RATE)?.push(44100u32)?;
+            .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_SUB_TYPE)
+                    .push(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
+                obj.property(Format::AUDIO_RATE).push(44100u32)?;
                 Ok(())
             })?;
 
         port.params.insert(
-            id::Param::FORMAT,
+            Param::FORMAT,
             PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
         );
 
         pod.clear();
 
         pod.as_mut()
-            .push_object(id::ObjectType::PARAM_META, id::Param::META, |obj| {
-                obj.property(id::ParamMeta::TYPE)?.push(id::Meta::HEADER)?;
-                obj.property(id::ParamMeta::SIZE)?
+            .push_object(ObjectType::PARAM_META, Param::META, |obj| {
+                obj.property(ParamMeta::TYPE).push(id::Meta::HEADER)?;
+                obj.property(ParamMeta::SIZE)
                     .push(mem::size_of::<ffi::MetaHeader>())?;
                 Ok(())
             })?;
 
         port.params.insert(
-            id::Param::META,
+            Param::META,
             PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
         );
 

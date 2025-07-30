@@ -1,4 +1,5 @@
-use crate::{EncodeInto, Error, Pod, PodKind, Type, Writer};
+use crate::builder::PodKind;
+use crate::{Builder, EncodeInto, Error, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -36,7 +37,7 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| st.encode((1, 2, 3)))?;
     ///
     /// let mut pod = pod.as_ref();
@@ -47,7 +48,7 @@ where
     /// ```
     #[inline]
     pub fn encode(&mut self, value: impl EncodeInto) -> Result<(), Error> {
-        value.encode_into(Pod::new(self.writer.borrow_mut()))
+        value.encode_into(Builder::new(self.writer.borrow_mut()))
     }
 
     /// Add a field into the struct.
@@ -57,7 +58,7 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_struct(|st| {
     ///     st.field().push(1i32)?;
     ///     st.field().push(2i32)?;
@@ -67,8 +68,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Pod<W::Mut<'_>> {
-        Pod::new(self.writer.borrow_mut())
+    pub fn field(&mut self) -> Builder<W::Mut<'_>> {
+        Builder::new(self.writer.borrow_mut())
     }
 
     #[inline]

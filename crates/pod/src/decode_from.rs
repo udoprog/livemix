@@ -1,5 +1,5 @@
 use crate::error::ErrorKind;
-use crate::{ArrayBuf, Error, Pod, PodKind, Reader};
+use crate::{ArrayBuf, Error, Pod, Reader};
 
 /// Helper trait to more easily encode values into a [`Pod`].
 ///
@@ -9,16 +9,16 @@ where
     Self: Sized,
 {
     #[doc(hidden)]
-    fn decode_from(pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error>;
+    fn decode_from(pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error>;
 }
 
 /// Implementation of [`DecodeFrom`] for an optional type.
 ///
 /// # Examples
 /// ```
-/// use pod::Pod;
+/// use pod::Builder;
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = Builder::array();
 /// pod.as_mut().push(42u32)?;
 /// assert_eq!(pod.as_ref().decode::<Option<u32>>()?, Some(42));
 /// # Ok::<_, pod::Error>(())
@@ -28,7 +28,7 @@ where
     T: DecodeFrom<'de>,
 {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error> {
+    fn decode_from(pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
         match pod.next_option()? {
             Some(pod) => Ok(Some(T::decode_from(pod)?)),
             None => Ok(None),
@@ -46,7 +46,7 @@ where
     T: DecodeFrom<'de>,
 {
     #[inline]
-    fn decode_from(mut pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error> {
+    fn decode_from(mut pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
         let mut values = ArrayBuf::<T, N>::new();
 
         for _ in 0..N {
@@ -67,9 +67,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_struct(|st| st.encode(()))?;
 ///
 /// let mut pod = pod.as_ref();
@@ -78,7 +76,7 @@ where
 /// ```
 impl<'de> DecodeFrom<'de> for () {
     #[inline]
-    fn decode_from(_: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<(), Error> {
+    fn decode_from(_: Pod<impl Reader<'de, u64>>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -90,9 +88,7 @@ macro_rules! encode_into_tuple {
         /// # Examples
         ///
         /// ```
-        /// use pod::Pod;
-        ///
-        /// let mut pod = Pod::array();
+        /// let mut pod = pod::array();
         /// pod.as_mut().push_struct(|st| st.encode((10i32, "hello world", [1u32, 2u32])))?;
         ///
         /// let mut pod = pod.as_ref();
@@ -110,7 +106,7 @@ macro_rules! encode_into_tuple {
             $($ident: DecodeFrom<'de>,)*
         {
             #[inline]
-            fn decode_from(mut pod: Pod<impl Reader<'de, u64>, impl PodKind>) -> Result<Self, Error> {
+            fn decode_from(mut pod: Pod<impl Reader<'de, u64>>) -> Result<Self, Error> {
                 $(let $var = $ident::decode_from(pod.as_read_mut())?;)*
                 Ok(($($var,)*))
             }

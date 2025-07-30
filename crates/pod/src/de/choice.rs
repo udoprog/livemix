@@ -15,7 +15,7 @@ use crate::{AsReader, ChoiceType, EncodeUnsized, Error, Reader, Type, TypedPod, 
 /// ```
 /// use pod::{ChoiceType, Pod, Type};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
 ///     choice.child().push(10i32)?;
 ///     choice.child().push(0i32)?;
@@ -54,7 +54,7 @@ impl<B> Choice<B> {
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -88,7 +88,7 @@ impl<B> Choice<B> {
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -112,7 +112,7 @@ impl<B> Choice<B> {
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -188,7 +188,7 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_array(Type::INT, |array| {
     ///     array.child().push(1i32)?;
     ///     Ok(())
@@ -211,7 +211,7 @@ where
     /// ```
     /// use pod::{Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
     ///
     /// let mut array = pod.as_ref().next_array()?;
@@ -230,7 +230,7 @@ where
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -271,7 +271,7 @@ where
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -322,7 +322,7 @@ where
     /// ```
     /// use pod::{ChoiceType, Pod, Type};
     ///
-    /// let mut pod = Pod::array();
+    /// let mut pod = pod::array();
     /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
     ///     choice.child().push(10i32)?;
     ///     choice.child().push(0i32)?;
@@ -366,7 +366,7 @@ where
 /// ```
 /// use pod::{ChoiceType, Pod, Type};
 ///
-/// let mut pod = Pod::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
 ///     choice.child().push(10i32)?;
 ///     choice.child().push(0i32)?;
@@ -376,7 +376,7 @@ where
 ///
 /// let mut choice = pod.as_ref().next_choice()?;
 ///
-/// let mut pod2 = Pod::array();
+/// let mut pod2 = pod::array();
 /// pod2.as_mut().encode(choice)?;
 ///
 /// let mut choice = pod2.as_ref().next_choice()?;

@@ -21,13 +21,11 @@ impl<B> Sequence<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.push(1i32)?;
-    ///     seq.control(1, 2)?.push(2i32)?;
-    ///     seq.control(1, 2)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
+    ///     seq.control().push(2i32)?;
+    ///     seq.control().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -45,13 +43,11 @@ impl<B> Sequence<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.push(1i32)?;
-    ///     seq.control(1, 2)?.push(2i32)?;
-    ///     seq.control(1, 2)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
+    ///     seq.control().push(2i32)?;
+    ///     seq.control().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -110,13 +106,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Pod;
-    ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.push(1i32)?;
-    ///     seq.control(1, 2)?.push(2i32)?;
-    ///     seq.control(1, 2)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
+    ///     seq.control().push(2i32)?;
+    ///     seq.control().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -140,11 +134,11 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.push(1i32)?;
-    ///     seq.control(1, 2)?.push(2i32)?;
-    ///     seq.control(1, 2)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
+    ///     seq.control().push(2i32)?;
+    ///     seq.control().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -196,11 +190,11 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.push(1i32)?;
-    ///     seq.control(1, 2)?.push(2i32)?;
-    ///     seq.control(1, 2)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
+    ///     seq.control().push(2i32)?;
+    ///     seq.control().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -239,11 +233,11 @@ where
     /// ```
     /// use pod::{Pod, TypedPod};
     ///
-    /// let mut pod = Pod::array();
-    /// pod.as_mut().encode_sequence(|seq| {
-    ///     seq.control(1, 2)?.push(1i32)?;
-    ///     seq.control(1, 2)?.push(2i32)?;
-    ///     seq.control(1, 2)?.push(3i32)?;
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push_sequence(|seq| {
+    ///     seq.control().push(1i32)?;
+    ///     seq.control().push(2i32)?;
+    ///     seq.control().push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -270,17 +264,17 @@ where
 /// ```
 /// use pod::{Pod, TypedPod};
 ///
-/// let mut pod = Pod::array();
-/// pod.as_mut().encode_sequence(|seq| {
-///     seq.control(1, 2)?.push(1i32)?;
-///     seq.control(1, 2)?.push(2i32)?;
-///     seq.control(1, 2)?.push(3i32)?;
+/// let mut pod = pod::array();
+/// pod.as_mut().push_sequence(|seq| {
+///     seq.control().push(1i32)?;
+///     seq.control().push(2i32)?;
+///     seq.control().push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
 /// let seq = pod.as_ref().next_sequence()?;
 ///
-/// let mut pod2 = Pod::array();
+/// let mut pod2 = pod::array();
 /// pod2.as_mut().encode(seq)?;
 ///
 /// let seq = pod2.as_ref().next_sequence()?;

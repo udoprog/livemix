@@ -15,7 +15,7 @@ pub(crate) mod bstr;
 
 mod pod;
 #[doc(inline)]
-pub use self::pod::{Pod, PodKind};
+pub use self::pod::Pod;
 
 mod typed_pod;
 pub use self::typed_pod::TypedPod;
@@ -89,3 +89,36 @@ mod choice;
 pub use self::choice::ChoiceType;
 
 pub mod builder;
+#[doc(inline)]
+pub use self::builder::Builder;
+
+/// Construct a new [`Pod`] with a 128 word-sized array buffer.
+///
+/// # Examples
+///
+/// ```
+/// let mut pod = pod::array();
+/// pod.as_mut().push(10i32)?;
+/// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[inline]
+pub fn array() -> Builder<ArrayBuf<u64>> {
+    Builder::array()
+}
+
+/// Construct a new [`Pod`] with a dynamically sized buffer.
+///
+/// # Examples
+///
+/// ```
+/// let mut pod = pod::dynamic();
+/// pod.as_mut().push(10i32)?;
+/// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[inline]
+#[cfg(feature = "alloc")]
+pub fn dynamic() -> Builder<DynamicBuf<u64>> {
+    Builder::dynamic()
+}
