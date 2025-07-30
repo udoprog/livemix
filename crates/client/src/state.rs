@@ -13,7 +13,8 @@ use anyhow::{Context, Result, bail};
 use pod::{Fd, Object, Pod, Struct};
 use protocol::Connection;
 use protocol::buf::RecvBuf;
-use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamIo};
+use protocol::consts::ActivationStatus;
+use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
@@ -25,6 +26,7 @@ use tracing::Level;
 
 use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
+use crate::ptr::atomic;
 use crate::{Buffers, Client, Memory, Ports, Region, ffi};
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
@@ -70,9 +72,9 @@ struct RegistryState {
 #[allow(unused)]
 struct ClientNodeState {
     id: u32,
-    read_fd: Option<OwnedFd>,
+    read_fd: Option<EventFd>,
     write_token: Token,
-    write_fd: Option<OwnedFd>,
+    write_fd: Option<EventFd>,
     read_token: Token,
     /// Activation record for this node.
     activation: Option<Region<ffi::NodeActivation>>,
@@ -184,7 +186,8 @@ enum Op {
     Pong { id: u32, seq: u32 },
     ConstructNode,
     NodeUpdate { client: usize },
-    ReadInterest { client: usize },
+    NodeStart { client: usize },
+    NodeReadInterest { client: usize },
 }
 
 #[derive(Debug)]
@@ -369,7 +372,25 @@ impl State {
                             }
                         }
                     }
-                    Op::ReadInterest { client: index } => {
+                    Op::NodeStart { client } => {
+                        if let Some(node) = self.client_nodes.get(client)
+                            && let Some(a) = &node.activation
+                        {
+                            if atomic!(a, status).compare_exchange(
+                                ActivationStatus::INACTIVE,
+                                ActivationStatus::NOT_TRIGGERED,
+                            ) {
+                                tracing::info!("Starting node");
+                                self.c.client_node_set_active(node.id, true)?;
+                            }
+                        } else {
+                            tracing::error!(
+                                ?client,
+                                "Cannot start node, missing activation for client"
+                            );
+                        }
+                    }
+                    Op::NodeReadInterest { client: index } => {
                         if let Some(client) = self.client_nodes.get(index) {
                             if let Some(read_fd) = &client.read_fd {
                                 self.read_to_client.insert(client.read_token, index);
@@ -442,12 +463,7 @@ impl State {
     pub fn tick(&mut self) -> Result<()> {
         for (_, node) in &mut self.client_nodes {
             if let Some(a) = &node.activation {
-                if crate::ptr::volatile!(a, status).read() == consts::ActivationStatus::INACTIVE {
-                    // tracing::warn!("node is not active");
-                    self.c.client_node_set_active(node.id, true)?;
-                    // crate::ptr::volatile!(a, status).write(consts::ActivationStatus::FINISHED);
-                }
-
+                std::dbg!(crate::ptr::volatile!(a, status).read());
                 // std::dbg!(unsafe { a.read() });
             }
         }
@@ -458,6 +474,8 @@ impl State {
     /// Handle read on custom token.
     #[tracing::instrument(skip(self))]
     pub fn handle_read(&mut self, token: Token) -> Result<()> {
+        std::dbg!("handle read?");
+
         let Some(index) = self.read_to_client.get(&token) else {
             tracing::warn!(?token, "No client found for token");
             return Ok(());
@@ -468,7 +486,20 @@ impl State {
             return Ok(());
         };
 
-        tracing::info!(client.id);
+        let Some(read_fd) = &client.read_fd else {
+            tracing::warn!(?client, "No read file descriptor for client");
+            return Ok(());
+        };
+
+        let Some(ev) = read_fd.read()? else {
+            return Ok(());
+        };
+
+        if let Some(a) = &client.activation {
+            // std::dbg!(atomic!(a, status).compare_exchange(ActivationStatus::TRIGGERED, ActivationStatus::NOT_TRIGGERED));
+        }
+
+        tracing::warn!(ev, "got event");
         Ok(())
     }
 
@@ -923,17 +954,22 @@ impl State {
             self.memory.free(a);
         }
 
+        // Set node as not triggered.
+        if let Some(activation) = &node.activation {
+            atomic!(activation, status).store(ActivationStatus::NOT_TRIGGERED);
+        }
+
         tracing::debug!(index, ?read_fd, ?write_fd, mem_id, offset, size,);
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
-        node.read_fd = read_fd;
-        node.write_fd = write_fd;
+        node.read_fd = read_fd.map(EventFd::from);
+        node.write_fd = write_fd.map(EventFd::from);
 
         if node.read_fd.is_some() {
-            self.ops.push_back(Op::ReadInterest { client: index });
+            self.ops.push_back(Op::NodeReadInterest { client: index });
         }
 
         Ok(())
@@ -1030,7 +1066,7 @@ impl State {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_command(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
+        let Some(..) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
@@ -1042,9 +1078,8 @@ impl State {
 
         match object_id {
             id::NodeCommand::START => {
-                for (_, activation) in &node.node_activations {
-                    // activation.signal()?;
-                }
+                self.ops.push_back(Op::NodeStart { client: index });
+                tracing::info!(?object_type, ?object_id, ?pod);
             }
             _ => {
                 tracing::info!(?object_type, ?object_id, ?pod);
@@ -1185,7 +1220,7 @@ impl State {
         let mut st = pod.next_struct()?;
         let direction = consts::Direction::from_raw(st.field()?.next::<u32>()?);
         let port_id = st.field()?.next::<u32>()?;
-        let mix_id = st.field()?.next::<u32>()?;
+        let _mix_id = st.field()?.next::<u32>()?;
         let id = st.field()?.next::<id::IoType>()?;
         let mem_id = st.field()?.next::<i32>()?;
         let offset = st.field()?.next::<isize>()?;
