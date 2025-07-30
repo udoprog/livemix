@@ -1,12 +1,13 @@
 use core::alloc::Layout;
 use core::fmt;
 use core::mem;
+use core::mem::MaybeUninit;
 use core::ptr;
 use core::slice;
 
 use alloc::alloc;
 
-use pod::utils::{AlignableWith, UninitAlign};
+use pod::utils::BytesInhabited;
 
 use super::AllocError;
 
@@ -14,27 +15,13 @@ pub(crate) const WANTS_BYTES: usize = 1 << 14;
 
 /// A buffer which can be used in combination with a channel.
 pub struct RecvBuf {
-    data: ptr::NonNull<u64>,
+    data: ptr::NonNull<u8>,
     cap: usize,
     read: usize,
     write: usize,
-    // Partially written words in bytes written.
-    partial_write: usize,
 }
 
 impl RecvBuf {
-    /// The size in bytes of a word.
-    pub const WORD_SIZE: usize = mem::size_of::<u64>();
-
-    /// The minimum number of words that will be available when calling
-    /// `as_bytes_mut`.
-    const MIN_WORDS: usize = const {
-        match WANTS_BYTES.wrapping_div(Self::WORD_SIZE) {
-            n if n < 16 => 16,
-            n => n,
-        }
-    };
-
     /// Construct a new empty buffer.
     ///
     /// # Examples
@@ -52,18 +39,17 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 1);
+    /// assert_eq!(buf.len(), 8);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub const fn new() -> Self {
         RecvBuf {
-            data: ptr::NonNull::dangling(),
+            data: ptr::NonNull::<u64>::dangling().cast(),
             cap: 0,
             read: 0,
             write: 0,
-            partial_write: 0,
         }
     }
 
@@ -84,7 +70,7 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 1);
+    /// assert_eq!(buf.len(), 8);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
@@ -111,13 +97,13 @@ impl RecvBuf {
     /// }
     ///
     /// assert!(!buf.is_empty());
-    /// assert_eq!(buf.len(), 1);
+    /// assert_eq!(buf.len(), 8);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.read == self.write && self.partial_write == 0
+        self.read == self.write
     }
 
     /// Get the remaining readable capacity of the buffer
@@ -137,15 +123,13 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 1);
+    /// assert_eq!(buf.len(), 8);
     /// assert_eq!(buf.remaining_bytes(), 8);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub fn remaining_bytes(&self) -> usize {
-        (self.write - self.read)
-            .wrapping_mul(Self::WORD_SIZE)
-            .wrapping_add(self.partial_write)
+        self.write - self.read
     }
 
     /// Clear the contents of the buffer.
@@ -165,7 +149,7 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 1);
+    /// assert_eq!(buf.len(), 8);
     /// assert_eq!(buf.remaining_bytes(), 8);
     ///
     /// buf.clear();
@@ -198,14 +182,28 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(8);
     /// }
     ///
-    /// assert_eq!(buf.len(), 1);
+    /// assert_eq!(buf.len(), 8);
     /// assert_eq!(buf.as_slice(), &[0x123456789abcdef0]);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub fn as_slice(&self) -> &[u64] {
+        let read = self.read.next_multiple_of(mem::size_of::<u64>());
+
+        if read >= self.write {
+            return &[];
+        }
+
+        let ptr = self
+            .data
+            .as_ptr()
+            .wrapping_add(read)
+            .cast_const()
+            .cast::<u64>();
+        let len = (self.write - read).wrapping_div(mem::size_of::<u64>());
+
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+        unsafe { slice::from_raw_parts(ptr, len) }
     }
 
     /// Get an initialized slice of bytes available for writing.
@@ -247,7 +245,7 @@ impl RecvBuf {
     /// ```
     #[inline]
     pub fn as_bytes_mut(&mut self) -> Result<&mut [u8], AllocError> {
-        self.reserve(self.write + Self::MIN_WORDS)?;
+        self.reserve(self.write + WANTS_BYTES)?;
 
         Ok(unsafe {
             slice::from_raw_parts_mut(self.as_bytes_ptr_mut(), self.remaining_bytes_mut())
@@ -258,22 +256,22 @@ impl RecvBuf {
     #[inline]
     pub fn read<U>(&mut self) -> Option<U>
     where
-        U: AlignableWith,
+        U: BytesInhabited,
     {
-        if self.is_empty() {
+        if self.len() < mem::size_of::<U>() {
             return None;
         }
 
-        let mut value = UninitAlign::<U>::uninit();
+        let mut value = MaybeUninit::<U>::uninit();
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             self.data
                 .as_ptr()
                 .add(self.read)
-                .copy_to_nonoverlapping(value.as_mut_ptr().cast(), value.size());
+                .copy_to_nonoverlapping(value.as_mut_ptr().cast(), mem::size_of::<U>());
 
-            self.advance_read(value.size());
+            self.advance_read(mem::size_of::<U>());
             Some(value.assume_init())
         }
     }
@@ -296,7 +294,7 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(7);
     /// }
     ///
-    /// assert!(buf.read_words(1).is_none());
+    /// assert!(buf.read_words(8).is_none());
     ///
     /// buf.as_bytes_mut()?[..1].copy_from_slice(&[8]);
     ///
@@ -308,19 +306,21 @@ impl RecvBuf {
     ///
     /// assert_eq!(buf.as_slice(), &[expected]);
     ///
-    /// assert!(buf.read_words(2).is_none());
-    /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
+    /// assert!(buf.read_words(16).is_none());
+    /// assert_eq!(buf.read_words(8), Some(&[expected][..]));
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub fn read_words(&mut self, size: usize) -> Option<&[u64]> {
-        if size > self.len() {
+        if self.read % mem::align_of::<u64>() != 0 || size > self.len() {
             return None;
         }
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
-            let value = slice::from_raw_parts(self.data.as_ptr().add(self.read), size);
+            let ptr = self.data.as_ptr().add(self.read).cast();
+            let len = size.wrapping_div(mem::size_of::<u64>());
+            let value = slice::from_raw_parts(ptr, len);
             self.advance_read(size);
             Some(value)
         }
@@ -351,7 +351,7 @@ impl RecvBuf {
     /// }
     ///
     /// assert_eq!(buf.as_slice(), &[]);
-    /// assert!(buf.read_words(1).is_none());
+    /// assert!(buf.read_words(8).is_none());
     ///
     /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
     ///
@@ -362,16 +362,12 @@ impl RecvBuf {
     /// }
     ///
     /// assert_eq!(buf.as_slice(), &[expected]);
-    /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
+    /// assert_eq!(buf.read_words(8), Some(&[expected][..]));
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
     pub unsafe fn advance_written_bytes(&mut self, n: usize) {
-        let n = n + mem::take(&mut self.partial_write);
-        let w = n / Self::WORD_SIZE;
-        let p = n % Self::WORD_SIZE;
-
-        let write = self.write + w;
+        let write = self.write + n;
 
         assert!(
             write <= self.cap,
@@ -381,7 +377,6 @@ impl RecvBuf {
         );
 
         self.write = write;
-        self.partial_write = p;
     }
 
     /// Add that a given amount of bytes has been read.
@@ -406,32 +401,20 @@ impl RecvBuf {
 
         self.read = read;
 
-        if self.read == self.write && self.partial_write == 0 {
+        if self.read == self.write {
             self.read = 0;
             self.write = 0;
-            self.partial_write = 0;
         }
     }
 
     #[inline]
     fn as_bytes_ptr_mut(&mut self) -> *mut u8 {
-        self.data
-            .as_ptr()
-            .wrapping_add(self.write)
-            .cast::<u8>()
-            .wrapping_add(self.partial_write)
+        self.data.as_ptr().wrapping_add(self.write)
     }
 
     #[inline]
     fn remaining_bytes_mut(&self) -> usize {
-        (self.cap - self.write)
-            .wrapping_mul(Self::WORD_SIZE)
-            .wrapping_sub(self.partial_write)
-    }
-
-    #[inline]
-    fn as_ptr(&self) -> *const u64 {
-        self.data.as_ptr().wrapping_add(self.read).cast_const()
+        self.cap - self.write
     }
 
     /// Ensure up to the given length is reserved.
@@ -440,11 +423,12 @@ impl RecvBuf {
             return Ok(());
         }
 
-        let new_cap = needed.next_power_of_two().max(16);
+        let cap = needed.next_power_of_two().max(16);
 
         let data = match self.cap {
             0 => unsafe {
-                let layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
+                let layout =
+                    Layout::from_size_align(cap, mem::align_of::<u64>()).map_err(|_| AllocError)?;
 
                 let data = alloc::alloc_zeroed(layout);
 
@@ -455,8 +439,10 @@ impl RecvBuf {
                 ptr::NonNull::new_unchecked(data)
             },
             _ => unsafe {
-                let old_layout = Layout::array::<u64>(self.cap).map_err(|_| AllocError)?;
-                let new_layout = Layout::array::<u64>(new_cap).map_err(|_| AllocError)?;
+                let old_layout =
+                    Layout::from_size_align_unchecked(self.cap, mem::align_of::<u64>());
+                let new_layout =
+                    Layout::from_size_align(cap, mem::align_of::<u64>()).map_err(|_| AllocError)?;
 
                 let data = alloc::realloc(self.data.as_ptr().cast(), old_layout, new_layout.size());
 
@@ -464,15 +450,16 @@ impl RecvBuf {
                     return Err(AllocError);
                 }
 
-                data.cast::<u64>()
-                    .wrapping_add(self.cap)
-                    .write_bytes(0, new_cap - self.cap);
+                // Zero-initialize the region so it can be returned by
+                // `as_bytes_mut`.
+                data.wrapping_add(self.cap).write_bytes(0, cap - self.cap);
+
                 ptr::NonNull::new_unchecked(data)
             },
         };
 
-        self.data = data.cast();
-        self.cap = new_cap;
+        self.data = data;
+        self.cap = cap;
         Ok(())
     }
 
@@ -480,10 +467,7 @@ impl RecvBuf {
         if self.cap > 0 {
             // SAFETY: The buffer is guaranteed to be allocated with the same alignment as `A`.
             unsafe {
-                let layout = Layout::from_size_align_unchecked(
-                    self.cap.wrapping_mul(Self::WORD_SIZE),
-                    mem::align_of::<u64>(),
-                );
+                let layout = Layout::from_size_align_unchecked(self.cap, mem::align_of::<u64>());
                 alloc::dealloc(self.data.as_ptr().cast(), layout);
             }
 
@@ -491,7 +475,6 @@ impl RecvBuf {
             self.cap = 0;
             self.read = 0;
             self.write = 0;
-            self.partial_write = 0;
         }
     }
 }

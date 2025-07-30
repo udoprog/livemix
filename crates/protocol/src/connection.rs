@@ -279,7 +279,7 @@ impl Connection {
             return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
         };
 
-        self.outgoing.push_bytes(header)?;
+        self.outgoing.push_bytes(&header)?;
         self.outgoing.extend_from_words(buf.as_slice())?;
         self.modified |= self.interest.set(Interest::WRITE);
         Ok(())
