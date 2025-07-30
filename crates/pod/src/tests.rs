@@ -100,7 +100,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let buf = ArrayBuf::<3>::from_array([1, 2, 3]);
+    let buf = ArrayBuf::<3>::from_slice(&[1, 2, 3]);
     let mut buf = buf.as_slice();
 
     assert_eq!(buf.read::<u64>()?, 1);

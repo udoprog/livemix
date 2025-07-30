@@ -41,26 +41,6 @@ where
     /// Get the position of the reader relative to the queried position.
     fn distance_from(&self, pos: Self::Pos) -> usize;
 
-    /// Returns the size of the remaining buffer in bytes.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Reader};
-    ///
-    /// let array = ArrayBuf::from_array([1, 2, 3]);
-    /// let mut buf = array.as_slice();
-    ///
-    /// assert_eq!(buf.remaining(), 24);
-    /// assert_eq!(buf.read::<[u64; 1]>()?, [1]);
-    /// assert_eq!(buf.remaining(), 16);
-    /// assert_eq!(buf.as_slice(), &[2, 3]);
-    /// assert_eq!(buf.read::<[u64; 2]>()?, [2, 3]);
-    /// assert_eq!(buf.remaining(), 0);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    fn remaining(&self) -> usize;
-
     /// Skip the given number of bytes.
     fn skip(&mut self, size: usize) -> Result<(), Error>;
 
@@ -180,11 +160,6 @@ where
     }
 
     #[inline]
-    fn remaining(&self) -> usize {
-        (**self).remaining()
-    }
-
-    #[inline]
     fn skip(&mut self, size: usize) -> Result<(), Error> {
         (**self).skip(size)
     }
@@ -273,11 +248,6 @@ impl<'de> Reader<'de> for &'de [u64] {
         // `'de` which should prevent the buffer from being invalidated.
         let offset = unsafe { self.as_ptr().offset_from_unsigned(pos.ptr) };
         offset.wrapping_mul(mem::size_of::<u64>())
-    }
-
-    #[inline]
-    fn remaining(&self) -> usize {
-        self.len() * mem::size_of::<u64>()
     }
 
     #[inline]
