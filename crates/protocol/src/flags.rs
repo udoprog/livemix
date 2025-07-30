@@ -205,8 +205,8 @@ pod::macros::flags! {
     }
 
     /// Describes `enum pw_memblock_flags`.
-    #[examples = [OUT]]
-    #[not_set = [MAPPED]]
+    #[examples = [MAP]]
+    #[not_set = [DONT_NOTIFY]]
     #[module = protocol::flags]
     pub struct MemBlock(u32) {
         NONE;
@@ -227,8 +227,8 @@ pod::macros::flags! {
     }
 
     /// Describes `enum pw_memblock_flags`.
-    #[examples = [OUT]]
-    #[not_set = [MAPPED]]
+    #[examples = [WRITE]]
+    #[not_set = [PRIVATE]]
     #[module = protocol::flags]
     pub struct MemMap(u32) {
         NONE;

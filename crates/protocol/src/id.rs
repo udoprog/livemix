@@ -649,6 +649,64 @@ pod::macros::id! {
         #[constant = libspa_sys::SPA_META_SyncTimeline]
         SYNC_TIMELINE = 9,
     }
+
+    /// Equivalent to `enum spa_param_buffers`.
+    #[example = DATA_TYPE]
+    #[module = protocol::id]
+    pub struct ParamBuffers {
+        UNKNOWN,
+        /// Number of buffers (Int).
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_buffers]
+        BUFFERS = 1,
+        /// Number of data blocks per buffer (Int).
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_blocks]
+        BLOCKS = 2,
+        /// Size of a data block memory (Int.
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_size]
+        SIZE = 3,
+        /// Stride of data block memory (Int).
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_stride]
+        STRIDE = 4,
+        /// Alignment of data block memory (Int).
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_align]
+        ALIGN = 5,
+        /// Possible memory types (flags choice Int, mask of enum spa_data_type).
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_dataType]
+        DATA_TYPE = 6,
+        /// Required meta data types (Int, mask of enum spa_meta_type).
+        #[constant = libspa_sys::SPA_PARAM_BUFFERS_metaType]
+        META_TYPE = 7,
+    }
+
+    /// properties for SPA_TYPE_OBJECT_ParamMeta.
+    ///
+    /// Equivalent to `enum spa_param_meta`.
+    #[example = TYPE]
+    #[module = protocol::id]
+    pub struct ParamMeta {
+        UNKNOWN,
+        /// The type of the parameter, one of enum spa_param_meta (Id enum spa_param_meta).
+        #[constant = libspa_sys::SPA_PARAM_META_type]
+        TYPE = 1,
+        /// The expected maximum size the meta (Int).
+        #[constant = libspa_sys::SPA_PARAM_META_size]
+        SIZE = 2,
+    }
+
+    /// properties for SPA_TYPE_OBJECT_ParamIO
+    ///
+    /// This corresponds to `enum spa_param_io`.
+    #[example = SIZE]
+    #[module = protocol::id]
+    pub struct ParamIo {
+        UNKNOWN,
+        /// type ID, uniquely identifies the io area (Id enum spa_io_type).
+        #[constant = libspa_sys::SPA_PARAM_IO_id]
+        ID = 1,
+        /// size of the io area (Int).
+        #[constant = libspa_sys::SPA_PARAM_IO_size]
+        SIZE = 2,
+    }
 }
 
 impl AudioFormat {

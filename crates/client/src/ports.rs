@@ -173,6 +173,22 @@ impl Ports {
                 Ok(())
             })?;
 
+        /*
+        param = spa_pod_builder_add_object(&b.b,
+            SPA_TYPE_OBJECT_ParamMeta, id,
+            SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
+            SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
+        */
+
+        pod.as_mut()
+            .push_object(id::ObjectType::PARAM_META, id::Param::META, |obj| {
+                obj.property(id::Format::MEDIA_TYPE, 0)?
+                    .push(id::MediaType::AUDIO)?;
+                obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                    .push(id::MediaSubType::RAW)?;
+                Ok(())
+            })?;
+
         port.params.insert(
             id::Param::FORMAT,
             PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
