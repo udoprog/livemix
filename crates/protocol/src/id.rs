@@ -619,7 +619,7 @@ pod::macros::id! {
     /// Represents the `enum spa_meta_type`.
     #[example = BITMAP]
     #[module = protocol::id]
-    pub struct MetaType {
+    pub struct Meta {
         UNKNOWN,
         /// struct spa_meta_header.
         #[constant = libspa_sys::SPA_META_Header]

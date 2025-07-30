@@ -449,7 +449,7 @@ impl State {
         for (_, node) in &mut self.client_nodes {
             if let Some(a) = &node.activation {
                 if crate::ptr::volatile!(a, status).read() == consts::ActivationStatus::INACTIVE {
-                    tracing::warn!("node is not active");
+                    // tracing::warn!("node is not active");
                     self.c.client_node_set_active(node.id, true)?;
                     // crate::ptr::volatile!(a, status).write(consts::ActivationStatus::FINISHED);
                 }
@@ -1109,7 +1109,7 @@ impl State {
             let mut metas = Vec::new();
 
             for _ in 0..n_metas {
-                let (ty, size) = st.decode::<(id::MetaType, u32)>()?;
+                let (ty, size) = st.decode::<(id::Meta, u32)>()?;
                 metas.push(buffer::Meta { ty, size });
             }
 

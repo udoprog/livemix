@@ -126,7 +126,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.read == self.write && self.partial_write == 0
+        self.read == self.write && self.partial_read == self.partial_write
     }
 
     /// Get the remaining readable capacity of the buffer

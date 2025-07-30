@@ -173,24 +173,24 @@ impl Ports {
                 Ok(())
             })?;
 
-        /*
-        param = spa_pod_builder_add_object(&b.b,
-            SPA_TYPE_OBJECT_ParamMeta, id,
-            SPA_PARAM_META_type, SPA_POD_Id(SPA_META_Header),
-            SPA_PARAM_META_size, SPA_POD_Int(sizeof(struct spa_meta_header)));
-        */
+        port.params.insert(
+            id::Param::FORMAT,
+            PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
+        );
+
+        pod.clear();
 
         pod.as_mut()
             .push_object(id::ObjectType::PARAM_META, id::Param::META, |obj| {
-                obj.property(id::Format::MEDIA_TYPE, 0)?
-                    .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
-                    .push(id::MediaSubType::RAW)?;
+                obj.property(id::ParamMeta::TYPE, 0)?
+                    .push(id::Meta::HEADER)?;
+                obj.property(id::ParamMeta::SIZE, 0)?
+                    .push(mem::size_of::<ffi::MetaHeader>())?;
                 Ok(())
             })?;
 
         port.params.insert(
-            id::Param::FORMAT,
+            id::Param::META,
             PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
         );
 

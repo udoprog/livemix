@@ -82,6 +82,12 @@ pub(crate) enum ErrorKind {
     InvalidIsize {
         value: i32,
     },
+    InvalidUsizeInt {
+        value: usize,
+    },
+    InvalidIsizeInt {
+        value: isize,
+    },
     CapacityError(CapacityError),
     #[cfg(feature = "alloc")]
     AllocError(AllocError),
@@ -172,6 +178,12 @@ impl fmt::Display for Error {
             }
             ErrorKind::InvalidIsize { value } => {
                 write!(f, "Value {value} is a valid isize")
+            }
+            ErrorKind::InvalidUsizeInt { value } => {
+                write!(f, "Value {value} is a valid int")
+            }
+            ErrorKind::InvalidIsizeInt { value } => {
+                write!(f, "Value {value} is a valid int")
             }
             ErrorKind::CapacityError(ref e) => e.fmt(f),
             #[cfg(feature = "alloc")]

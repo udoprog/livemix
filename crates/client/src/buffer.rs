@@ -8,7 +8,7 @@ use crate::memory::Region;
 
 #[derive(Debug)]
 pub(crate) struct Meta {
-    pub(crate) ty: id::MetaType,
+    pub(crate) ty: id::Meta,
     pub(crate) size: u32,
 }
 

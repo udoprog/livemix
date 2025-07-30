@@ -1,3 +1,4 @@
+use crate::error::ErrorKind;
 use crate::utils::WordBytes;
 use crate::{EncodeUnsized, Error, Fd, Fraction, Id, Pointer, RawId, Rectangle, Type, Writer};
 
@@ -90,6 +91,34 @@ impl Encode for i32 {
 
 crate::macros::encode_into_sized!(i32);
 
+/// [`Encode`] implementation for `isize`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(10isize)?;
+/// assert_eq!(pod.as_ref().next::<isize>()?, 10);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for isize {
+    const TYPE: Type = Type::INT;
+    const SIZE: usize = 4;
+
+    #[inline]
+    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        let Ok(value) = i32::try_from(*self) else {
+            return Err(Error::new(ErrorKind::InvalidIsizeInt { value: *self }));
+        };
+
+        value.write_content(writer)
+    }
+}
+
+crate::macros::encode_into_sized!(isize);
+
 /// [`Encode`] implementation for `u32`.
 ///
 /// # Examples
@@ -117,6 +146,38 @@ impl Encode for u32 {
 }
 
 crate::macros::encode_into_sized!(u32);
+
+/// [`Encode`] implementation for `usize`.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(10usize)?;
+/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
+///
+/// let mut pod = Pod::array();
+/// pod.as_mut().push(10i32)?;
+/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl Encode for usize {
+    const TYPE: Type = Type::INT;
+    const SIZE: usize = 4;
+
+    #[inline]
+    fn write_content(&self, writer: impl Writer<u64>) -> Result<(), Error> {
+        let Ok(value) = u32::try_from(*self) else {
+            return Err(Error::new(ErrorKind::InvalidUsizeInt { value: *self }));
+        };
+
+        value.cast_signed().write_content(writer)
+    }
+}
+
+crate::macros::encode_into_sized!(usize);
 
 /// [`Encode`] implementation for `i64`.
 ///
