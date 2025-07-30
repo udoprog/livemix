@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 use anyhow::Result;
 use pod::Object;
@@ -183,7 +184,7 @@ impl Client {
         id: u32,
         max_input_ports: u32,
         max_output_ports: u32,
-        params: &BTreeMap<id::Param, Object<Box<[u64]>>>,
+        params: &BTreeMap<id::Param, Vec<Object<Box<[u64]>>>>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
             (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
@@ -217,10 +218,13 @@ impl Client {
         pod.as_mut().push_struct(|st| {
             st.field().push(change_mask)?;
 
-            st.field().push(params.len() as u32)?;
+            st.field()
+                .push(params.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
-            for (_, value) in params {
-                st.field().encode(value.as_ref())?;
+            for (_, params) in params {
+                for param in params {
+                    st.field().encode(param.as_ref())?;
+                }
             }
 
             if change_mask & flags::ClientNodeUpdate::INFO {
@@ -257,7 +261,7 @@ impl Client {
         direction: consts::Direction,
         port_id: u32,
         name: &str,
-        params: &BTreeMap<id::Param, PortParam>,
+        params: &BTreeMap<id::Param, Vec<PortParam>>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
             (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
@@ -285,10 +289,13 @@ impl Client {
             st.encode((direction, port_id, change_mask))?;
 
             // Parameters.
-            st.field().push(params.len() as u32)?;
+            st.field()
+                .push(params.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
 
-            for (_, param) in params {
-                st.field().encode(param.value.as_ref())?;
+            for (_, params) in params {
+                for param in params {
+                    st.field().encode(param.value.as_ref())?;
+                }
             }
 
             if change_mask & flags::ClientNodePortUpdate::INFO {

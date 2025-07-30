@@ -4,17 +4,23 @@ use std::collections::BTreeMap;
 
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
-use pod::Object;
+use pod::{ChoiceType, Object, Type};
 use protocol::{
     consts,
-    id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamMeta},
+    id::{
+        self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers,
+        ParamIo, ParamMeta,
+    },
 };
 use tracing::Level;
 
 use crate::{Buffers, Region, ffi};
+
+const BUFFER_SAMPLES: u32 = 128;
 
 #[derive(Debug)]
 pub struct PortParam {
@@ -38,7 +44,7 @@ pub struct Port {
     pub io_clock: Option<Region<ffi::IoClock>>,
     pub io_position: Option<Region<ffi::IoPosition>>,
     pub io_buffers: Option<Region<ffi::IoBuffers>>,
-    params: BTreeMap<Param, PortParam>,
+    params: BTreeMap<Param, Vec<PortParam>>,
 }
 
 impl Port {
@@ -62,7 +68,7 @@ impl Port {
         value: Object<Box<[u64]>>,
         flags: u32,
     ) -> Result<()> {
-        self.params.insert(id, PortParam::new(value, flags));
+        self.params.insert(id, vec![PortParam::new(value, flags)]);
         self.modified = true;
         Ok(())
     }
@@ -76,7 +82,7 @@ impl Port {
     }
 
     /// Get parameters from the port.
-    pub(crate) fn params(&self) -> &BTreeMap<Param, PortParam> {
+    pub(crate) fn params(&self) -> &BTreeMap<Param, Vec<PortParam>> {
         &self.params
     }
 
@@ -156,7 +162,7 @@ impl Ports {
 
         port.params.insert(
             Param::ENUM_FORMAT,
-            PortParam::new(pod.take().next_object()?.to_owned(), 0),
+            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
         );
 
         pod.as_mut()
@@ -172,7 +178,7 @@ impl Ports {
 
         port.params.insert(
             Param::FORMAT,
-            PortParam::new(pod.take().next_object()?.to_owned(), 0),
+            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
         );
 
         pod.as_mut()
@@ -185,7 +191,81 @@ impl Ports {
 
         port.params.insert(
             Param::META,
-            PortParam::new(pod.take().next_object()?.to_owned(), 0),
+            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
+        );
+
+        {
+            let mut params = Vec::new();
+
+            pod.as_mut()
+                .push_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+                    obj.property(ParamIo::ID).push(id::IoType::CLOCK)?;
+                    obj.property(ParamIo::SIZE)
+                        .push(mem::size_of::<ffi::IoClock>())?;
+                    Ok(())
+                })?;
+
+            params.push(PortParam::new(pod.take().next_object()?.to_owned(), 0));
+
+            pod.as_mut()
+                .push_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+                    obj.property(ParamIo::ID).push(id::IoType::POSITION)?;
+                    obj.property(ParamIo::SIZE)
+                        .push(mem::size_of::<ffi::IoPosition>())?;
+                    Ok(())
+                })?;
+
+            params.push(PortParam::new(pod.take().next_object()?.to_owned(), 0));
+
+            port.params.insert(Param::IO, params);
+        }
+
+        /*
+                       param = spa_pod_builder_add_object(&b,
+                       SPA_TYPE_OBJECT_ParamBuffers, id,
+                       SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(1, 1, 32),
+                       SPA_PARAM_BUFFERS_blocks,  SPA_POD_Int(1),
+                       SPA_PARAM_BUFFERS_size,    SPA_POD_CHOICE_RANGE_Int(
+                                                       BUFFER_SAMPLES * sizeof(float), 32, INT32_MAX),
+                       SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(sizeof(float)));
+        */
+
+        pod.as_mut()
+            .push_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
+                obj.property(ParamBuffers::BUFFERS).push_choice(
+                    ChoiceType::RANGE,
+                    Type::INT,
+                    |choice| {
+                        choice.child().push(1u32)?;
+                        choice.child().push(1u32)?;
+                        choice.child().push(32u32)?;
+                        Ok(())
+                    },
+                )?;
+
+                obj.property(ParamBuffers::BLOCKS).push(1i32)?;
+
+                obj.property(ParamBuffers::SIZE).push_choice(
+                    ChoiceType::RANGE,
+                    Type::INT,
+                    |choice| {
+                        choice
+                            .child()
+                            .push(BUFFER_SAMPLES * mem::size_of::<f32>() as u32)?;
+                        choice.child().push(32)?;
+                        choice.child().push(i32::MAX)?;
+                        Ok(())
+                    },
+                )?;
+
+                obj.property(ParamBuffers::STRIDE)
+                    .push(mem::size_of::<f32>())?;
+                Ok(())
+            })?;
+
+        port.params.insert(
+            Param::BUFFERS,
+            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
         );
 
         ports.push(port);

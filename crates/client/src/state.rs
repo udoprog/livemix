@@ -6,13 +6,14 @@ use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
 use pod::{Fd, Object, Pod, Struct};
 use protocol::Connection;
 use protocol::buf::RecvBuf;
-use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
+use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamIo};
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
@@ -79,7 +80,7 @@ struct ClientNodeState {
     node_activations: Slab<Activation>,
     /// Map of peer ids to their activation indices.
     peer_to_activation: BTreeMap<u32, usize>,
-    params: BTreeMap<Param, Object<Box<[u64]>>>,
+    params: BTreeMap<Param, Vec<Object<Box<[u64]>>>>,
     ports: Ports,
     io_clock: Option<Region<ffi::IoClock>>,
     io_control: Option<Region<()>>,
@@ -108,7 +109,10 @@ impl ClientNodeState {
                 Ok(())
             })?;
 
-        params.insert(Param::ENUM_FORMAT, pod.take().next_object()?.to_owned());
+        params.insert(
+            Param::ENUM_FORMAT,
+            vec![pod.take().next_object()?.to_owned()],
+        );
 
         pod.as_mut()
             .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
@@ -121,10 +125,7 @@ impl ClientNodeState {
                 Ok(())
             })?;
 
-        params.insert(
-            Param::FORMAT,
-            pod.as_ref().into_typed()?.next_object()?.to_owned(),
-        );
+        params.insert(Param::FORMAT, vec![pod.take().next_object()?.to_owned()]);
 
         Ok(Self {
             id,
@@ -147,7 +148,7 @@ impl ClientNodeState {
     /// Set a parameter for the node.
     #[inline]
     fn set_param(&mut self, param: Param, value: Object<Box<[u64]>>) {
-        self.params.insert(param, value);
+        self.params.insert(param, vec![value]);
         self.modified = true;
     }
 

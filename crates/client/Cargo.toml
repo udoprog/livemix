@@ -7,6 +7,7 @@ edition = "2024"
 default = ["std"]
 std = ["alloc", "pod/std", "protocol/std", "libc/std"]
 alloc = ["pod/alloc", "protocol/alloc"]
+test-pipewire-sys = ["dep:libspa-sys", "dep:pipewire-sys"]
 
 [dependencies]
 pod = { path = "../pod" }
@@ -16,3 +17,6 @@ anyhow = "1.0.98"
 tracing = "0.1.41"
 slab = "0.4.10"
 libc = { version = "0.2.174", default-features = false }
+
+libspa-sys = { version = "0.8.0", optional = true }
+pipewire-sys = { version = "0.8.0", optional = true }

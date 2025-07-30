@@ -438,24 +438,6 @@ fn test_format_l1_struct() -> Result<(), Error> {
 }
 
 #[test]
-fn test_format_choice() -> Result<(), Error> {
-    let mut pod = Builder::array();
-    pod.as_mut()
-        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-            choice.child().push(10i32)?;
-            choice.child().push(0i32)?;
-            choice.child().push(30i32)?;
-            Ok(())
-        })?;
-
-    assert_eq!(
-        format!("{pod:?}"),
-        "Choice { type: Range, child_type: Int, entries: [10, 0, 30] }"
-    );
-    Ok(())
-}
-
-#[test]
 fn test_format_buggy() -> Result<(), Error> {
     let mut pod = Builder::array();
     pod.as_mut()
@@ -516,5 +498,38 @@ fn test_realloc() -> Result<(), Error> {
         buf.extend_from_words(&[n])?;
     }
 
+    Ok(())
+}
+
+#[test]
+fn choice_format() -> Result<(), Error> {
+    let mut pod = Builder::array();
+    pod.as_mut()
+        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+            choice.child().push(10i32)?;
+            choice.child().push(0i32)?;
+            choice.child().push(30i32)?;
+            Ok(())
+        })?;
+
+    assert_eq!(
+        format!("{pod:?}"),
+        "Choice { type: Range, child_type: Int, entries: [10, 0, 30] }"
+    );
+    Ok(())
+}
+
+#[test]
+fn choice_words() -> Result<(), Error> {
+    let mut pod = Builder::array();
+    pod.as_mut()
+        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+            choice.child().push(10i32)?;
+            choice.child().push(0i32)?;
+            choice.child().push(30i32)?;
+            Ok(())
+        })?;
+
+    std::dbg!(pod.as_buf().as_slice());
     Ok(())
 }

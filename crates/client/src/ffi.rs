@@ -352,3 +352,27 @@ pub struct MetaHeader {
     /// sequence number, increments with a media specific frequency.
     seq: u64,
 }
+
+#[cfg(feature = "test-pipewire-sys")]
+#[test]
+fn test_sizes() {
+    use core::mem;
+
+    assert_eq!(
+        mem::size_of::<IoPosition>(),
+        mem::size_of::<libspa_sys::spa_io_position>()
+    );
+    assert_eq!(
+        mem::align_of::<IoPosition>(),
+        mem::align_of::<libspa_sys::spa_io_position>()
+    );
+
+    assert_eq!(
+        mem::size_of::<IoClock>(),
+        mem::size_of::<libspa_sys::spa_io_clock>()
+    );
+    assert_eq!(
+        mem::align_of::<IoClock>(),
+        mem::align_of::<libspa_sys::spa_io_clock>()
+    );
+}
