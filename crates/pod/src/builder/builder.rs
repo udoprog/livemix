@@ -164,15 +164,15 @@ impl PodKind for EnvelopePod {
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct Builder<B, K = EnvelopePod> {
+pub struct Builder<B, P = EnvelopePod> {
     buf: B,
-    pub(crate) kind: K,
+    pub(crate) kind: P,
 }
 
-impl<B, K> Clone for Builder<B, K>
+impl<B, P> Clone for Builder<B, P>
 where
     B: Clone,
-    K: Clone,
+    P: Clone,
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -374,9 +374,9 @@ impl<B> Builder<B, ChildPod> {
     }
 }
 
-impl<B, K> Builder<B, K> {
+impl<B, P> Builder<B, P> {
     #[inline]
-    pub(crate) fn new_with(buf: B, kind: K) -> Self
+    pub(crate) fn new_with(buf: B, kind: P) -> Self
     where
         B: Writer,
     {
@@ -418,10 +418,10 @@ impl<B, K> Builder<B, K> {
     }
 }
 
-impl<B, K> Builder<B, K>
+impl<B, P> Builder<B, P>
 where
     B: Writer,
-    K: PodKind,
+    P: PodKind,
 {
     /// Conveniently encode a value into the pod.
     ///
@@ -495,7 +495,7 @@ where
     pub fn push_none(mut self) -> Result<(), Error> {
         self.kind.check(Type::NONE, 0)?;
 
-        if K::ENVELOPE {
+        if P::ENVELOPE {
             self.buf.write(&[0, Type::NONE.into_u32()])?;
         }
 
@@ -547,7 +547,7 @@ where
     pub fn push_array(
         mut self,
         child_type: Type,
-        f: impl FnOnce(&mut ArrayBuilder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ArrayBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = ArrayBuilder::to_writer(self.buf, self.kind, child_type)?;
@@ -619,7 +619,7 @@ where
         mut self,
         child_type: Type,
         child_size: usize,
-        f: impl FnOnce(&mut ArrayBuilder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ArrayBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut array =
@@ -648,7 +648,7 @@ where
     #[inline]
     pub fn push_struct(
         mut self,
-        f: impl FnOnce(&mut StructBuilder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut StructBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = StructBuilder::to_writer(self.buf, self.kind)?;
@@ -678,7 +678,7 @@ where
         mut self,
         object_type: impl RawId,
         object_id: impl RawId,
-        f: impl FnOnce(&mut ObjectBuilder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ObjectBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = ObjectBuilder::to_writer(
@@ -711,7 +711,7 @@ where
     #[inline]
     pub fn push_sequence(
         mut self,
-        f: impl FnOnce(&mut SequenceBuilder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut SequenceBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = SequenceBuilder::to_writer(self.buf, self.kind)?;
@@ -739,7 +739,7 @@ where
         mut self,
         choice: ChoiceType,
         child_type: Type,
-        f: impl FnOnce(&mut ChoiceBuilder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ChoiceBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = ChoiceBuilder::to_writer(self.buf, self.kind, choice, child_type)?;

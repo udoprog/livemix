@@ -10,8 +10,8 @@ pub use self::array_builder::ArrayBuilder;
 mod struct_builder;
 pub use self::struct_builder::StructBuilder;
 
-mod object_encoder;
-pub use self::object_encoder::ObjectBuilder;
+mod object_builder;
+pub use self::object_builder::ObjectBuilder;
 
 mod sequence_builder;
 pub use self::sequence_builder::SequenceBuilder;

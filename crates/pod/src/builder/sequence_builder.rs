@@ -64,24 +64,24 @@ impl PodKind for ControlChild {
 
 /// An encoder for a sequence.
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
-pub struct SequenceBuilder<W, K>
+pub struct SequenceBuilder<W, P>
 where
     W: Writer,
 {
     writer: W,
-    kind: K,
+    kind: P,
     header: W::Pos,
     unit: u32,
     pad: u32,
 }
 
-impl<W, K> SequenceBuilder<W, K>
+impl<W, P> SequenceBuilder<W, P>
 where
     W: Writer,
-    K: PodKind,
+    P: PodKind,
 {
     #[inline]
-    pub(crate) fn to_writer(mut writer: W, kind: K) -> Result<Self, Error> {
+    pub(crate) fn to_writer(mut writer: W, kind: P) -> Result<Self, Error> {
         // Reserve space for the header of the sequence which includes its size that will be determined later.
         let header = writer.reserve(&[
             mem::size_of::<[u32; 2]>() as u32,

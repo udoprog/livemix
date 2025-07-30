@@ -111,11 +111,11 @@ where
 
     /// Read an array of words.
     #[inline]
-    fn peek<U>(&self) -> Result<U, Error>
+    fn peek<T>(&self) -> Result<T, Error>
     where
-        U: AlignableWith,
+        T: AlignableWith,
     {
-        let mut out = UninitAlign::<U>::uninit();
+        let mut out = UninitAlign::<T>::uninit();
         self.peek_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init() })
@@ -123,11 +123,11 @@ where
 
     /// Read an array of words.
     #[inline]
-    fn read<U>(&mut self) -> Result<U, Error>
+    fn read<T>(&mut self) -> Result<T, Error>
     where
-        U: AlignableWith,
+        T: AlignableWith,
     {
-        let mut out = UninitAlign::<U>::uninit();
+        let mut out = UninitAlign::<T>::uninit();
         self.read_words_uninit(out.as_mut_slice())?;
         // SAFETY: The slice must have been initialized by the reader.
         Ok(unsafe { out.assume_init() })

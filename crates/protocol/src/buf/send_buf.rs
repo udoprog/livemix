@@ -217,15 +217,15 @@ impl SendBuf {
 
     /// Read `T` out of the buffer.
     #[inline]
-    pub fn read<U>(&mut self) -> Option<U>
+    pub fn read<T>(&mut self) -> Option<T>
     where
-        U: AlignableWith,
+        T: AlignableWith,
     {
         if self.is_empty() {
             return None;
         }
 
-        let mut value = UninitAlign::<U>::uninit();
+        let mut value = UninitAlign::<T>::uninit();
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {

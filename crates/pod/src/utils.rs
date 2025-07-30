@@ -47,54 +47,6 @@ unsafe impl BytesInhabited for i64 {}
 unsafe impl BytesInhabited for u64 {}
 unsafe impl<T, const N: usize> BytesInhabited for [T; N] where T: BytesInhabited {}
 
-/// Helper to align a value to a word, making necessary write conversions safe.
-#[repr(align(8))]
-pub struct Align<T>(pub T);
-
-impl<T> Align<T> {
-    /// Coerce a value into a slice of words.
-    #[inline]
-    pub fn as_words(&self) -> &[u64]
-    where
-        T: AlignableWith,
-    {
-        // SAFETY: The value must be word-aligned and packed.
-        unsafe { slice::from_raw_parts(self.as_ptr(), T::WORD_SIZE) }
-    }
-
-    /// Get a pointer to the word representation of the value.
-    #[inline]
-    pub fn as_ptr(&self) -> *const u64
-    where
-        T: AlignableWith,
-    {
-        (&self.0 as *const T).cast()
-    }
-
-    /// Get the size of the region in word.
-    #[inline]
-    pub fn size(&self) -> usize
-    where
-        T: AlignableWith,
-    {
-        T::WORD_SIZE
-    }
-}
-
-impl<T> Clone for Align<T>
-where
-    T: Copy,
-{
-    #[inline]
-    fn clone(&self) -> Self {
-        Self(self.0)
-    }
-}
-
-impl<T> Copy for Align<T> where T: Copy {}
-
-impl<T> Align<T> where T: AlignableWith {}
-
 /// Helper type which alllows for building buffers of type `U` which are aligned
 /// to type `T` of size `N`.
 #[repr(C, align(8))]

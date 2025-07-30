@@ -5,12 +5,12 @@ use crate::error::ErrorKind;
 use crate::{Builder, ChoiceType, Error, Type, Writer};
 
 /// An encoder for a choice.
-pub struct ChoiceBuilder<W, K>
+pub struct ChoiceBuilder<W, P>
 where
     W: Writer,
 {
     writer: W,
-    kind: K,
+    kind: P,
     header: W::Pos,
     #[allow(unused)]
     choice: ChoiceType,
@@ -20,15 +20,15 @@ where
     child_type: Type,
 }
 
-impl<W, K> ChoiceBuilder<W, K>
+impl<W, P> ChoiceBuilder<W, P>
 where
     W: Writer,
-    K: PodKind,
+    P: PodKind,
 {
     #[inline]
     pub(crate) fn to_writer(
         mut writer: W,
-        kind: K,
+        kind: P,
         choice: ChoiceType,
         child_type: Type,
     ) -> Result<Self, Error> {

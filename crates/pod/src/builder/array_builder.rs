@@ -37,24 +37,24 @@ use crate::{Builder, Error, Type, Writer};
 /// })?;
 /// # Ok::<_, pod::Error>(())
 /// ```
-pub struct ArrayBuilder<W, K>
+pub struct ArrayBuilder<W, P>
 where
     W: Writer,
 {
     writer: W,
-    kind: K,
+    kind: P,
     header: W::Pos,
     child_size: usize,
     child_type: Type,
 }
 
-impl<W, K> ArrayBuilder<W, K>
+impl<W, P> ArrayBuilder<W, P>
 where
     W: Writer,
-    K: PodKind,
+    P: PodKind,
 {
     #[inline]
-    pub(crate) fn to_writer(mut writer: W, kind: K, child_type: Type) -> Result<Self, Error> {
+    pub(crate) fn to_writer(mut writer: W, kind: P, child_type: Type) -> Result<Self, Error> {
         let Some(child_size) = child_type.size() else {
             return Err(Error::new(ErrorKind::UnsizedTypeInArray { ty: child_type }));
         };
@@ -78,7 +78,7 @@ where
     #[inline]
     pub(crate) fn to_writer_unsized(
         mut writer: W,
-        kind: K,
+        kind: P,
         child_size: usize,
         child_type: Type,
     ) -> Result<Self, Error> {
