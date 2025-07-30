@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 mod recv_buf;
 pub use self::recv_buf::RecvBuf;
 

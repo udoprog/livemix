@@ -9,7 +9,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
-use pod::{DynamicBuf, Fd, Object, Pod, Struct};
+use pod::{Fd, Object, Pod, Struct};
 use protocol::Connection;
 use protocol::buf::RecvBuf;
 use protocol::ids::Ids;
@@ -1306,19 +1306,19 @@ impl State {
 fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<&'buf [u64]>>> {
     let size = header.size() as usize;
 
-    if size % <DynamicBuf<u64>>::WORD_SIZE != 0 {
+    if size % <RecvBuf<u64>>::WORD_SIZE != 0 {
         bail!(
             "Header size must be aligned to a word size of {} bytes",
-            <DynamicBuf<u64>>::WORD_SIZE
+            <RecvBuf<u64>>::WORD_SIZE
         );
     }
 
     debug_assert!(
-        size % <DynamicBuf<u64>>::WORD_SIZE == 0,
+        size % <RecvBuf<u64>>::WORD_SIZE == 0,
         "Size of frame is not aligned"
     );
 
-    let Some(words) = buf.read_words(size / DynamicBuf::<u64>::WORD_SIZE) else {
+    let Some(words) = buf.read_words(size / RecvBuf::<u64>::WORD_SIZE) else {
         return Ok(None);
     };
 

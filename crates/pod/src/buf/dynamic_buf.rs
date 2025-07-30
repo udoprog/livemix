@@ -8,10 +8,8 @@ use core::slice;
 use alloc::alloc;
 
 use crate::error::ErrorKind;
-use crate::utils::{Align, AlignableWith, BytesInhabited, UninitAlign};
+use crate::utils::BytesInhabited;
 use crate::{AsReader, Error, Writer};
-
-pub(crate) const WANTS_BYTES: usize = 1 << 14;
 
 /// An allocation error has occured when trying to reserve space in the [`DynamicBuf`].
 #[derive(Debug)]
@@ -34,9 +32,6 @@ pub struct DynamicBuf<T = u64> {
     cap: usize,
     read: usize,
     write: usize,
-    // Partially written words in bytes written.
-    partial_read: usize,
-    partial_write: usize,
 }
 
 impl<T> DynamicBuf<T> {
@@ -49,15 +44,6 @@ impl<T> DynamicBuf<T> {
         mem::size_of::<T>()
     };
 
-    /// The minimum number of words that will be available when calling
-    /// `as_bytes_mut`.
-    const MIN_WORDS: usize = const {
-        match WANTS_BYTES.wrapping_div(Self::WORD_SIZE) {
-            n if n < 16 => 16,
-            n => n,
-        }
-    };
-
     /// Construct a new empty buffer.
     ///
     /// # Examples
@@ -67,11 +53,8 @@ impl<T> DynamicBuf<T> {
     ///
     /// let mut buf = DynamicBuf::<u64>::new();
     /// assert!(buf.is_empty());
-    /// buf.push_bytes(42u64)?;
+    /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.len(), 1);
-    ///
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.as_bytes(), &expected[..]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -81,8 +64,6 @@ impl<T> DynamicBuf<T> {
             cap: 0,
             read: 0,
             write: 0,
-            partial_read: 0,
-            partial_write: 0,
         }
     }
 
@@ -94,18 +75,14 @@ impl<T> DynamicBuf<T> {
     /// use pod::{DynamicBuf, Writer};
     ///
     /// let mut buf = DynamicBuf::<u64>::new();
-    /// assert!(buf.is_empty());
-    /// buf.push_bytes(42u64)?;
+    /// assert_eq!(buf.len(), 0);
+    /// buf.extend_from_words(&[42])?;
     /// assert_eq!(buf.len(), 1);
-    ///
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.as_bytes(), &expected[..]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
     pub fn len(&self) -> usize {
-        let add = self.partial_read.next_multiple_of(Self::WORD_SIZE) / Self::WORD_SIZE;
-        (self.write - self.read).wrapping_sub(add)
+        self.write - self.read
     }
 
     /// Test if the buffer is empty.
@@ -117,41 +94,13 @@ impl<T> DynamicBuf<T> {
     ///
     /// let mut buf = DynamicBuf::<u64>::new();
     /// assert!(buf.is_empty());
-    /// buf.push_bytes(42u64)?;
-    /// assert_eq!(buf.len(), 1);
-    ///
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.as_bytes(), &expected[..]);
+    /// buf.extend_from_words(&[42])?;
+    /// assert!(!buf.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.read == self.write && self.partial_read == self.partial_write
-    }
-
-    /// Get the remaining readable capacity of the buffer
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{DynamicBuf, Writer};
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert_eq!(buf.len(), 0);
-    /// buf.push_bytes(42u64)?;
-    /// assert_eq!(buf.len(), 2);
-    ///
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.remaining_bytes(), 8);
-    /// assert_eq!(buf.as_bytes(), expected);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn remaining_bytes(&self) -> usize {
-        (self.write - self.read)
-            .wrapping_mul(Self::WORD_SIZE)
-            .wrapping_add(self.partial_write)
-            .wrapping_sub(self.partial_read)
+        self.read == self.write
     }
 
     /// Clear the contents of the buffer.
@@ -162,17 +111,10 @@ impl<T> DynamicBuf<T> {
     /// use pod::DynamicBuf;
     ///
     /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert!(buf.is_empty());
     ///
-    /// buf.push(1)?;
-    /// buf.push(2)?;
+    /// buf.extend_from_words(&[1, 2])?;
     /// assert_eq!(buf.as_slice(), &[1, 2]);
-    ///
-    /// buf.as_slice_mut()[0] = 3;
-    /// assert_eq!(buf.as_slice(), &[3, 2]);
-    ///
     /// buf.clear();
-    /// assert!(buf.is_empty());
     /// assert_eq!(buf.as_slice(), &[]);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -191,32 +133,6 @@ impl<T> DynamicBuf<T> {
         }
     }
 
-    /// Returns the bytes of the buffer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{DynamicBuf, Writer};
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert_eq!(buf.len(), 0);
-    /// buf.push_bytes(42u64)?;
-    /// assert_eq!(buf.len(), 2);
-    ///
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.remaining_bytes(), 8);
-    /// assert_eq!(buf.as_bytes(), expected);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8]
-    where
-        T: BytesInhabited,
-    {
-        // SAFETY: The buffer is guaranteed to initialized due to invariants.
-        unsafe { slice::from_raw_parts(self.as_bytes_ptr(), self.remaining_bytes()) }
-    }
-
     /// Returns the slice of data in the buffer.
     ///
     /// # Examples
@@ -226,93 +142,14 @@ impl<T> DynamicBuf<T> {
     ///
     /// let mut buf = DynamicBuf::<u64>::new();
     /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.push(42u64)?;
-    /// assert_eq!(buf.as_slice(), &[42]);
+    /// buf.extend_from_words(&[1, 2, 3, 4])?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
     pub fn as_slice(&self) -> &[T] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
-    }
-
-    /// Returns a mutable slice of data in the buffer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{DynamicBuf, Writer};
-    ///
-    /// let mut buf = DynamicBuf::<u64>::new();
-    /// assert_eq!(buf.len(), 0);
-    /// buf.write(42u64)?;
-    /// assert_eq!(buf.len(), 1);
-    /// assert_eq!(buf.as_slice(), &[42]);
-    ///
-    /// buf.as_slice_mut()[0] = 43;
-    /// assert_eq!(buf.as_slice(), &[43]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    pub fn as_slice_mut(&mut self) -> &mut [T] {
-        // SAFETY: The buffer is guaranteed to be initialized from the
-        // `self.read..self.write` range.
-        unsafe { slice::from_raw_parts_mut(self.as_ptr_mut(), self.len()) }
-    }
-
-    /// Get an initialized slice of bytes available for writing.
-    ///
-    /// This is useful since it allows writing native aligned values from a byte
-    /// array from APIs like [`Read`].
-    ///
-    /// The number of bytes written should must be communicated through
-    /// [`DynamicBuf::advance_written_bytes`].
-    ///
-    /// [`Read`]: std::io::Read
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert!(buf.as_bytes_mut()?.len() > 0);
-    ///
-    /// buf.as_bytes_mut()?[..3].copy_from_slice(&[1, 2, 3]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(3);
-    /// }
-    ///
-    /// assert_eq!(buf.as_bytes(), &[1, 2, 3]);
-    /// assert_eq!(buf.as_slice(), &[]);
-    ///
-    /// buf.as_bytes_mut()?[..1].copy_from_slice(&[4]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(1);
-    /// }
-    ///
-    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
-    /// assert_eq!(buf.as_slice(), &[expected]);
-    ///
-    /// unsafe {
-    ///     buf.advance_read_bytes(1);
-    /// }
-    ///
-    /// assert_eq!(buf.as_bytes(), &[2, 3, 4]);
-    /// assert_eq!(buf.as_slice(), &[]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn as_bytes_mut(&mut self) -> Result<&mut [u8], AllocError> {
-        self.reserve(self.write + Self::MIN_WORDS)?;
-
-        Ok(unsafe {
-            slice::from_raw_parts_mut(self.as_bytes_ptr_mut(), self.remaining_bytes_mut())
-        })
     }
 
     /// Extend the buffer with a slice of words.
@@ -347,336 +184,6 @@ impl<T> DynamicBuf<T> {
         Ok(())
     }
 
-    /// Push a value into the buffer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.push(1u32)?;
-    /// buf.push(2u32)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2]);
-    ///
-    /// buf.as_slice_mut()[0] = 3;
-    /// assert_eq!(buf.as_slice(), &[3, 2]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn push(&mut self, value: T) -> Result<(), AllocError> {
-        self.reserve(self.write + 1)?;
-
-        // SAFETY: Necessary invariants have been checked above.
-        unsafe {
-            self.data.as_ptr().wrapping_add(self.write).write(value);
-            self.advance_written(1);
-        }
-
-        Ok(())
-    }
-
-    /// Push the bytes of `U` into the buffer.
-    ///
-    /// This guarantees that `U` is bytes-compatible with `T` and that alignment
-    /// in the buffer is maintained.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert_eq!(buf.len(), 0);
-    /// buf.push_bytes(42u64);
-    /// assert_eq!(buf.len(), 2);
-    ///
-    /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.as_bytes(), expected);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn push_bytes<U>(&mut self, value: U) -> Result<(), AllocError>
-    where
-        U: AlignableWith<T>,
-    {
-        let value = Align(value);
-        self.reserve(self.write + value.size::<T>())?;
-
-        // SAFETY: Necessary invariants have been checked above.
-        unsafe {
-            self.data
-                .as_ptr()
-                .add(self.write)
-                .copy_from_nonoverlapping(value.as_ptr::<T>(), value.size::<T>());
-
-            self.advance_written(value.size::<T>());
-        }
-
-        Ok(())
-    }
-
-    /// Read `T` out of the buffer.
-    #[inline]
-    pub fn read<U>(&mut self) -> Option<U>
-    where
-        U: AlignableWith<T>,
-    {
-        if self.is_empty() {
-            return None;
-        }
-
-        let mut value = UninitAlign::<U>::uninit();
-
-        // SAFETY: Necessary invariants have been checked above.
-        unsafe {
-            self.data
-                .as_ptr()
-                .add(self.read)
-                .copy_to_nonoverlapping(value.as_mut_ptr::<T>().cast(), value.size::<T>());
-
-            self.advance_read(value.size::<T>());
-            Some(value.assume_init())
-        }
-    }
-
-    /// Read a slice of words from the buffer.
-    ///
-    /// This requires that `T` implements `BytesInhabited`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert_eq!(buf.as_slice().len(), 0);
-    ///
-    /// buf.push(1u32)?;
-    /// buf.push(2u32)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2]);
-    ///
-    /// buf.as_slice_mut()[0] = 3;
-    /// assert_eq!(buf.as_slice(), &[3, 2]);
-    ///
-    /// let slice = buf.read_words(2).unwrap();
-    /// assert_eq!(slice, &[3, 2]);
-    /// assert!(buf.read_words(1).is_none());
-    /// assert!(buf.read_words(2).is_none());
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    ///
-    /// When interacting with bytes-oriented writes:
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert!(buf.as_bytes_mut()?.len() > 0);
-    ///
-    /// buf.as_bytes_mut()?[..7].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(7);
-    /// }
-    ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-    /// let expected2 = u32::from_ne_bytes([5, 6, 7, 8]);
-    ///
-    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4, 5, 6, 7]);
-    /// assert_eq!(buf.as_slice(), &[expected]);
-    ///
-    /// assert!(buf.read_words(2).is_none());
-    /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
-    /// assert_eq!(buf.as_bytes(), &[5, 6, 7]);
-    ///
-    /// buf.as_bytes_mut()?[..3].copy_from_slice(&[8, 9, 10]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(3);
-    /// }
-    ///
-    /// assert_eq!(buf.read_words(1), Some(&[expected2][..]));
-    /// assert!(buf.read_words(1).is_none());
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub fn read_words(&mut self, size: usize) -> Option<&[T]>
-    where
-        T: BytesInhabited,
-    {
-        if size > self.len() {
-            return None;
-        }
-
-        // SAFETY: Necessary invariants have been checked above.
-        unsafe {
-            let value = slice::from_raw_parts(self.data.as_ptr().add(self.read).cast::<T>(), size);
-            self.advance_read(size);
-            Some(value)
-        }
-    }
-
-    /// Add that a given amount of bytes has been read.
-    ///
-    /// Note that this is safe since we always ensure that the buffer is
-    /// zero-initialized.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the specified number of bytes
-    /// `self.read..self.read + n` is a valid memory region in the buffer that
-    /// has previously been written to.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert!(buf.as_bytes_mut()?.len() > 0);
-    ///
-    /// buf.as_bytes_mut()?[..4].copy_from_slice(&[1, 2, 3, 4]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(4);
-    /// }
-    ///
-    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
-    /// assert_eq!(buf.as_slice(), &[expected]);
-    ///
-    /// unsafe {
-    ///     buf.advance_read_bytes(1);
-    /// }
-    ///
-    /// assert_eq!(buf.as_bytes(), &[2, 3, 4]);
-    /// assert_eq!(buf.as_slice(), &[]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub unsafe fn advance_read_bytes(&mut self, n: usize) {
-        let n = n + mem::take(&mut self.partial_read);
-        let r = n / Self::WORD_SIZE;
-        let p = n % Self::WORD_SIZE;
-
-        let read = self.read + r;
-
-        debug_assert!(
-            read <= self.write,
-            "Read position {read} in buffer is greater than write {}",
-            self.write
-        );
-
-        self.read = read;
-        self.partial_read = p;
-
-        if self.read >= self.write {
-            self.read = 0;
-            self.write = 0;
-            self.partial_read = 0;
-        }
-    }
-
-    /// Add that a given amount of bytes has been written.
-    ///
-    /// Note that this is safe since we always ensure that the buffer is
-    /// zero-initialized.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the specified number of bytes fits with the
-    /// buffer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::DynamicBuf;
-    ///
-    /// let mut buf = DynamicBuf::<u32>::new();
-    /// assert!(buf.as_bytes_mut()?.len() > 0);
-    ///
-    /// buf.as_bytes_mut()?[..7].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(7);
-    /// }
-    ///
-    /// let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-    /// let expected2 = u32::from_ne_bytes([5, 6, 7, 8]);
-    ///
-    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4, 5, 6, 7]);
-    /// assert_eq!(buf.as_slice(), &[expected]);
-    ///
-    /// assert!(buf.read_words(2).is_none());
-    /// assert_eq!(buf.read_words(1), Some(&[expected][..]));
-    /// assert_eq!(buf.as_bytes(), &[5, 6, 7]);
-    ///
-    /// buf.as_bytes_mut()?[..3].copy_from_slice(&[8, 9, 10]);
-    ///
-    /// unsafe {
-    ///     buf.advance_written_bytes(3);
-    /// }
-    ///
-    /// assert_eq!(buf.read_words(1), Some(&[expected2][..]));
-    /// assert!(buf.read_words(1).is_none());
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    #[inline]
-    pub unsafe fn advance_written_bytes(&mut self, n: usize)
-    where
-        T: BytesInhabited,
-    {
-        let n = n + mem::take(&mut self.partial_write);
-        let w = n / Self::WORD_SIZE;
-        let p = n % Self::WORD_SIZE;
-
-        let write = self.write + w;
-
-        assert!(
-            write <= self.cap,
-            "Write position {} in buffer is greater than capacity {}",
-            self.write,
-            self.cap
-        );
-
-        self.write = write;
-        self.partial_write = p;
-    }
-
-    /// Add that a given amount of bytes has been read.
-    ///
-    /// Note that this is safe since we always ensure that the buffer is
-    /// zero-initialized.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the specified number of bytes
-    /// `self.read..self.read + n` is a valid memory region in the buffer that
-    /// has previously been written to.
-    #[inline]
-    unsafe fn advance_read(&mut self, n: usize) {
-        let read = self.read + n;
-
-        debug_assert!(
-            read <= self.write,
-            "Read position {read} in buffer is greater than write {}",
-            self.write
-        );
-
-        self.read = read;
-
-        if self.read == self.write && self.partial_read == self.partial_write {
-            self.read = 0;
-            self.write = 0;
-            self.partial_read = 0;
-            self.partial_write = 0;
-        }
-    }
-
     /// Add that a given amount of bytes has been written.
     ///
     /// # Safety
@@ -696,50 +203,11 @@ impl<T> DynamicBuf<T> {
         );
 
         self.write = write;
-        // This might leak bytes-oriented writes, but that is OK.
-        self.partial_write = 0;
-    }
-
-    #[inline]
-    fn as_bytes_ptr(&self) -> *const u8 {
-        self.data
-            .as_ptr()
-            .wrapping_add(self.read)
-            .cast::<u8>()
-            .wrapping_add(self.partial_read)
-            .cast_const()
-    }
-
-    #[inline]
-    fn as_bytes_ptr_mut(&mut self) -> *mut u8 {
-        self.data
-            .as_ptr()
-            .wrapping_add(self.write)
-            .cast::<u8>()
-            .wrapping_add(self.partial_write)
-    }
-
-    #[inline]
-    fn remaining_bytes_mut(&self) -> usize {
-        (self.cap - self.write)
-            .wrapping_mul(Self::WORD_SIZE)
-            .wrapping_sub(self.partial_write)
     }
 
     #[inline]
     fn as_ptr(&self) -> *const T {
-        let add = self.partial_read.next_multiple_of(Self::WORD_SIZE) / Self::WORD_SIZE;
-
-        self.data
-            .as_ptr()
-            .wrapping_add(self.read)
-            .cast_const()
-            .wrapping_add(add)
-    }
-
-    #[inline]
-    fn as_ptr_mut(&mut self) -> *mut T {
-        self.data.as_ptr().wrapping_add(self.read)
+        self.data.as_ptr().wrapping_add(self.read).cast_const()
     }
 
     /// Ensure up to the given length is reserved.
@@ -923,10 +391,6 @@ where
         let write = self.write.wrapping_add(full.div_ceil(Self::WORD_SIZE));
 
         self.reserve(write)?;
-
-        debug_assert!(self.write <= self.cap);
-        debug_assert!(write <= self.cap);
-        assert_eq!(self.partial_write, 0);
 
         // SAFETY: We are writing to a valid position in the buffer.
         unsafe {

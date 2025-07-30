@@ -513,61 +513,8 @@ fn test_realloc() -> Result<(), Error> {
     let mut buf = DynamicBuf::<u64>::new();
 
     for n in 0..128 {
-        buf.push(n)?;
+        buf.extend_from_words(&[n])?;
     }
 
-    Ok(())
-}
-
-#[test]
-fn test_as_bytes_mut() -> Result<(), Error> {
-    let expected = u32::from_ne_bytes([1, 2, 3, 4]);
-
-    let mut buf = DynamicBuf::<u32>::new();
-    assert!(buf.as_bytes_mut()?.len() > 0);
-
-    buf.as_bytes_mut()?[..3].copy_from_slice(&[1, 2, 3]);
-
-    unsafe {
-        buf.advance_written_bytes(3);
-    }
-
-    assert_eq!(buf.remaining_bytes(), 3);
-    assert_eq!(buf.as_bytes(), &[1, 2, 3]);
-    assert_eq!(buf.as_slice(), &[]);
-
-    buf.as_bytes_mut()?[..1].copy_from_slice(&[4]);
-
-    unsafe {
-        buf.advance_written_bytes(1);
-    }
-
-    assert_eq!(buf.remaining_bytes(), 4);
-    assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
-    assert_eq!(buf.as_slice(), &[expected]);
-
-    unsafe {
-        buf.advance_read_bytes(1);
-    }
-
-    assert_eq!(buf.remaining_bytes(), 3);
-    assert_eq!(buf.as_bytes(), &[2, 3, 4]);
-    assert_eq!(buf.as_slice(), &[]);
-
-    unsafe {
-        buf.advance_read_bytes(2);
-    }
-
-    assert_eq!(buf.remaining_bytes(), 1);
-    assert_eq!(buf.as_bytes(), &[4]);
-    assert_eq!(buf.as_slice(), &[]);
-
-    unsafe {
-        buf.advance_read_bytes(1);
-    }
-
-    assert_eq!(buf.remaining_bytes(), 0);
-    assert_eq!(buf.as_bytes(), &[]);
-    assert_eq!(buf.as_slice(), &[]);
     Ok(())
 }
