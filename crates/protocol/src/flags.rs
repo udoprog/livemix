@@ -276,6 +276,26 @@ pod::macros::flags! {
         /// Equivalent of `SPA_STATUS_DRAINED`.
         DRAINED = 1 << 3;
     }
+
+    /// Describes `SPA_HEADER_FLAG_*`.
+    #[examples = [CORRUPTED]]
+    #[not_set = [HEADER]]
+    #[module = protocol::flags]
+    pub struct MetaHeaderFlags(u32) {
+        NONE;
+        /// data is not continuous with previous buffer.
+        DISCONT = 1 << 0;
+        /// data might be corrupted.
+        CORRUPTED = 1 << 1;
+        /// media specific marker.
+        MARKER = 1 << 2;
+        /// data contains a codec specific header.
+        HEADER = 1 << 3;
+        /// data contains media neutral data.
+        GAP = 1 << 4;
+        /// cannot be decoded independently.
+        DELTA_UNIT = 1 << 5;
+    }
 }
 
 impl Param {

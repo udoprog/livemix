@@ -337,3 +337,18 @@ pub struct IoBuffers {
     /// a buffer id.
     buffer_id: u32,
 }
+
+/// Describes essential buffer header metadata such as flags and timestamps.
+#[repr(C)]
+pub struct MetaHeader {
+    /// flags.
+    flags: flags::MetaHeaderFlags,
+    /// offset in current cycle.
+    offset: u32,
+    /// presentation timestamp in nanoseconds.
+    pts: i64,
+    /// decoding timestamp as a difference with pts.
+    dts_offset: i64,
+    /// sequence number, increments with a media specific frequency.
+    seq: u64,
+}
