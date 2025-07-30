@@ -7,6 +7,7 @@ use core::slice;
 
 use alloc::alloc;
 
+use crate::SplitReader;
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
 use crate::{AsReader, Error, Writer};
@@ -297,6 +298,22 @@ where
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
         self.as_slice()
+    }
+}
+
+impl<T> SplitReader<T> for DynamicBuf<T>
+where
+    T: 'static,
+{
+    type TakeReader<'this> = &'this [T];
+
+    #[inline]
+    fn take_reader(&mut self) -> Self::TakeReader<'_> {
+        let ptr = self.data.as_ptr().cast_const();
+        let len = self.len;
+        self.len = 0;
+        // SAFETY: The buffer is guaranteed to be initialized up to `len`.
+        unsafe { slice::from_raw_parts(ptr, len) }
     }
 }
 

@@ -53,6 +53,9 @@ pub use self::writer::Writer;
 mod as_reader;
 pub use self::as_reader::AsReader;
 
+mod split_reader;
+pub use self::split_reader::SplitReader;
+
 mod reader;
 pub use self::reader::Reader;
 

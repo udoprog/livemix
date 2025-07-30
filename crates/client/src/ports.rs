@@ -156,10 +156,8 @@ impl Ports {
 
         port.params.insert(
             Param::ENUM_FORMAT,
-            PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
+            PortParam::new(pod.take().next_object()?.to_owned(), 0),
         );
-
-        pod.clear();
 
         pod.as_mut()
             .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
@@ -174,10 +172,8 @@ impl Ports {
 
         port.params.insert(
             Param::FORMAT,
-            PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
+            PortParam::new(pod.take().next_object()?.to_owned(), 0),
         );
-
-        pod.clear();
 
         pod.as_mut()
             .push_object(ObjectType::PARAM_META, Param::META, |obj| {
@@ -189,7 +185,7 @@ impl Ports {
 
         port.params.insert(
             Param::META,
-            PortParam::new(pod.as_ref().into_typed()?.next_object()?.to_owned(), 0),
+            PortParam::new(pod.take().next_object()?.to_owned(), 0),
         );
 
         ports.push(port);

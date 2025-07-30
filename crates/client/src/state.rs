@@ -108,12 +108,7 @@ impl ClientNodeState {
                 Ok(())
             })?;
 
-        params.insert(
-            Param::ENUM_FORMAT,
-            pod.as_ref().into_typed()?.next_object()?.to_owned(),
-        );
-
-        pod.clear();
+        params.insert(Param::ENUM_FORMAT, pod.take().next_object()?.to_owned());
 
         pod.as_mut()
             .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {

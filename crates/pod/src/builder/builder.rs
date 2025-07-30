@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::SplitReader;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
 use crate::error::ErrorKind;
 use crate::{ArrayBuf, Encode, EncodeInto};
@@ -293,6 +294,32 @@ where
     #[inline]
     pub fn as_mut(&mut self) -> Builder<B::Mut<'_>> {
         Builder::new(self.buf.borrow_mut())
+    }
+}
+
+impl<B> Builder<B>
+where
+    B: SplitReader<u64>,
+{
+    /// Split a builder off.
+    ///
+    /// This will clear the builder which is currently associated with `self`
+    /// and return the data written so far in the pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut pod = pod::array();
+    /// pod.as_mut().push(10i32)?;
+    /// assert_eq!(pod.take().decode::<i32>()?, 10);
+    ///
+    /// pod.as_mut().push(42i32)?;
+    /// assert_eq!(pod.take().decode::<i32>()?, 42);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn take(&mut self) -> Pod<B::TakeReader<'_>> {
+        Pod::new(self.buf.take_reader())
     }
 }
 
