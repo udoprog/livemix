@@ -268,7 +268,7 @@ impl Connection {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
 
-        let Ok(size) = u32::try_from(buf.remaining()) else {
+        let Ok(size) = u32::try_from(buf.bytes_len()) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 

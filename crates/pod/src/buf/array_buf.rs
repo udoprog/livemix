@@ -3,6 +3,7 @@ use core::mem::{self, MaybeUninit};
 use core::slice;
 
 use crate::error::ErrorKind;
+use crate::utils::BytesInhabited;
 use crate::{AsReader, Error, SplitReader, Writer};
 
 use super::CapacityError;
@@ -21,7 +22,7 @@ const DEFAULT_SIZE: usize = 1024;
 ///
 /// let mut buf = ArrayBuf::<128>::from_slice(&[1, 2, 3, 4]);
 /// assert_eq!(buf.len(), 32);
-/// buf.extend_from_words(&[5])?;
+/// buf.extend_from_words(&[5u64])?;
 /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
 /// assert_eq!(buf.len(), 40);
 /// # Ok::<_, pod::buf::CapacityError>(())
@@ -60,16 +61,19 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::ArrayBuf;
     ///
     /// let mut buf = ArrayBuf::default();
-    /// buf.extend_from_words(&[1, 2, 3, 4])?;
+    /// buf.extend_from_words(&[1u64, 2, 3, 4])?;
     /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
-    pub fn extend_from_words(&mut self, words: &[u64]) -> Result<(), CapacityError> {
-        let words_len = words.len().wrapping_mul(mem::size_of::<u64>());
-        let len = self.len.wrapping_add(words_len);
+    pub fn extend_from_words<T>(&mut self, words: &[T]) -> Result<(), CapacityError>
+    where
+        T: BytesInhabited,
+    {
+        let len = words.len().wrapping_mul(mem::size_of::<T>());
+        let new_len = self.len.wrapping_add(len);
 
         // Ensure we have enough space in the buffer.
-        if !(self.len..=N).contains(&len) {
+        if !(self.len..=N).contains(&new_len) {
             return Err(CapacityError);
         }
 
@@ -78,10 +82,10 @@ impl<const N: usize> ArrayBuf<N> {
             self.data
                 .as_mut_ptr()
                 .add(self.len)
-                .copy_from_nonoverlapping(words.as_ptr().cast(), words_len);
+                .copy_from_nonoverlapping(words.as_ptr().cast(), len);
         }
 
-        self.len = len;
+        self.len = new_len;
         Ok(())
     }
 }
@@ -155,7 +159,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut buf = ArrayBuf::default();
     /// assert!(buf.is_empty());
     /// assert_eq!(buf.len(), 0);
-    /// buf.extend_from_words(&[42])?;
+    /// buf.extend_from_words(&[42u64])?;
     /// assert!(!buf.is_empty());
     /// assert_eq!(buf.len(), 8);
     /// # Ok::<_, pod::buf::CapacityError>(())
@@ -174,7 +178,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut buf = ArrayBuf::default();
     /// assert!(buf.is_empty());
     /// assert_eq!(buf.len(), 0);
-    /// buf.extend_from_words(&[42])?;
+    /// buf.extend_from_words(&[42u64])?;
     /// assert!(!buf.is_empty());
     /// assert_eq!(buf.len(), 8);
     /// # Ok::<_, pod::buf::CapacityError>(())
@@ -238,7 +242,7 @@ impl<const N: usize> ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_bytes().len(), 0);
-    /// buf.extend_from_words(&[42])?;
+    /// buf.extend_from_words(&[42u64])?;
     /// assert_eq!(buf.as_bytes(), &expected[..]);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
@@ -257,7 +261,7 @@ impl<const N: usize> ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_slice().len(), 0);
-    /// buf.extend_from_words(&[42])?;
+    /// buf.extend_from_words(&[42u64])?;
     /// assert_eq!(buf.as_slice(), &[42]);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
@@ -281,7 +285,7 @@ impl<const N: usize> ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::default();
     /// assert_eq!(buf.as_slice().len(), 0);
-    /// buf.extend_from_words(&[42])?;
+    /// buf.extend_from_words(&[42u64])?;
     /// assert_eq!(buf.as_slice(), &[42]);
     ///
     /// buf.as_slice_mut()[0] = 43;
@@ -527,13 +531,9 @@ impl<const N: usize> Writer for ArrayBuf<N> {
 
     #[inline]
     fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
-        let Some(full) = bytes.len().checked_add(pad) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
         let len = self
             .len
-            .wrapping_add(full)
+            .wrapping_add(bytes.len().wrapping_add(pad))
             .next_multiple_of(mem::size_of::<u64>());
 
         if !(self.len..=N).contains(&len) {

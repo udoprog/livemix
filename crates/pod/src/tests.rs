@@ -71,7 +71,7 @@ fn test_push_decode_u64() -> Result<(), Error> {
 
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
-    let mut pod = Builder::new(ArrayBuf::<1>::new());
+    let mut pod = Builder::new(ArrayBuf::<8>::new());
     assert!(pod.as_mut().push_none().is_ok());
 
     assert_eq!(
@@ -100,7 +100,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let buf = ArrayBuf::<3>::from_slice(&[1, 2, 3]);
+    let buf = ArrayBuf::<24>::from_slice(&[1, 2, 3]);
     let mut buf = buf.as_slice();
 
     assert_eq!(buf.read::<u64>()?, 1);

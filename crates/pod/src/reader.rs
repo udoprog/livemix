@@ -76,6 +76,23 @@ where
     fn as_bytes(&self) -> &[u8];
 
     /// Returns the length of the bytes in the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Reader};
+    ///
+    /// let array = ArrayBuf::<24>::from_slice(&[1u64, 2, 3]);
+    /// let mut buf = array.as_slice();
+    ///
+    /// assert_eq!(buf.bytes_len(), 24);
+    /// assert_eq!(buf.read::<[u64; 1]>()?, [1]);
+    /// assert_eq!(buf.bytes_len(), 16);
+    /// assert_eq!(buf.as_slice(), &[2, 3]);
+    /// assert_eq!(buf.read::<[u64; 2]>()?, [2, 3]);
+    /// assert_eq!(buf.bytes_len(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     fn bytes_len(&self) -> usize;
 
     /// Returns the slice of remaining data to be read.
