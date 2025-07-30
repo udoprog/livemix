@@ -37,7 +37,7 @@ use crate::{Error, Pod, Type, Writer};
 /// })?;
 /// # Ok::<_, pod::Error>(())
 /// ```
-pub struct ArrayEncoder<W, K>
+pub struct ArrayBuilder<W, K>
 where
     W: Writer<u64>,
 {
@@ -48,7 +48,7 @@ where
     child_type: Type,
 }
 
-impl<W, K> ArrayEncoder<W, K>
+impl<W, K> ArrayBuilder<W, K>
 where
     W: Writer<u64>,
     K: PodKind,

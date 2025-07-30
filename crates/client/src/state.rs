@@ -98,14 +98,14 @@ impl ClientNodeState {
 
         pod.as_mut()
             .push_object(id::ObjectType::FORMAT, id::Param::ENUM_FORMAT, |obj| {
-                obj.property(id::Format::MEDIA_TYPE, 0)?
+                obj.property(id::Format::MEDIA_TYPE)?
                     .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                obj.property(id::Format::MEDIA_SUB_TYPE)?
                     .push(id::MediaSubType::RAW)?;
-                obj.property(id::Format::AUDIO_FORMAT, 0)?
+                obj.property(id::Format::AUDIO_FORMAT)?
                     .push(id::AudioFormat::S16)?;
-                obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
+                obj.property(id::Format::AUDIO_CHANNELS)?.push(1u32)?;
+                obj.property(id::Format::AUDIO_RATE)?.push(44100u32)?;
                 Ok(())
             })?;
 
@@ -118,14 +118,14 @@ impl ClientNodeState {
 
         pod.as_mut()
             .push_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
-                obj.property(id::Format::MEDIA_TYPE, 0)?
+                obj.property(id::Format::MEDIA_TYPE)?
                     .push(id::MediaType::AUDIO)?;
-                obj.property(id::Format::MEDIA_SUB_TYPE, 0)?
+                obj.property(id::Format::MEDIA_SUB_TYPE)?
                     .push(id::MediaSubType::RAW)?;
-                obj.property(id::Format::AUDIO_FORMAT, 0)?
+                obj.property(id::Format::AUDIO_FORMAT)?
                     .push(id::AudioFormat::S16)?;
-                obj.property(id::Format::AUDIO_CHANNELS, 0)?.push(1u32)?;
-                obj.property(id::Format::AUDIO_RATE, 0)?.push(44100u32)?;
+                obj.property(id::Format::AUDIO_CHANNELS)?.push(1u32)?;
+                obj.property(id::Format::AUDIO_RATE)?.push(44100u32)?;
                 Ok(())
             })?;
 

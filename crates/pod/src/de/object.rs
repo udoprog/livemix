@@ -78,9 +78,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.push(1i32)?;
-    ///     obj.property(2, 20)?.push(2i32)?;
-    ///     obj.property(3, 30)?.push(3i32)?;
+    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -89,17 +89,17 @@ where
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
-    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
-    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
-    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
@@ -119,9 +119,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.push(1i32)?;
-    ///     obj.property(2, 20)?.push(2i32)?;
-    ///     obj.property(3, 30)?.push(3i32)?;
+    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -130,17 +130,17 @@ where
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
-    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
-    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
-    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
@@ -188,9 +188,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.push(1i32)?;
-    ///     obj.property(2, 20)?.push(2i32)?;
-    ///     obj.property(3, 30)?.push(3i32)?;
+    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -201,17 +201,17 @@ where
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
-    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
-    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
-    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
@@ -244,9 +244,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.push(1i32)?;
-    ///     obj.property(2, 20)?.push(2i32)?;
-    ///     obj.property(3, 30)?.push(3i32)?;
+    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -257,17 +257,17 @@ where
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
-    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
-    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
-    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
@@ -293,9 +293,9 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_object(10, 20, |obj| {
-///     obj.property(1, 10)?.push(1i32)?;
-///     obj.property(2, 20)?.push(2i32)?;
-///     obj.property(3, 30)?.push(3i32)?;
+///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
@@ -311,17 +311,17 @@ where
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
-/// assert_eq!(p.flags(), 10);
+/// assert_eq!(p.flags(), 0b001);
 /// assert_eq!(p.value().next::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
-/// assert_eq!(p.flags(), 20);
+/// assert_eq!(p.flags(), 0b010);
 /// assert_eq!(p.value().next::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
-/// assert_eq!(p.flags(), 30);
+/// assert_eq!(p.flags(), 0b100);
 /// assert_eq!(p.value().next::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());

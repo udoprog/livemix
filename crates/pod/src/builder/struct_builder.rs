@@ -2,7 +2,7 @@ use crate::{EncodeInto, Error, Pod, PodKind, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
-pub struct StructEncoder<W, K>
+pub struct StructBuilder<W, K>
 where
     W: Writer<u64>,
 {
@@ -11,7 +11,7 @@ where
     header: W::Pos,
 }
 
-impl<W, K> StructEncoder<W, K>
+impl<W, K> StructBuilder<W, K>
 where
     W: Writer<u64>,
     K: PodKind,

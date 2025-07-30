@@ -6,8 +6,8 @@ use alloc::boxed::Box;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
 use crate::de::{Array, Choice, Object, Sequence, Struct};
-use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
 use crate::{ArrayBuf, DecodeFrom, Encode, EncodeInto};
 use crate::{
@@ -461,9 +461,9 @@ where
     pub fn push_array(
         self,
         child_type: Type,
-        f: impl FnOnce(&mut ArrayEncoder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ArrayBuilder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut encoder = ArrayEncoder::to_writer(self.buf, self.kind, child_type)?;
+        let mut encoder = ArrayBuilder::to_writer(self.buf, self.kind, child_type)?;
         f(&mut encoder)?;
         encoder.close()?;
         Ok(())
@@ -532,10 +532,10 @@ where
         self,
         child_type: Type,
         child_size: usize,
-        f: impl FnOnce(&mut ArrayEncoder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ArrayBuilder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
         let mut array =
-            ArrayEncoder::to_writer_unsized(self.buf, self.kind, child_size, child_type)?;
+            ArrayBuilder::to_writer_unsized(self.buf, self.kind, child_size, child_type)?;
         f(&mut array)?;
         array.close()?;
         Ok(())
@@ -560,9 +560,9 @@ where
     #[inline]
     pub fn push_struct(
         self,
-        f: impl FnOnce(&mut StructEncoder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut StructBuilder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut encoder = StructEncoder::to_writer(self.buf, self.kind)?;
+        let mut encoder = StructBuilder::to_writer(self.buf, self.kind)?;
         f(&mut encoder)?;
         encoder.close()?;
         Ok(())
@@ -577,9 +577,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 0)?.push(1i32)?;
-    ///     obj.property(2, 0)?.push(2i32)?;
-    ///     obj.property(3, 0)?.push(3i32)?;
+    ///     obj.property(1)?.push(1i32)?;
+    ///     obj.property(2)?.push(2i32)?;
+    ///     obj.property(3)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
@@ -589,9 +589,9 @@ where
         self,
         object_type: impl RawId,
         object_id: impl RawId,
-        f: impl FnOnce(&mut ObjectEncoder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ObjectBuilder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut encoder = ObjectEncoder::to_writer(
+        let mut encoder = ObjectBuilder::to_writer(
             self.buf,
             self.kind,
             object_type.into_id(),
@@ -621,9 +621,9 @@ where
     #[inline]
     pub fn encode_sequence(
         self,
-        f: impl FnOnce(&mut SequenceEncoder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut SequenceBuilder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut encoder = SequenceEncoder::to_writer(self.buf, self.kind)?;
+        let mut encoder = SequenceBuilder::to_writer(self.buf, self.kind)?;
         f(&mut encoder)?;
         encoder.close()?;
         Ok(())
@@ -648,9 +648,9 @@ where
         self,
         choice: ChoiceType,
         child_type: Type,
-        f: impl FnOnce(&mut ChoiceEncoder<B, K>) -> Result<(), Error>,
+        f: impl FnOnce(&mut ChoiceBuilder<B, K>) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let mut encoder = ChoiceEncoder::to_writer(self.buf, self.kind, choice, child_type)?;
+        let mut encoder = ChoiceBuilder::to_writer(self.buf, self.kind, choice, child_type)?;
         f(&mut encoder)?;
         encoder.close()?;
         Ok(())
@@ -970,9 +970,9 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 10)?.push(1i32)?;
-    ///     obj.property(2, 20)?.push(2i32)?;
-    ///     obj.property(3, 30)?.push(3i32)?;
+    ///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+    ///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+    ///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     ///
@@ -981,17 +981,17 @@ where
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
-    /// assert_eq!(p.flags(), 10);
+    /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().next::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
-    /// assert_eq!(p.flags(), 20);
+    /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().next::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
-    /// assert_eq!(p.flags(), 30);
+    /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().next::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
@@ -1240,9 +1240,9 @@ where
 ///
 /// let mut pod = Pod::array();
 /// pod.as_mut().push_object(10, 20, |obj| {
-///     obj.property(1, 10)?.push(1i32)?;
-///     obj.property(2, 20)?.push(2i32)?;
-///     obj.property(3, 30)?.push(3i32)?;
+///     obj.property_with_flags(1, 0b001)?.push(1i32)?;
+///     obj.property_with_flags(2, 0b010)?.push(2i32)?;
+///     obj.property_with_flags(3, 0b100)?.push(3i32)?;
 ///     Ok(())
 /// })?;
 ///
@@ -1254,17 +1254,17 @@ where
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
-/// assert_eq!(p.flags(), 10);
+/// assert_eq!(p.flags(), 0b001);
 /// assert_eq!(p.value().next::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
-/// assert_eq!(p.flags(), 20);
+/// assert_eq!(p.flags(), 0b010);
 /// assert_eq!(p.value().next::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
-/// assert_eq!(p.flags(), 30);
+/// assert_eq!(p.flags(), 0b100);
 /// assert_eq!(p.value().next::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());

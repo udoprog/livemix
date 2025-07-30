@@ -367,10 +367,10 @@ fn test_format_object() -> Result<(), Error> {
     let mut pod = Pod::array();
 
     pod.as_mut().push_object(10, 20, |obj| {
-        obj.property(1, 0b100)?.push(1i32)?;
-        obj.property(2, 0b010)?.push(2i32)?;
+        obj.property_with_flags(1, 0b100)?.push(1i32)?;
+        obj.property_with_flags(2, 0b010)?.push(2i32)?;
 
-        obj.property(3, 0b001)?.push_struct(|st| {
+        obj.property_with_flags(3, 0b001)?.push_struct(|st| {
             st.field().push(*b"hello world")?;
             st.field().push(Rectangle::new(800, 600))?;
             st.field().push(*b"goodbye world")?;

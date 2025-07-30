@@ -87,3 +87,5 @@ pub use self::fd::Fd;
 
 mod choice;
 pub use self::choice::ChoiceType;
+
+pub mod builder;

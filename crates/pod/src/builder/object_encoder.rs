@@ -3,7 +3,7 @@ use core::mem;
 use crate::{Error, Pod, PodKind, RawId, Type, Writer};
 
 /// An encoder for an object.
-pub struct ObjectEncoder<W, K>
+pub struct ObjectBuilder<W, K>
 where
     W: Writer<u64>,
 {
@@ -16,7 +16,7 @@ where
     object_id: u32,
 }
 
-impl<W, K> ObjectEncoder<W, K>
+impl<W, K> ObjectBuilder<W, K>
 where
     W: Writer<u64>,
     K: PodKind,
@@ -55,15 +55,40 @@ where
     ///
     /// let mut pod = Pod::array();
     /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1, 0)?.push(1i32)?;
-    ///     obj.property(2, 0)?.push(2i32)?;
-    ///     obj.property(3, 0)?.push(3i32)?;
+    ///     obj.property(1)?.push(1i32)?;
+    ///     obj.property(2)?.push(2i32)?;
+    ///     obj.property(3)?.push(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property(&mut self, key: impl RawId, flags: u32) -> Result<Pod<W::Mut<'_>>, Error> {
+    pub fn property(&mut self, key: impl RawId) -> Result<Pod<W::Mut<'_>>, Error> {
+        self.property_with_flags(key, 0)
+    }
+
+    /// Encode a property with flags into the object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = Pod::array();
+    /// pod.as_mut().push_object(10, 20, |obj| {
+    ///     obj.property_with_flags(1, 0b1001)?.push(1i32)?;
+    ///     obj.property_with_flags(2, 0b1001)?.push(2i32)?;
+    ///     obj.property_with_flags(3, 0b1001)?.push(3i32)?;
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn property_with_flags(
+        &mut self,
+        key: impl RawId,
+        flags: u32,
+    ) -> Result<Pod<W::Mut<'_>>, Error> {
         self.writer.write([key.into_id(), flags])?;
         Ok(Pod::new(self.writer.borrow_mut()))
     }

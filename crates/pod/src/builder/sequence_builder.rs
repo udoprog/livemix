@@ -4,7 +4,7 @@ use crate::{Error, Pod, PodKind, Type, Writer};
 
 /// An encoder for a sequence.
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
-pub struct SequenceEncoder<W, K>
+pub struct SequenceBuilder<W, K>
 where
     W: Writer<u64>,
 {
@@ -15,7 +15,7 @@ where
     pad: u32,
 }
 
-impl<W, K> SequenceEncoder<W, K>
+impl<W, K> SequenceBuilder<W, K>
 where
     W: Writer<u64>,
     K: PodKind,

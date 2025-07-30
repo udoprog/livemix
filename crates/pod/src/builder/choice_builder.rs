@@ -5,7 +5,7 @@ use crate::pod::{ChildPod, PodKind};
 use crate::{ChoiceType, Error, Pod, Type, Writer};
 
 /// An encoder for a choice.
-pub struct ChoiceEncoder<W, K>
+pub struct ChoiceBuilder<W, K>
 where
     W: Writer<u64>,
 {
@@ -20,7 +20,7 @@ where
     child_type: Type,
 }
 
-impl<W, K> ChoiceEncoder<W, K>
+impl<W, K> ChoiceBuilder<W, K>
 where
     W: Writer<u64>,
     K: PodKind,
