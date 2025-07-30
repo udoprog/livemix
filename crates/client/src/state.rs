@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use anyhow::{Context, Result, bail};
 use pod::{DynamicBuf, Fd, Object, Pod, Struct};
 use protocol::Connection;
+use protocol::buf::RecvBuf;
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
@@ -316,7 +317,7 @@ impl State {
     }
 
     /// Process client.
-    pub fn run(&mut self, recv: &mut DynamicBuf) -> Result<()> {
+    pub fn run(&mut self, recv: &mut RecvBuf) -> Result<()> {
         'next: loop {
             while let Some(op) = self.ops.pop_front() {
                 match op {
@@ -1302,10 +1303,7 @@ impl State {
 }
 
 /// Read a frame from the current buffer.
-fn frame<'buf>(
-    buf: &'buf mut DynamicBuf<u64>,
-    header: &Header,
-) -> Result<Option<Pod<&'buf [u64]>>> {
+fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<&'buf [u64]>>> {
     let size = header.size() as usize;
 
     if size % <DynamicBuf<u64>>::WORD_SIZE != 0 {

@@ -5,7 +5,7 @@ use core::fmt;
 use std::io;
 
 #[cfg(feature = "alloc")]
-use pod::buf::AllocError;
+use crate::buf::AllocError;
 
 #[non_exhaustive]
 pub struct Error {
@@ -52,6 +52,7 @@ impl From<pod::Error> for Error {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl From<AllocError> for Error {
     #[inline]
     fn from(e: AllocError) -> Self {

@@ -9,10 +9,11 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
-use pod::{AsReader, DynamicBuf, Pod, Reader};
+use pod::{AsReader, Pod, Reader};
 use tracing::Level;
 
 use crate::Error;
+use crate::buf::{RecvBuf, SendBuf};
 use crate::error::ErrorKind;
 use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
@@ -34,7 +35,7 @@ impl AsRawFd for Connection {
 pub struct Connection {
     socket: UnixStream,
     message_sequence: u32,
-    outgoing: DynamicBuf,
+    outgoing: SendBuf,
     interest: Interest,
     modified: ChangeInterest,
 }
@@ -70,7 +71,7 @@ impl Connection {
         Ok(Self {
             socket,
             message_sequence: 0,
-            outgoing: DynamicBuf::new(),
+            outgoing: SendBuf::new(),
             interest: Interest::READ | Interest::HUP | Interest::ERROR,
             modified: ChangeInterest::Unchanged,
         })
@@ -153,11 +154,7 @@ impl Connection {
     }
 
     /// Receive file descriptors from the server.
-    pub fn recv_with_fds(
-        &mut self,
-        recv: &mut DynamicBuf,
-        fds: &mut [RawFd],
-    ) -> Result<usize, Error> {
+    pub fn recv_with_fds(&mut self, recv: &mut RecvBuf, fds: &mut [RawFd]) -> Result<usize, Error> {
         const {
             assert!(mem::align_of::<MaybeUninit<[u64; 16]>>() >= mem::align_of::<libc::cmsghdr>());
         }

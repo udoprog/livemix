@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use pod::DynamicBuf;
+use protocol::buf::RecvBuf;
 use protocol::poll::{ChangeInterest, Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd};
 
@@ -17,7 +18,7 @@ fn main() -> Result<()> {
     let timer = TimerFd::new()?;
     timer.set_nonblocking(true)?;
 
-    let mut recv = DynamicBuf::new();
+    let mut recv = RecvBuf::new();
     let mut state = client::State::new(c);
 
     let conn_token = state.token()?;
