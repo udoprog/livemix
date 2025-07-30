@@ -562,6 +562,30 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         self.len = len;
         Ok(())
     }
+
+    #[inline]
+    fn pad(&mut self, align: usize) -> Result<(), Error> {
+        let remaining = self.len % align;
+
+        if remaining == 0 {
+            return Ok(());
+        }
+
+        let pad = align - remaining;
+        let new_len = self.len.wrapping_add(pad);
+
+        if !(self.len..=N).contains(&new_len) {
+            return Err(Error::new(ErrorKind::CapacityError(CapacityError)));
+        }
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data.as_mut_ptr().add(self.len).write_bytes(0, pad);
+        }
+
+        self.len = new_len;
+        Ok(())
+    }
 }
 
 impl<const N: usize> AsReader for ArrayBuf<N> {

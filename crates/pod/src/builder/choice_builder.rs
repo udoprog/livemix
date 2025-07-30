@@ -81,7 +81,7 @@ where
     /// ```
     #[inline]
     pub fn child(&mut self) -> Builder<W::Mut<'_>, ChildPod> {
-        Builder::new_child(self.writer.borrow_mut(), self.child_size, self.child_type)
+        Builder::new_unpadded_child(self.writer.borrow_mut(), self.child_size, self.child_type)
     }
 
     #[inline]

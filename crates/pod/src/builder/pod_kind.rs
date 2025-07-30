@@ -15,18 +15,6 @@ mod sealed {
     impl Sealed for ControlChild {}
 }
 
-/// An unlimited pod.
-#[derive(Clone, Copy, Debug)]
-#[non_exhaustive]
-pub struct EnvelopePod;
-
-/// A pod limited for a specific child type and size.
-#[derive(Clone, Copy, Debug)]
-pub struct ChildPod {
-    pub(crate) size: usize,
-    pub(crate) ty: Type,
-}
-
 pub trait PodKind
 where
     Self: self::sealed::Sealed,
@@ -78,46 +66,10 @@ where
     }
 }
 
-impl PodKind for ChildPod {
-    const ENVELOPE: bool = false;
-
-    #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
-    where
-        T: Encode,
-    {
-        self.check(T::TYPE, T::SIZE)?;
-        value.write_content(buf)
-    }
-
-    #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
-    where
-        T: ?Sized + EncodeUnsized,
-    {
-        self.check(T::TYPE, value.size())?;
-        value.write_content(buf)
-    }
-
-    #[inline]
-    fn check(&self, ty: Type, size: usize) -> Result<(), Error> {
-        if self.ty != ty {
-            return Err(Error::new(ErrorKind::Expected {
-                expected: self.ty,
-                actual: ty,
-            }));
-        }
-
-        if size > self.size {
-            return Err(Error::new(ErrorKind::ChildSizeMismatch {
-                expected: self.size,
-                actual: size,
-            }));
-        }
-
-        Ok(())
-    }
-}
+/// An unlimited pod.
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct EnvelopePod;
 
 impl PodKind for EnvelopePod {
     const ENVELOPE: bool = true;
@@ -150,6 +102,67 @@ impl PodKind for EnvelopePod {
 
     #[inline]
     fn check(&self, _: Type, _: usize) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+/// A pod limited for a specific child type and size.
+#[derive(Clone, Copy, Debug)]
+pub struct ChildPod {
+    pub(crate) size: usize,
+    pub(crate) ty: Type,
+    pub(crate) padded: bool,
+}
+
+impl PodKind for ChildPod {
+    const ENVELOPE: bool = false;
+
+    #[inline]
+    fn push<T>(&self, value: T, mut buf: impl Writer) -> Result<(), Error>
+    where
+        T: Encode,
+    {
+        self.check(T::TYPE, T::SIZE)?;
+        value.write_content(buf.borrow_mut())?;
+
+        if self.padded {
+            buf.pad(8)?;
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn push_unsized<T>(&self, value: &T, mut buf: impl Writer) -> Result<(), Error>
+    where
+        T: ?Sized + EncodeUnsized,
+    {
+        self.check(T::TYPE, value.size())?;
+        value.write_content(buf.borrow_mut())?;
+
+        if self.padded {
+            buf.pad(8)?;
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn check(&self, ty: Type, size: usize) -> Result<(), Error> {
+        if self.ty != ty {
+            return Err(Error::new(ErrorKind::Expected {
+                expected: self.ty,
+                actual: ty,
+            }));
+        }
+
+        if size > self.size {
+            return Err(Error::new(ErrorKind::ChildSizeMismatch {
+                expected: self.size,
+                actual: size,
+            }));
+        }
+
         Ok(())
     }
 }

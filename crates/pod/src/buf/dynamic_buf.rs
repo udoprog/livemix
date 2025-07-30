@@ -429,6 +429,28 @@ impl Writer for DynamicBuf {
         self.len = len;
         Ok(())
     }
+
+    #[inline]
+    fn pad(&mut self, align: usize) -> Result<(), Error> {
+        let remaining = self.len % align;
+
+        if remaining == 0 {
+            return Ok(());
+        }
+
+        let pad = align - remaining;
+        let new_len = self.len.wrapping_add(pad);
+
+        self.reserve(new_len)?;
+
+        // SAFETY: We are writing to a valid position in the buffer.
+        unsafe {
+            self.data.as_ptr().add(self.len).write_bytes(0, pad);
+        }
+
+        self.len = new_len;
+        Ok(())
+    }
 }
 
 impl fmt::Debug for DynamicBuf {

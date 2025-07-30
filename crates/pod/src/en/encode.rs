@@ -32,7 +32,7 @@ impl Encode for bool {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(&[if *self { 1u32 } else { 0u32 }, 0u32])
+        writer.write(&[if *self { 1u32 } else { 0u32 }])
     }
 }
 
@@ -59,7 +59,7 @@ where
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(&[self.0.into_id(), 0])
+        writer.write(&[self.0.into_id()])
     }
 }
 
@@ -81,7 +81,7 @@ impl Encode for i32 {
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(&[self.cast_unsigned(), 0])
+        writer.write(&[self.cast_unsigned()])
     }
 }
 

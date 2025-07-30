@@ -56,6 +56,9 @@ where
 
     /// Write bytes to the writer.
     fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error>;
+
+    /// Pad the writer to the given alignment.
+    fn pad(&mut self, align: usize) -> Result<(), Error>;
 }
 
 impl<W> Writer for &mut W
@@ -106,5 +109,10 @@ where
     #[inline]
     fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
         (**self).write_bytes(bytes, pad)
+    }
+
+    #[inline]
+    fn pad(&mut self, align: usize) -> Result<(), Error> {
+        (**self).pad(align)
     }
 }

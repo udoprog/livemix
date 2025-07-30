@@ -224,7 +224,23 @@ impl<B> Builder<B, ChildPod> {
     pub(crate) const fn new_child(buf: B, size: usize, ty: Type) -> Self {
         Builder {
             buf,
-            kind: ChildPod { size, ty },
+            kind: ChildPod {
+                size,
+                ty,
+                padded: true,
+            },
+        }
+    }
+
+    /// Construct a new child pod.
+    pub(crate) const fn new_unpadded_child(buf: B, size: usize, ty: Type) -> Self {
+        Builder {
+            buf,
+            kind: ChildPod {
+                size,
+                ty,
+                padded: true,
+            },
         }
     }
 }
