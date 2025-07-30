@@ -30,8 +30,7 @@ impl fmt::Display for AllocError {
 pub struct DynamicBuf<T = u64> {
     data: ptr::NonNull<T>,
     cap: usize,
-    read: usize,
-    write: usize,
+    len: usize,
 }
 
 impl<T> DynamicBuf<T> {
@@ -62,8 +61,7 @@ impl<T> DynamicBuf<T> {
         DynamicBuf {
             data: ptr::NonNull::<T>::dangling().cast(),
             cap: 0,
-            read: 0,
-            write: 0,
+            len: 0,
         }
     }
 
@@ -82,7 +80,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     #[inline]
     pub fn len(&self) -> usize {
-        self.write - self.read
+        self.len
     }
 
     /// Test if the buffer is empty.
@@ -100,7 +98,7 @@ impl<T> DynamicBuf<T> {
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.read == self.write
+        self.len == 0
     }
 
     /// Clear the contents of the buffer.
@@ -120,15 +118,11 @@ impl<T> DynamicBuf<T> {
     /// ```
     #[inline]
     pub fn clear(&mut self) {
-        let read = mem::take(&mut self.read);
-        let write = mem::take(&mut self.write);
+        let write = mem::take(&mut self.len);
 
         if mem::needs_drop::<T>() {
             unsafe {
-                ptr::drop_in_place(slice::from_raw_parts_mut(
-                    self.data.as_ptr().add(read),
-                    write - read,
-                ));
+                ptr::drop_in_place(slice::from_raw_parts_mut(self.data.as_ptr(), write));
             }
         }
     }
@@ -149,7 +143,28 @@ impl<T> DynamicBuf<T> {
     #[inline]
     pub fn as_slice(&self) -> &[T] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+        unsafe { slice::from_raw_parts(self.data.as_ptr().cast_const(), self.len()) }
+    }
+
+    /// Returns the mutable slice of data in the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::DynamicBuf;
+    ///
+    /// let mut buf = DynamicBuf::<u64>::new();
+    /// assert_eq!(buf.as_slice().len(), 0);
+    /// buf.extend_from_words(&[1, 2, 3, 4])?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
+    /// buf.as_slice_mut()[2] = 5;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 5, 4]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn as_slice_mut(&mut self) -> &mut [T] {
+        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
+        unsafe { slice::from_raw_parts_mut(self.data.as_ptr(), self.len()) }
     }
 
     /// Extend the buffer with a slice of words.
@@ -168,14 +183,17 @@ impl<T> DynamicBuf<T> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn extend_from_words(&mut self, words: &[T]) -> Result<(), AllocError> {
-        self.reserve(self.write + words.len())?;
+    pub fn extend_from_words(&mut self, words: &[T]) -> Result<(), AllocError>
+    where
+        T: BytesInhabited,
+    {
+        self.reserve(self.len + words.len())?;
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
             self.data
                 .as_ptr()
-                .add(self.write)
+                .add(self.len)
                 .copy_from_nonoverlapping(words.as_ptr(), words.len());
 
             self.advance_written(words.len());
@@ -193,7 +211,7 @@ impl<T> DynamicBuf<T> {
     /// has previously been written to.
     #[inline]
     unsafe fn advance_written(&mut self, n: usize) {
-        let write = self.write + n;
+        let write = self.len + n;
 
         // Debug assertion, since this is an internal API.
         debug_assert!(
@@ -202,12 +220,7 @@ impl<T> DynamicBuf<T> {
             self.cap
         );
 
-        self.write = write;
-    }
-
-    #[inline]
-    fn as_ptr(&self) -> *const T {
-        self.data.as_ptr().wrapping_add(self.read).cast_const()
+        self.len = write;
     }
 
     /// Ensure up to the given length is reserved.
@@ -222,7 +235,7 @@ impl<T> DynamicBuf<T> {
             0 => unsafe {
                 let layout = Layout::array::<T>(new_cap).map_err(|_| AllocError)?;
 
-                let data = alloc::alloc_zeroed(layout);
+                let data = alloc::alloc(layout);
 
                 if data.is_null() {
                     return Err(AllocError);
@@ -240,9 +253,6 @@ impl<T> DynamicBuf<T> {
                     return Err(AllocError);
                 }
 
-                data.cast::<T>()
-                    .wrapping_add(self.cap)
-                    .write_bytes(0, new_cap - self.cap);
                 ptr::NonNull::new_unchecked(data)
             },
         };
@@ -265,8 +275,7 @@ impl<T> DynamicBuf<T> {
 
             self.data = ptr::NonNull::<T>::dangling().cast();
             self.cap = 0;
-            self.read = 0;
-            self.write = 0;
+            self.len = 0;
         }
     }
 }
@@ -315,7 +324,7 @@ where
 
     #[inline]
     fn reserve_words(&mut self, words: &[T]) -> Result<Self::Pos, Error> {
-        let write = self.write.wrapping_add(words.len());
+        let write = self.len.wrapping_add(words.len());
 
         self.reserve(write)?;
 
@@ -323,22 +332,22 @@ where
         unsafe {
             self.data
                 .as_ptr()
-                .add(self.write)
+                .add(self.len)
                 .copy_from_nonoverlapping(words.as_ptr().cast(), words.len());
         }
 
         let pos = Pos {
-            write: self.write,
+            write: self.len,
             len: words.len(),
         };
 
-        self.write = write;
+        self.len = write;
         Ok(pos)
     }
 
     #[inline]
     fn distance_from(&self, pos: Self::Pos) -> usize {
-        self.write
+        self.len
             .wrapping_sub(pos.write)
             .wrapping_mul(Self::WORD_SIZE)
     }
@@ -360,11 +369,11 @@ where
             }));
         }
 
-        if write.wrapping_add(len) > self.write {
+        if write.wrapping_add(len) > self.len {
             return Err(Error::new(ErrorKind::ReservedOverflow {
                 write,
                 len,
-                capacity: self.write,
+                capacity: self.len,
             }));
         }
 
@@ -388,19 +397,19 @@ where
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
-        let write = self.write.wrapping_add(full.div_ceil(Self::WORD_SIZE));
+        let write = self.len.wrapping_add(full.div_ceil(Self::WORD_SIZE));
 
         self.reserve(write)?;
 
         // SAFETY: We are writing to a valid position in the buffer.
         unsafe {
-            let ptr = self.data.as_ptr().wrapping_add(self.write).cast::<u8>();
+            let ptr = self.data.as_ptr().wrapping_add(self.len).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
             let pad = Self::WORD_SIZE - bytes.len() % Self::WORD_SIZE;
             ptr.wrapping_add(bytes.len()).write_bytes(0, pad);
         }
 
-        self.write = write;
+        self.len = write;
         Ok(())
     }
 }

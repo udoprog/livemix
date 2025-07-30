@@ -196,7 +196,7 @@ impl Client {
 
         const PROPS: &[(&str, &str)] = &[("node.name", "livemix_node")];
 
-        let mut pod = Pod::array();
+        let mut pod = Pod::dynamic();
 
         let mut change_mask = flags::ClientNodeUpdate::NONE;
         change_mask |= flags::ClientNodeUpdate::PARAMS;
@@ -264,7 +264,7 @@ impl Client {
             (id::Param::LATENCY, flags::Param::WRITE),
         ];
 
-        let mut pod = Pod::array();
+        let mut pod = Pod::dynamic();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
         change_mask |= flags::ClientNodePortUpdate::PARAMS;

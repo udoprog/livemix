@@ -4,6 +4,8 @@ use core::mem;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
+#[cfg(feature = "alloc")]
+use crate::DynamicBuf;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::en::{ArrayEncoder, ChoiceEncoder, ObjectEncoder, SequenceEncoder, StructEncoder};
 use crate::error::ErrorKind;
@@ -171,7 +173,48 @@ where
     }
 }
 
-impl Pod<ArrayBuf<u64>> {
+#[cfg(feature = "alloc")]
+impl Pod<DynamicBuf> {
+    /// Construct a new [`Pod`] with a 128 word-sized array buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::dynamic();
+    /// pod.as_mut().push(10i32)?;
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub const fn dynamic() -> Self {
+        Self::new(DynamicBuf::new())
+    }
+
+    /// Clear the current builder.
+    ///
+    /// This will clear the buffer and reset the pod to an empty state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Pod;
+    ///
+    /// let mut pod = Pod::dynamic();
+    /// pod.as_mut().push(10i32)?;
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// pod.clear();
+    /// pod.as_mut().push(20i32)?;
+    /// assert_eq!(pod.as_ref().next::<i32>()?, 20i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn clear(&mut self) {
+        self.buf.clear();
+    }
+}
+
+impl Pod<ArrayBuf> {
     /// Construct a new [`Pod`] with a 128 word-sized array buffer.
     ///
     /// # Examples
