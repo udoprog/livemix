@@ -61,8 +61,8 @@ macro_rules! __id {
 
             impl<'de> $crate::Readable<'de> for $ty {
                 #[inline]
-                fn read_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
-                    pod.next()
+                fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
+                    pod.next()?.next()
                 }
             }
 
@@ -237,8 +237,8 @@ macro_rules! __consts {
 
             impl<'de> $crate::Readable<'de> for $ty {
                 #[inline]
-                fn read_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
-                    pod.next()
+                fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
+                    pod.next()?.next()
                 }
             }
 
@@ -433,8 +433,8 @@ macro_rules! __flags {
 
             impl<'de> $crate::Readable<'de> for $ty {
                 #[inline]
-                fn read_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
-                    pod.next()
+                fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
+                    pod.next()?.next()
                 }
             }
 
@@ -654,8 +654,8 @@ macro_rules! __decode_from_sized {
         $(where $($where)*)*
         {
             #[inline]
-            fn read_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
-                pod.next()
+            fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
+                pod.next()?.next()
             }
         }
     };
@@ -663,8 +663,8 @@ macro_rules! __decode_from_sized {
     ($ty:ty) => {
         impl<'de> $crate::Readable<'de> for $ty {
             #[inline]
-            fn read_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
-                pod.next()
+            fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
+                pod.next()?.next()
             }
         }
     };
@@ -676,10 +676,8 @@ macro_rules! __decode_from_borrowed {
     ($ty:ty) => {
         impl<'de> $crate::Readable<'de> for &'de $ty {
             #[inline]
-            fn read_from(
-                pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>,
-            ) -> Result<Self, $crate::Error> {
-                pod.next_unsized()
+            fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
+                pod.next()?.next_unsized()
             }
         }
     };

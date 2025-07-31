@@ -3,13 +3,14 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::PodStream;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
 use crate::{
-    AsSlice, ChoiceType, EncodeUnsized, Error, PackedPod, Pod, Readable, Reader, Slice, Type,
-    TypedPod, Writer,
+    AsSlice, ChoiceType, EncodeUnsized, Error, PackedPod, Readable, Reader, Slice, Type, TypedPod,
+    Writer,
 };
 
 /// A decoder for a choice.
@@ -259,7 +260,7 @@ where
     where
         T: Readable<'de>,
     {
-        T::read_from(Pod::packed(self.buf.borrow_mut()))
+        T::read_from(self)
     }
 
     /// Get the next element in the array.
@@ -395,6 +396,20 @@ where
             self.child_type,
             self.remaining,
         )
+    }
+}
+
+impl<'de, B> PodStream<'de> for Choice<B>
+where
+    B: Reader<'de>,
+{
+    #[inline]
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+        let Some(pod) = self.next() else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        Ok(pod)
     }
 }
 

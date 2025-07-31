@@ -3,9 +3,10 @@ use core::fmt;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
+use crate::error::ErrorKind;
 use crate::{
-    ArrayBuf, AsSlice, Decode, DecodeUnsized, EncodeUnsized, Error, PackedPod, ReadPod, Readable,
-    Reader, Slice, Type, TypedPod, Visitor, Writer,
+    ArrayBuf, AsSlice, Decode, DecodeUnsized, EncodeUnsized, Error, PackedPod, PodStream, ReadPod,
+    Readable, Reader, Slice, Type, TypedPod, Visitor, Writer,
 };
 #[cfg(feature = "alloc")]
 use crate::{DynamicBuf, PaddedPod};
@@ -246,11 +247,11 @@ where
     /// assert_eq!(d, 2u32);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn read<T>(self) -> Result<T, Error>
+    pub fn read<T>(mut self) -> Result<T, Error>
     where
         T: Readable<'de>,
     {
-        T::read_from(self)
+        T::read_from(&mut self)
     }
 
     /// Encode a value from the pod.
@@ -722,6 +723,24 @@ where
     #[inline]
     pub fn as_ref(&self) -> Pod<Slice<'_>, P> {
         Pod::with_kind(self.buf.as_slice(), self.kind)
+    }
+}
+
+impl<'de, B, P> PodStream<'de> for Pod<B, P>
+where
+    B: Reader<'de>,
+    P: ReadPod,
+{
+    #[inline]
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+        let (size, ty) = self.buf.header()?;
+
+        let Some(buf) = self.buf.split(size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        self.kind.unpad(self.buf.borrow_mut())?;
+        Ok(TypedPod::packed(buf, size, ty))
     }
 }
 

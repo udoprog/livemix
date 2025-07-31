@@ -102,6 +102,10 @@ pub mod builder;
 #[doc(inline)]
 pub use self::builder::Builder;
 
+mod pod_stream;
+#[doc(inline)]
+pub use self::pod_stream::PodStream;
+
 /// Construct a new [`Pod`] with a 128 word-sized array buffer.
 ///
 /// # Examples

@@ -1,6 +1,6 @@
 use crate::buf::ArrayVec;
 use crate::error::ErrorKind;
-use crate::{Error, Pod, ReadPod, Reader};
+use crate::{Error, PodStream};
 
 /// Helper trait to more easily encode values into a [`Pod`].
 ///
@@ -10,7 +10,7 @@ where
     Self: Sized,
 {
     #[doc(hidden)]
-    fn read_from(pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error>;
+    fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error>;
 }
 
 /// Implementation of [`Readable`] for an optional type.
@@ -29,9 +29,9 @@ where
     T: Readable<'de>,
 {
     #[inline]
-    fn read_from(pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
-        match pod.next_option()? {
-            Some(pod) => Ok(Some(T::read_from(pod)?)),
+    fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
+        match pod.next()?.next_option()? {
+            Some(mut pod) => Ok(Some(T::read_from(&mut pod)?)),
             None => Ok(None),
         }
     }
@@ -47,11 +47,11 @@ where
     T: Readable<'de>,
 {
     #[inline]
-    fn read_from(mut pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
+    fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
         let mut values = ArrayVec::<T, N>::new();
 
         for _ in 0..N {
-            values.push(T::read_from(pod.as_mut())?)?;
+            values.push(T::read_from(pod)?)?;
         }
 
         let Some(values) = values.into_inner() else {
@@ -77,7 +77,7 @@ where
 /// ```
 impl<'de> Readable<'de> for () {
     #[inline]
-    fn read_from(_: Pod<impl Reader<'de>, impl ReadPod>) -> Result<(), Error> {
+    fn read_from(_: &mut impl PodStream<'de>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -107,8 +107,8 @@ macro_rules! encode_into_tuple {
             $($ident: Readable<'de>,)*
         {
             #[inline]
-            fn read_from(mut pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
-                $(let $var = $ident::read_from(pod.as_mut())?;)*
+            fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
+                $(let $var = $ident::read_from(pod)?;)*
                 Ok(($($var,)*))
             }
         }

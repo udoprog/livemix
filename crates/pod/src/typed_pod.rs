@@ -4,6 +4,7 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::PodStream;
 use crate::bstr::BStr;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
@@ -610,6 +611,22 @@ where
             buf: self.buf.clone(),
             kind: self.kind,
         }
+    }
+}
+
+impl<'de, B, P> PodStream<'de> for TypedPod<B, P>
+where
+    B: Reader<'de>,
+    P: ReadPod,
+{
+    #[inline]
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+        let Some(buf) = self.buf.split(self.size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        self.kind.unpad(self.buf.borrow_mut())?;
+        Ok(TypedPod::packed(buf, self.size, self.ty))
     }
 }
 
