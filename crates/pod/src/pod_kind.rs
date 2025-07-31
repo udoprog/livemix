@@ -18,7 +18,7 @@ mod sealed {
 
 pub trait BuildPod
 where
-    Self: Sized + self::sealed::Sealed,
+    Self: Copy + Sized + self::sealed::Sealed,
 {
     #[inline]
     fn header(&self, _: impl Writer) -> Result<(), Error> {
@@ -220,7 +220,7 @@ where
 }
 
 /// A control child for a sequence.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ControlPod {
     offset: u32,
     ty: u32,

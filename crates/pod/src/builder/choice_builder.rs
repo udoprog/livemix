@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{BuildPod, Builder, ChildPod, ChoiceType, Error, PADDING, Type, Writer};
+use crate::{BuildPod, Builder, ChildPod, ChoiceType, Error, PADDING, Type, Writable, Writer};
 
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, P>
@@ -61,6 +61,29 @@ where
             child_size,
             child_type,
         })
+    }
+
+    /// Write the given [`Writable`] to this [`ChoiceBuilder`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ChoiceType, Builder, Type};
+    ///
+    /// let mut pod = Builder::array();
+    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| choice.write((10, 0, 30)))?;
+    ///
+    /// let mut pod = pod.as_ref();
+    /// let mut choice = pod.next_choice()?;
+    /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
+    /// assert_eq!(choice.read::<(i32, u32, i32)>()?, (10, 0, 30));
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn write(&mut self, value: impl Writable) -> Result<(), Error> {
+        let mut buf =
+            Builder::new_child(self.writer.borrow_mut(), self.child_size, self.child_type);
+        value.write_into(&mut buf)
     }
 
     /// Write control into the choice.

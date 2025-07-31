@@ -59,7 +59,7 @@ where
         self.buf.is_empty()
     }
 
-    /// Decode from the struct using the [`Readable`] trait.
+    /// Decode from the [`Struct`] using the [`Readable`] trait.
     ///
     /// # Examples
     ///

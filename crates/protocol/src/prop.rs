@@ -1,6 +1,6 @@
 use core::ffi::CStr;
 
-use pod::{EncodeUnsized, Writable};
+use pod::{EncodeUnsized, PodSink, Writable};
 
 /// The key of a property.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -53,10 +53,7 @@ impl EncodeUnsized for Prop {
 
 impl Writable for Prop {
     #[inline]
-    fn write_into(
-        &self,
-        pod: pod::Builder<impl pod::Writer, impl pod::BuildPod>,
-    ) -> Result<(), pod::Error> {
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), pod::Error> {
         CStr::write_into(&self.0, pod)
     }
 }

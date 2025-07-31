@@ -54,8 +54,8 @@ macro_rules! __id {
 
             impl $crate::Writable for $ty {
                 #[inline]
-                fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                    pod.push(self)
+                fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                    pod.next()?.push(self)
                 }
             }
 
@@ -230,8 +230,8 @@ macro_rules! __consts {
 
             impl $crate::Writable for $ty {
                 #[inline]
-                fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                    pod.push(self)
+                fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                    pod.next()?.push(self)
                 }
             }
 
@@ -426,8 +426,8 @@ macro_rules! __flags {
 
             impl $crate::Writable for $ty {
                 #[inline]
-                fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                    pod.push(self)
+                fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                    pod.next()?.push(self)
                 }
             }
 
@@ -630,8 +630,8 @@ macro_rules! __encode_into_sized {
         $(where $($where)*)*
         {
             #[inline]
-            fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                pod.push(self)
+            fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                pod.next()?.push(self)
             }
         }
     };
@@ -639,8 +639,8 @@ macro_rules! __encode_into_sized {
     ($ty:ty) => {
         impl $crate::Writable for $ty {
             #[inline]
-            fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                pod.push(self)
+            fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                pod.next()?.push(self)
             }
         }
     };
@@ -694,8 +694,8 @@ macro_rules! __encode_into_unsized {
         )*
         {
             #[inline]
-            fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                pod.push_unsized(self)
+            fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                pod.next()?.push_unsized(self)
             }
         }
     };
@@ -703,8 +703,8 @@ macro_rules! __encode_into_unsized {
     ($ty:ty) => {
         impl $crate::Writable for $ty {
             #[inline]
-            fn write_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
-                pod.push_unsized(self)
+            fn write_into(&self, pod: &mut impl $crate::PodSink) -> Result<(), $crate::Error> {
+                pod.next()?.push_unsized(self)
             }
         }
     };

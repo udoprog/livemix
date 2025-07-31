@@ -1,11 +1,11 @@
-use crate::{BuildPod, Builder, Error, Writer};
+use crate::{Error, PodSink};
 
 /// Helper trait to more easily encode values into a [`Builder`].
 ///
 /// This is used through the [`Builder::encode`] and similar methods.
 pub trait Writable {
     #[doc(hidden)]
-    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error>;
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), Error>;
 }
 
 impl<T> Writable for &T
@@ -13,7 +13,7 @@ where
     T: ?Sized + Writable,
 {
     #[inline]
-    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), Error> {
         (*self).write_into(pod)
     }
 }
@@ -30,11 +30,9 @@ where
     T: Writable,
 {
     #[inline]
-    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
-        let mut pod = pod.into_envelope()?;
-
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), Error> {
         for item in self {
-            item.write_into(pod.as_mut())?;
+            item.write_into(pod)?;
         }
 
         Ok(())
@@ -50,11 +48,9 @@ where
     T: Writable,
 {
     #[inline]
-    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
-        let mut pod = pod.into_envelope()?;
-
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), Error> {
         for item in self.iter() {
-            item.write_into(pod.as_mut())?;
+            item.write_into(pod)?;
         }
 
         Ok(())
@@ -79,7 +75,7 @@ where
 /// ```
 impl Writable for () {
     #[inline]
-    fn write_into(&self, _: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+    fn write_into(&self, _: &mut impl PodSink) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -111,10 +107,9 @@ macro_rules! encode_into_tuple {
             $($ident: Writable,)*
         {
             #[inline]
-            fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+            fn write_into(&self, pod: &mut impl PodSink) -> Result<(), Error> {
                 let ($(ref $var,)*) = *self;
-                let mut pod = pod.into_envelope()?;
-                $($var.write_into(pod.as_mut())?;)*
+                $($var.write_into(pod)?;)*
                 Ok(())
             }
         }

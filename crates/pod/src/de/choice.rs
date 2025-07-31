@@ -228,7 +228,7 @@ where
         self.remaining == 0
     }
 
-    /// Decode from the struct using the [`Readable`] trait.
+    /// Decode from the [`Choice`] using the [`Readable`] trait.
     ///
     /// # Examples
     ///

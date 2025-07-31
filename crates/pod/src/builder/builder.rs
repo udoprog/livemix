@@ -3,6 +3,7 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::PodSink;
 use crate::ReadPod;
 use crate::Slice;
 use crate::SplitReader;
@@ -302,11 +303,11 @@ where
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn write<T>(self, value: T) -> Result<(), Error>
+    pub fn write<T>(mut self, value: T) -> Result<(), Error>
     where
         T: Writable,
     {
-        value.write_into(self)
+        value.write_into(&mut self)
     }
 
     /// Encode a value from the pod.
@@ -663,11 +664,23 @@ where
         pod.buf.write_at(header, &[size, Type::POD.into_u32()])?;
         Ok(())
     }
+}
 
-    /// Coerce into envelope [`Builder`].
-    pub fn into_envelope(mut self) -> Result<Builder<B>, Error> {
-        self.kind.header(self.buf.borrow_mut())?;
-        Ok(Builder::new(self.buf))
+impl<B, P> PodSink for Builder<B, P>
+where
+    B: Writer,
+    P: BuildPod,
+{
+    type Writer<'this>
+        = B::Mut<'this>
+    where
+        Self: 'this;
+    type BuildPod = P;
+
+    /// Get the next pod from the stream.
+    #[inline]
+    fn next(&mut self) -> Result<Builder<Self::Writer<'_>, Self::BuildPod>, Error> {
+        Ok(Builder::with_kind(self.buf.borrow_mut(), self.kind))
     }
 }
 

@@ -3,6 +3,8 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::PodStream;
+use crate::Readable;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
@@ -154,6 +156,38 @@ where
         })
     }
 
+    /// Decode from the [`Array`] using the [`Readable`] trait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = pod::array();
+    ///
+    /// pod.as_mut().push_array(Type::INT, |array| {
+    ///     array.child().push(1)?;
+    ///     array.child().push(2)?;
+    ///     array.child().push(3)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let mut array = pod.as_ref().next_array()?;
+    ///
+    /// assert_eq!(array.child_type(), Type::INT);
+    /// assert_eq!(array.len(), 3);
+    /// assert_eq!(array.read::<(i32, i32, i32)>()?, (1, 2, 3));
+    /// assert_eq!(array.len(), 0);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn read<T>(&mut self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        T::read_from(self)
+    }
+
     /// Get the next element in the array.
     ///
     /// # Examples
@@ -280,6 +314,20 @@ where
             self.child_type,
             self.remaining,
         )
+    }
+}
+
+impl<'de, B> PodStream<'de> for Array<B>
+where
+    B: Reader<'de>,
+{
+    #[inline]
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+        let Some(pod) = self.next() else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        Ok(pod)
     }
 }
 

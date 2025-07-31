@@ -28,8 +28,7 @@ where
         })
     }
 
-    /// Apply the given [`Writable`] implementation to the contents of this
-    /// struct.
+    /// Write the given [`Writable`] to this [`StructBuilder`].
     ///
     /// # Examples
     ///
@@ -47,7 +46,8 @@ where
     /// ```
     #[inline]
     pub fn write(&mut self, value: impl Writable) -> Result<(), Error> {
-        value.write_into(Builder::new(self.writer.borrow_mut()))
+        let mut buf = Builder::new(self.writer.borrow_mut());
+        value.write_into(&mut buf)
     }
 
     /// Add a field into the struct.
