@@ -25,7 +25,7 @@ where
         Self: 'this;
 
     /// The position type used by the reader.
-    type Pos: 'de + Copy;
+    type Pos: 'de;
 
     /// Borrow the current reader mutably.
     fn borrow_mut(&mut self) -> Self::Mut<'_>;
@@ -34,7 +34,7 @@ where
     fn pos(&self) -> Self::Pos;
 
     /// Get the position of the reader relative to the queried position.
-    fn distance_from(&self, pos: Self::Pos) -> usize;
+    fn distance_from(&self, pos: &Self::Pos) -> usize;
 
     /// Skip the given number of bytes.
     fn skip(&mut self, size: usize) -> Result<(), Error>;
@@ -184,7 +184,7 @@ where
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
+    fn distance_from(&self, pos: &Self::Pos) -> usize {
         (**self).distance_from(pos)
     }
 

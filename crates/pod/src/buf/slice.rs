@@ -166,7 +166,6 @@ impl AsSlice for Slice<'_> {
 }
 
 /// A stored slice position.
-#[derive(Clone, Copy)]
 pub struct Pos<'de> {
     ptr: NonNull<u8>,
     _marker: PhantomData<&'de [u8]>,
@@ -196,9 +195,9 @@ impl<'de> Reader<'de> for Slice<'de> {
     ///
     /// let pos = buf.pos();
     /// _ = buf.read::<u32>()?;
-    /// assert_eq!(buf.distance_from(pos), 4);
+    /// assert_eq!(buf.distance_from(&pos), 4);
     /// _ = buf.read::<u32>()?;
-    /// assert_eq!(buf.distance_from(pos), 8);
+    /// assert_eq!(buf.distance_from(&pos), 8);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -221,13 +220,13 @@ impl<'de> Reader<'de> for Slice<'de> {
     ///
     /// let pos = buf.pos();
     /// _ = buf.read::<u32>()?;
-    /// assert_eq!(buf.distance_from(pos), 4);
+    /// assert_eq!(buf.distance_from(&pos), 4);
     /// _ = buf.read::<u32>()?;
-    /// assert_eq!(buf.distance_from(pos), 8);
+    /// assert_eq!(buf.distance_from(&pos), 8);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
+    fn distance_from(&self, pos: &Self::Pos) -> usize {
         self.ptr.addr().get().wrapping_sub(pos.ptr.addr().get())
     }
 
@@ -266,11 +265,11 @@ impl<'de> Reader<'de> for Slice<'de> {
     ///
     /// let pos = buf.pos();
     /// buf.skip(4)?;
-    /// assert_eq!(buf.distance_from(pos), 4);
+    /// assert_eq!(buf.distance_from(&pos), 4);
     /// buf.unpad(8)?;
-    /// assert_eq!(buf.distance_from(pos), 8);
+    /// assert_eq!(buf.distance_from(&pos), 8);
     /// buf.unpad(6)?;
-    /// assert_eq!(buf.distance_from(pos), 12);
+    /// assert_eq!(buf.distance_from(&pos), 12);
     /// assert_eq!(buf.read::<u32>()?, 0x7b7b7b7b);
     /// # Ok::<_, pod::Error>(())
     /// ```

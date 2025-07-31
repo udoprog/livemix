@@ -228,7 +228,7 @@ where
         self.remaining == 0
     }
 
-    /// Decode from the [`Choice`] using the [`Readable`] trait.
+    /// Read from the [`Choice`] using the [`Readable`] trait.
     ///
     /// # Examples
     ///
@@ -413,7 +413,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`Choice`].
+/// [`UnsizedWritable`] implementation for [`Choice`].
 ///
 /// # Examples
 ///
@@ -470,7 +470,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         let Ok(child_size) = u32::try_from(self.child_size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };

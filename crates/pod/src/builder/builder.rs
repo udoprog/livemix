@@ -329,7 +329,7 @@ where
         self.kind.write_sized(value, self.buf)
     }
 
-    /// Encode an unsized value from the pod.
+    /// Write an unsized value into the pod.
     ///
     /// # Examples
     ///
@@ -346,7 +346,7 @@ where
         self.kind.write_unsized_into(value, self.buf)
     }
 
-    /// Encode a `None` value.
+    /// Write a `None` value.
     ///
     /// # Examples
     ///
@@ -362,7 +362,7 @@ where
         Ok(())
     }
 
-    /// Encode an array with the given sized type.
+    /// Write an array with the given sized type.
     ///
     /// To encode an array with unsized types, use [`Pod::write_unsized_array`]
     /// where a length in bytes must be specified for every element.
@@ -416,7 +416,7 @@ where
         Ok(())
     }
 
-    /// Encode an array with items of an unsized type.
+    /// Write an array with items of an unsized type.
     ///
     /// The `len` specified must match every element of the array.
     ///
@@ -492,7 +492,7 @@ where
         Ok(())
     }
 
-    /// Encode a struct.
+    /// Write a struct.
     ///
     /// # Examples
     ///
@@ -520,7 +520,7 @@ where
         Ok(())
     }
 
-    /// Encode an object.
+    /// Write an object.
     ///
     /// # Examples
     ///
@@ -555,7 +555,7 @@ where
         Ok(())
     }
 
-    /// Encode a sequence.
+    /// Write a sequence.
     ///
     /// # Examples
     ///
@@ -583,7 +583,7 @@ where
         Ok(())
     }
 
-    /// Encode a choice.
+    /// Write a choice.
     ///
     /// # Examples
     ///
@@ -611,7 +611,7 @@ where
         Ok(())
     }
 
-    /// Encode a nested pod.
+    /// Write a nested pod.
     ///
     /// # Examples
     ///
@@ -654,7 +654,7 @@ where
 
         let size = pod
             .buf
-            .distance_from(header)
+            .distance_from(&header)
             .wrapping_sub(mem::size_of::<[u32; 2]>());
 
         self.kind.check(Type::POD, size)?;
@@ -686,7 +686,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`Builder`].
+/// [`UnsizedWritable`] implementation for [`Builder`].
 ///
 /// # Examples
 ///
@@ -738,7 +738,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(self.buf.as_slice().as_bytes())
     }
 }

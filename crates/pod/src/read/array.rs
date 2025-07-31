@@ -156,7 +156,7 @@ where
         })
     }
 
-    /// Decode from the [`Array`] using the [`Readable`] trait.
+    /// Read from the [`Array`] using the [`Readable`] trait.
     ///
     /// # Examples
     ///
@@ -331,7 +331,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`Array`].
+/// [`UnsizedWritable`] implementation for [`Array`].
 ///
 /// # Examples
 ///
@@ -377,7 +377,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         let Ok(child_size) = u32::try_from(self.child_size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };

@@ -35,17 +35,26 @@ pub mod utils;
 mod id;
 pub use self::id::{Id, RawId};
 
-mod write_into;
-pub use self::write_into::Writable;
+mod writable;
+pub use self::writable::Writable;
 
-mod read_from;
-pub use self::read_from::Readable;
+mod readable;
+pub use self::readable::Readable;
 
-mod en;
-pub use self::en::{SizedWritable, UnsizedWritable};
+mod unsized_writable;
+pub use self::unsized_writable::UnsizedWritable;
 
-mod de;
-pub use self::de::{Array, Choice, Object, Sequence, SizedReadable, Struct, UnsizedReadable};
+pub(crate) mod sized_writable;
+pub use self::sized_writable::SizedWritable;
+
+mod unsized_readable;
+pub use self::unsized_readable::UnsizedReadable;
+
+pub(crate) mod sized_readable;
+pub use self::sized_readable::SizedReadable;
+
+mod read;
+pub use self::read::{Array, Choice, Object, Sequence, Struct};
 
 pub mod buf;
 #[cfg(feature = "alloc")]

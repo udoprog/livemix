@@ -447,7 +447,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
+    fn distance_from(&self, pos: &Self::Pos) -> usize {
         self.len.wrapping_sub(pos.at)
     }
 

@@ -2,11 +2,11 @@ use core::fmt;
 
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
-    ArrayBuf, AsSlice, Error, PackedPod, PodStream, ReadPod, Readable, Reader, SizedReadable,
-    Slice, Type, TypedPod, UnsizedReadable, UnsizedWritable, Visitor, Writer,
+    Array, ArrayBuf, AsSlice, Choice, Error, Object, PackedPod, PodStream, ReadPod, Readable,
+    Reader, Sequence, SizedReadable, Slice, Struct, Type, TypedPod, UnsizedReadable,
+    UnsizedWritable, Visitor, Writer,
 };
 #[cfg(feature = "alloc")]
 use crate::{DynamicBuf, PaddedPod};
@@ -254,7 +254,7 @@ where
         T::read_from(&mut self)
     }
 
-    /// [`Decode`] a value from the pod.
+    /// Read a sized value from the pod.
     ///
     /// # Examples
     ///
@@ -272,7 +272,7 @@ where
         self.into_typed()?.read_sized::<T>()
     }
 
-    /// Read the next unsized value from the pod.
+    /// Read an unsized value from the pod.
     ///
     /// # Examples
     ///
@@ -292,7 +292,7 @@ where
         self.into_typed()?.read_unsized()
     }
 
-    /// Read the next unsized value from the pod.
+    /// Read an unsized value from the pod.
     ///
     /// # Examples
     ///
@@ -311,7 +311,7 @@ where
         self.into_typed()?.visit_unsized(visitor)
     }
 
-    /// Read the next optional value from the pod.
+    /// Read an optional value from the pod.
     ///
     /// This returns [`None`] if the encoded value is [`None`], otherwise a pod
     /// for the value is returned.
@@ -343,7 +343,7 @@ where
         }
     }
 
-    /// Read the next array.
+    /// Read an array.
     ///
     /// # Examples
     ///
@@ -392,7 +392,7 @@ where
         self.into_typed()?.read_array()
     }
 
-    /// Read the next struct.
+    /// Read a struct.
     ///
     /// # Examples
     ///
@@ -433,7 +433,7 @@ where
         self.into_typed()?.read_struct()
     }
 
-    /// Read the next object.
+    /// Read an object.
     ///
     /// # Examples
     ///
@@ -487,7 +487,7 @@ where
         self.into_typed()?.read_object()
     }
 
-    /// Read the next sequence.
+    /// Read a sequence.
     ///
     /// # Examples
     ///
@@ -541,7 +541,7 @@ where
         self.into_typed()?.read_sequence()
     }
 
-    /// Read the next choice.
+    /// Read a choice.
     ///
     /// # Examples
     ///
@@ -582,7 +582,7 @@ where
         self.into_typed()?.read_choice()
     }
 
-    /// Read the next nested pod.
+    /// Read a nested pod.
     ///
     /// # Examples
     ///
@@ -744,7 +744,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`Pod`].
+/// [`UnsizedWritable`] implementation for [`Pod`].
 ///
 /// # Examples
 ///
@@ -796,7 +796,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(self.buf.as_slice().as_bytes())
     }
 }

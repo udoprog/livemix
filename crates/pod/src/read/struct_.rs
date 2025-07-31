@@ -59,7 +59,7 @@ where
         self.buf.is_empty()
     }
 
-    /// Decode from the [`Struct`] using the [`Readable`] trait.
+    /// Read from the [`Struct`] using the [`Readable`] trait.
     ///
     /// # Examples
     ///
@@ -88,7 +88,7 @@ where
         T::read_from(&mut Pod::new(self.buf.borrow_mut()))
     }
 
-    /// Decode the next field in the struct.
+    /// Read the next field in the struct.
     ///
     /// # Examples
     ///
@@ -202,7 +202,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`Struct`].
+/// [`UnsizedWritable`] implementation for [`Struct`].
 ///
 /// # Examples
 ///
@@ -241,7 +241,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(self.buf.as_slice().as_bytes())
     }
 }

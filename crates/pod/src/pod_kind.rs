@@ -45,14 +45,14 @@ where
     {
         // This should always hold, since when we reserve space, we always
         // reserve space for the header, which is 64 bits wide.
-        debug_assert!(writer.distance_from(header) >= mem::size_of::<[u32; 2]>());
+        debug_assert!(writer.distance_from(&header) >= mem::size_of::<[u32; 2]>());
 
         // Calculate the size of the struct at the header position.
         //
         // Every header is exactly 64-bits wide and this is not included in the
         // size of the objects, so we have to subtract it here.
         let size = writer
-            .distance_from(header)
+            .distance_from(&header)
             .wrapping_sub(mem::size_of::<[u32; 2]>());
 
         self.check(ty, size)?;
@@ -83,7 +83,7 @@ impl BuildPod for PaddedPod {
         };
 
         buf.write(&[size, T::TYPE.into_u32()])?;
-        value.write_content(buf.borrow_mut())?;
+        value.write_sized(buf.borrow_mut())?;
         buf.pad(PADDING)?;
         Ok(())
     }
@@ -102,7 +102,7 @@ impl BuildPod for PaddedPod {
         };
 
         buf.write(&[size, T::TYPE.into_u32()])?;
-        value.write_content(buf.borrow_mut())?;
+        value.write_unsized(buf.borrow_mut())?;
         buf.pad(PADDING)?;
         Ok(())
     }
@@ -127,7 +127,7 @@ impl BuildPod for ChildPod {
         T: SizedWritable,
     {
         self.check(T::TYPE, T::SIZE)?;
-        value.write_content(buf)
+        value.write_sized(buf)
     }
 
     #[inline]
@@ -140,7 +140,7 @@ impl BuildPod for ChildPod {
         };
 
         self.check(T::TYPE, size)?;
-        value.write_content(buf)
+        value.write_unsized(buf)
     }
 
     #[inline]
@@ -205,7 +205,7 @@ where
     #[inline]
     fn write_sized<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
-        T: crate::SizedWritable,
+        T: SizedWritable,
     {
         PaddedPod.write_sized(value, buf)
     }
@@ -213,7 +213,7 @@ where
     #[inline]
     fn write_unsized_into<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + crate::UnsizedWritable,
+        T: ?Sized + UnsizedWritable,
     {
         PaddedPod.write_unsized_into(value, buf)
     }
@@ -256,7 +256,7 @@ impl BuildPod for ControlPod {
     #[inline]
     fn write_sized<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
-        T: crate::SizedWritable,
+        T: SizedWritable,
     {
         PaddedPod.write_sized(value, buf)
     }
@@ -264,7 +264,7 @@ impl BuildPod for ControlPod {
     #[inline]
     fn write_unsized_into<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + crate::UnsizedWritable,
+        T: ?Sized + UnsizedWritable,
     {
         PaddedPod.write_unsized_into(value, buf)
     }

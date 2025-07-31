@@ -46,7 +46,7 @@ where
         })
     }
 
-    /// Encode a property into the object.
+    /// Write a property into the object.
     ///
     /// # Examples
     ///

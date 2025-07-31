@@ -13,10 +13,10 @@ where
     const SIZE: usize;
 
     /// Write the content of a type.
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error>;
 }
 
-/// [`Encode`] implementation for `i32`.
+/// [`SizedWritable`] implementation for `bool`.
 ///
 /// # Examples
 ///
@@ -31,14 +31,15 @@ impl SizedWritable for bool {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[if *self { 1u32 } else { 0u32 }])
     }
 }
 
 crate::macros::encode_into_sized!(bool);
 
-/// [`Encode`] implementation for any type that can be converted into an [`Id`].
+/// [`SizedWritable`] implementation for any type that can be converted into an
+/// [`Id`].
 ///
 /// # Examples
 ///
@@ -58,14 +59,14 @@ where
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.0.into_id()])
     }
 }
 
 crate::macros::encode_into_sized!(impl [I] Id<I> where I: RawId);
 
-/// [`Encode`] implementation for `i32`.
+/// [`SizedWritable`] implementation for `i32`.
 ///
 /// # Examples
 ///
@@ -80,14 +81,14 @@ impl SizedWritable for i32 {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.cast_unsigned()])
     }
 }
 
 crate::macros::encode_into_sized!(i32);
 
-/// [`Encode`] implementation for `isize`.
+/// [`SizedWritable`] implementation for `isize`.
 ///
 /// # Examples
 ///
@@ -102,18 +103,18 @@ impl SizedWritable for isize {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
         let Ok(value) = i32::try_from(*self) else {
             return Err(Error::new(ErrorKind::InvalidIsizeInt { value: *self }));
         };
 
-        value.write_content(writer)
+        value.write_sized(writer)
     }
 }
 
 crate::macros::encode_into_sized!(isize);
 
-/// [`Encode`] implementation for `u32`.
+/// [`SizedWritable`] implementation for `u32`.
 ///
 /// # Examples
 ///
@@ -132,14 +133,14 @@ impl SizedWritable for u32 {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
-        self.cast_signed().write_content(writer)
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
+        self.cast_signed().write_sized(writer)
     }
 }
 
 crate::macros::encode_into_sized!(u32);
 
-/// [`Encode`] implementation for `usize`.
+/// [`SizedWritable`] implementation for `usize`.
 ///
 /// # Examples
 ///
@@ -158,18 +159,18 @@ impl SizedWritable for usize {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
         let Ok(value) = u32::try_from(*self) else {
             return Err(Error::new(ErrorKind::InvalidUsizeInt { value: *self }));
         };
 
-        value.cast_signed().write_content(writer)
+        value.cast_signed().write_sized(writer)
     }
 }
 
 crate::macros::encode_into_sized!(usize);
 
-/// [`Encode`] implementation for `i64`.
+/// [`SizedWritable`] implementation for `i64`.
 ///
 /// # Examples
 ///
@@ -184,14 +185,14 @@ impl SizedWritable for i64 {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.cast_unsigned()])
     }
 }
 
 crate::macros::encode_into_sized!(i64);
 
-/// [`Encode`] implementation for `u64`.
+/// [`SizedWritable`] implementation for `u64`.
 ///
 /// # Examples
 ///
@@ -210,13 +211,13 @@ impl SizedWritable for u64 {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
-        self.cast_signed().write_content(writer)
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
+        self.cast_signed().write_sized(writer)
     }
 }
 crate::macros::encode_into_sized!(u64);
 
-/// [`Encode`] implementation for `f32`.
+/// [`SizedWritable`] implementation for `f32`.
 ///
 /// # Examples
 ///
@@ -231,14 +232,14 @@ impl SizedWritable for f32 {
     const SIZE: usize = 4;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.to_bits(), 0])
     }
 }
 
 crate::macros::encode_into_sized!(f32);
 
-/// Decode implementation for `f64`.
+/// [`SizedWritable`] implementation for `f64`.
 ///
 /// # Examples
 ///
@@ -253,14 +254,14 @@ impl SizedWritable for f64 {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.to_bits()])
     }
 }
 
 crate::macros::encode_into_sized!(f64);
 
-/// [`Encode`] implementation for [`Rectangle`].
+/// [`SizedWritable`] implementation for [`Rectangle`].
 ///
 /// # Examples
 ///
@@ -277,14 +278,14 @@ impl SizedWritable for Rectangle {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.width, self.height])
     }
 }
 
 crate::macros::encode_into_sized!(Rectangle);
 
-/// [`Encode`] a [`Fraction`].
+/// [`SizedWritable`] a [`Fraction`].
 ///
 /// # Examples
 ///
@@ -301,14 +302,14 @@ impl SizedWritable for Fraction {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.num, self.denom])
     }
 }
 
 crate::macros::encode_into_sized!(Fraction);
 
-/// [`Encode`] a an array of bytes `[u8; N]`.
+/// [`SizedWritable`] a an array of bytes `[u8; N]`.
 ///
 /// # Examples
 ///
@@ -325,14 +326,14 @@ impl<const N: usize> SizedWritable for [u8; N] {
     const SIZE: usize = N;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
-        <[u8]>::write_content(self, writer)
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
+        <[u8]>::write_unsized(self, writer)
     }
 }
 
 crate::macros::encode_into_sized!(impl [const N: usize] [u8; N]);
 
-/// [`Encode`] implementation for [`Pointer`].
+/// [`SizedWritable`] implementation for [`Pointer`].
 ///
 /// # Examples
 ///
@@ -351,7 +352,7 @@ impl SizedWritable for Pointer {
     const SIZE: usize = 16;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         let mut bytes = WordBytes::new();
         bytes.write_usize(self.pointer());
 
@@ -363,7 +364,7 @@ impl SizedWritable for Pointer {
 
 crate::macros::encode_into_sized!(Pointer);
 
-/// [`Encode`] implementation for [`Fd`].
+/// [`SizedWritable`] implementation for [`Fd`].
 ///
 /// # Examples
 ///
@@ -380,7 +381,7 @@ impl SizedWritable for Fd {
     const SIZE: usize = 8;
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_sized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.fd().cast_unsigned()])?;
         Ok(())
     }
@@ -388,7 +389,7 @@ impl SizedWritable for Fd {
 
 crate::macros::encode_into_sized!(Fd);
 
-/// [`Encode`] an unsized type through a reference.
+/// [`SizedWritable`] an unsized type through a reference.
 ///
 /// # Examples
 ///
@@ -408,7 +409,7 @@ where
     const SIZE: usize = T::SIZE;
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
-        <T as SizedWritable>::write_content(self, writer)
+    fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
+        <T as SizedWritable>::write_sized(self, writer)
     }
 }

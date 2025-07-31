@@ -1,4 +1,4 @@
-//! Helper types for building POD objects.
+//! Helper types for building PODs.
 
 mod builder;
 #[doc(inline)]

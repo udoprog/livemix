@@ -370,7 +370,7 @@ impl Writer for DynamicBuf {
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
+    fn distance_from(&self, pos: &Self::Pos) -> usize {
         self.len.wrapping_sub(pos.at)
     }
 

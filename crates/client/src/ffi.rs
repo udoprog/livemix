@@ -174,66 +174,63 @@ pub struct IoSegmentBar {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct NodeActivation {
     pub status: consts::ActivationStatus,
-    /// unsigned int version:1;
-    /// A sync is pending.
-    /// unsigned int pending_sync:1;
-    /// A new position is pending.
-    /// unsigned int pending_new_pos:1;
+    /// unsigned int version:1; A sync is pending. unsigned int pending_sync:1;
+    /// A new position is pending. unsigned int pending_new_pos:1;
     pub header_bits: u32,
-    /// one current state and one next state as version flag.
+    /// One current state and one next state as version flag.
     pub state: [NodeActivationState; 2],
-    /// time at which the node was triggered (i.e.  as ready to start processing
+    /// Time at which the node was triggered (i.e. as ready to start processing
     /// in the current  iteration).
     pub signal_time: u64,
-    /// time at which processing actually started.
+    /// Time at which processing actually started.
     pub awake_time: u64,
-    /// time at which processing was completed.
+    /// Time at which processing was completed.
     pub finish_time: u64,
-    /// previous time at which the node was triggered.
+    /// Previous time at which the node was triggered.
     pub prev_signal_time: u64,
-    /// reposition info, used when driver  has this node id.
+    /// Reposition info, used when driver  has this node id.
     pub reposition: IoSegment,
-    /// update for the extra segment info fields used when driver segment_owner
+    /// Update for the extra segment info fields used when driver segment_owner
     /// has this node id.
     pub segment: IoSegment,
-    /// id of owners for each segment info struct nodes that want to update
+    /// Id of owners for each segment info struct nodes that want to update
     /// segment info need  CAS their node id in this array.
     pub segment_owner: [u32; 16],
     pub prev_awake_time: u64,
     pub prev_finish_time: u64,
-    /// must be 0.
+    /// Must be 0.
     _pad: Pad<[u32; 7]>,
     /// Version of client, see above.
     pub client_version: u32,
     /// Version of server, see above.
     pub server_version: u32,
-    /// driver active on client.
+    /// Driver active on client.
     pub active_driver_id: u32,
-    /// the current node driver id.
+    /// The current node driver id.
     pub driver_id: u32,
-    /// extra flags.
+    /// Extra flags.
     pub flags: u32,
-    /// contains current position and segment info extra info is updated by
+    /// Contains current position and segment info extra info is updated by
     /// nodes that have  themselves as owner in the segment structs.
     pub position: IoPosition,
-    /// sync timeout in  position goes to RUNNING without waiting longer for
+    /// Sync timeout in  position goes to RUNNING without waiting longer for
     /// sync clients.
     pub sync_timeout: u64,
-    /// number of cycles before timeout.
+    /// Number of cycles before timeout.
     pub sync_left: u64,
-    /// averaged over short, medium, long time.
+    /// Averaged over short, medium, long time.
     pub cpu_load: [f32; 3],
-    /// number of xruns.
+    /// Number of xruns.
     pub xrun_count: u32,
-    /// time of last xrun in microseconds.
+    /// Time of last xrun in microseconds.
     pub xrun_time: u64,
-    /// delay of last xrun in microseconds.
+    /// Delay of last xrun in microseconds.
     pub xrun_delay: u64,
-    /// max of all xruns in microseconds.
+    /// Max of all xruns in microseconds.
     pub max_delay: u64,
-    /// next command.
+    /// Next command.
     pub command: u32,
-    /// owner id with new reposition info, last one to update wins.
+    /// Owner id with new reposition info, last one to update wins.
     pub reposition_owner: u32,
 }
 

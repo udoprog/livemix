@@ -17,10 +17,10 @@ pub trait UnsizedWritable {
     fn size(&self) -> Option<usize>;
 
     #[doc(hidden)]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
+    fn write_unsized(&self, writer: impl Writer) -> Result<(), Error>;
 }
 
-/// [`EncodeUnsized`] implementation for an unsized `[u8]`.
+/// [`UnsizedWritable`] implementation for an unsized `[u8]`.
 ///
 /// # Examples
 ///
@@ -40,14 +40,14 @@ impl UnsizedWritable for [u8] {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_bytes(self, 0)
     }
 }
 
 crate::macros::encode_into_unsized!([u8]);
 
-/// [`EncodeUnsized`] implementation for an unsized [`CStr`].
+/// [`UnsizedWritable`] implementation for an unsized [`CStr`].
 ///
 /// # Examples
 ///
@@ -68,7 +68,7 @@ impl UnsizedWritable for CStr {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_bytes(self.to_bytes_with_nul(), 0)?;
         Ok(())
     }
@@ -76,7 +76,7 @@ impl UnsizedWritable for CStr {
 
 crate::macros::encode_into_unsized!(CStr);
 
-/// [`EncodeUnsized`] implementation for an unsized [`str`].
+/// [`UnsizedWritable`] implementation for an unsized [`str`].
 ///
 /// # Errors
 ///
@@ -110,7 +110,7 @@ impl UnsizedWritable for str {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         let bytes = self.as_bytes();
 
         if bytes.contains(&0) {
@@ -124,7 +124,7 @@ impl UnsizedWritable for str {
 
 crate::macros::encode_into_unsized!(str);
 
-/// Encode an owned [`String`].
+/// [`UnsizedWritable`] implementation for an owned [`String`].
 ///
 /// # Examples
 ///
@@ -151,14 +151,14 @@ impl UnsizedWritable for String {
     }
 
     #[inline]
-    fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
-        str::write_content(self, writer)
+    fn write_unsized(&self, writer: impl Writer) -> Result<(), Error> {
+        str::write_unsized(self, writer)
     }
 }
 
 crate::macros::encode_into_unsized!(String);
 
-/// [`EncodeUnsized`] implementation for an unsized [`Bitmap`].
+/// [`UnsizedWritable`] implementation for an unsized [`Bitmap`].
 ///
 /// # Examples
 ///
@@ -180,7 +180,7 @@ impl UnsizedWritable for Bitmap {
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write_bytes(self.as_bytes(), 0)?;
         Ok(())
     }

@@ -31,7 +31,7 @@ macro_rules! __id {
                 )*
             }
 
-            #[doc = concat!(" Encode an [`", stringify!($ty), "`].")]
+            #[doc = concat!(" `SizedWritable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
             ///
@@ -47,8 +47,8 @@ macro_rules! __id {
                 const SIZE: usize = <u32 as $crate::SizedWritable>::SIZE;
 
                 #[inline]
-                fn write_content(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
-                    $crate::Id(*self).write_content(writer)
+                fn write_sized(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+                    $crate::Id(*self).write_sized(writer)
                 }
             }
 
@@ -66,7 +66,7 @@ macro_rules! __id {
                 }
             }
 
-            #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
+            #[doc = concat!(" `SizedReadable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
             ///
@@ -223,8 +223,8 @@ macro_rules! __consts {
                 const SIZE: usize = <$repr as $crate::SizedWritable>::SIZE;
 
                 #[inline]
-                fn write_content(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
-                    <$repr as $crate::SizedWritable>::write_content(&self.0, writer)
+                fn write_sized(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+                    <$repr as $crate::SizedWritable>::write_sized(&self.0, writer)
                 }
             }
 
@@ -242,7 +242,7 @@ macro_rules! __consts {
                 }
             }
 
-            #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
+            #[doc = concat!(" `SizedReadable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
             ///
@@ -403,7 +403,7 @@ macro_rules! __flags {
                 }
             }
 
-            #[doc = concat!(" Encode an [`", stringify!($ty), "`].")]
+            #[doc = concat!(" `SizedWritable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
             ///
@@ -419,8 +419,8 @@ macro_rules! __flags {
                 const SIZE: usize = <$repr as $crate::SizedWritable>::SIZE;
 
                 #[inline]
-                fn write_content(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
-                    <$repr as $crate::SizedWritable>::write_content(&self.0, writer)
+                fn write_sized(&self, writer: impl $crate::Writer) -> Result<(), $crate::Error> {
+                    <$repr as $crate::SizedWritable>::write_sized(&self.0, writer)
                 }
             }
 
@@ -438,7 +438,7 @@ macro_rules! __flags {
                 }
             }
 
-            #[doc = concat!(" Decode an [`", stringify!($ty), "`].")]
+            #[doc = concat!(" `SizedReadable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
             ///

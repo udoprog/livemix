@@ -31,7 +31,7 @@ where
     fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error>;
 }
 
-/// [`Decode`] implementation for `i32`.
+/// [`SizedReadable`] implementation for `bool`.
 ///
 /// # Examples
 ///
@@ -52,7 +52,8 @@ impl<'de> SizedReadable<'de> for bool {
 
 crate::macros::decode_from_sized!(bool);
 
-/// [`Decode`] implementation for an [`RawId`] type.
+/// [`SizedReadable`] implementation for any type that can be converted into an
+/// [`Id`].
 ///
 /// # Examples
 ///
@@ -78,7 +79,7 @@ where
 
 crate::macros::decode_from_sized!(impl [I] Id<I> where I: RawId);
 
-/// [`Decode`] implementation for `i32`.
+/// [`SizedReadable`] implementation for `i32`.
 ///
 /// # Examples
 ///
@@ -99,7 +100,7 @@ impl<'de> SizedReadable<'de> for i32 {
 
 crate::macros::decode_from_sized!(i32);
 
-/// [`Decode`] implementation for `u32`.
+/// [`SizedReadable`] implementation for `u32`.
 ///
 /// # Examples
 ///
@@ -124,7 +125,7 @@ impl<'de> SizedReadable<'de> for u32 {
 
 crate::macros::decode_from_sized!(u32);
 
-/// [`Decode`] implementation for `usize`.
+/// [`SizedReadable`] implementation for `usize`.
 ///
 /// This is decoded as an `u32`, or `Int` and will be checked that it's in
 /// bounds.
@@ -158,7 +159,7 @@ impl<'de> SizedReadable<'de> for usize {
 
 crate::macros::decode_from_sized!(usize);
 
-/// [`Decode`] implementation for `isize`.
+/// [`SizedReadable`] implementation for `isize`.
 ///
 /// This is decoded as an `i32`, or `Int` and will be checked that it's in
 /// bounds.
@@ -192,7 +193,7 @@ impl<'de> SizedReadable<'de> for isize {
 
 crate::macros::decode_from_sized!(isize);
 
-/// [`Decode`] implementation for `i64`.
+/// [`SizedReadable`] implementation for `i64`.
 ///
 /// # Examples
 ///
@@ -213,7 +214,7 @@ impl<'de> SizedReadable<'de> for i64 {
 
 crate::macros::decode_from_sized!(i64);
 
-/// [`Decode`] implementation for `u64`.
+/// [`SizedReadable`] implementation for `u64`.
 ///
 /// # Examples
 ///
@@ -238,7 +239,7 @@ impl<'de> SizedReadable<'de> for u64 {
 
 crate::macros::decode_from_sized!(u64);
 
-/// [`Decode`] implementation for `f32`.
+/// [`SizedReadable`] implementation for `f32`.
 ///
 /// # Examples
 ///
@@ -259,7 +260,7 @@ impl<'de> SizedReadable<'de> for f32 {
 
 crate::macros::decode_from_sized!(f32);
 
-/// [`Decode`] implementation for `f64`.
+/// [`SizedReadable`] implementation for `f64`.
 ///
 /// # Examples
 ///
@@ -280,7 +281,7 @@ impl<'de> SizedReadable<'de> for f64 {
 
 crate::macros::decode_from_sized!(f64);
 
-/// [`Decode`] implementation for [`Rectangle`].
+/// [`SizedReadable`] implementation for [`Rectangle`].
 ///
 /// # Examples
 ///
@@ -304,7 +305,7 @@ impl<'de> SizedReadable<'de> for Rectangle {
 
 crate::macros::decode_from_sized!(Rectangle);
 
-/// [`Decode`] implementation for a [`Fraction`].
+/// [`SizedReadable`] implementation for a [`Fraction`].
 ///
 /// # Examples
 ///
@@ -328,7 +329,7 @@ impl<'de> SizedReadable<'de> for Fraction {
 
 crate::macros::decode_from_sized!(Fraction);
 
-/// [`Encode`] a an array of bytes `[u8; N]`.
+/// [`SizedReadable`] a an array of bytes `[u8; N]`.
 ///
 /// # Examples
 ///
@@ -359,7 +360,7 @@ impl<'de, const N: usize> SizedReadable<'de> for [u8; N] {
 
 crate::macros::decode_from_sized!(impl [const N: usize] [u8; N]);
 
-/// Decode an owned c-string.
+/// [`SizedReadable`] implementation for an owned [`CString`].
 ///
 /// # Examples
 ///
@@ -384,7 +385,7 @@ impl<'de> SizedReadable<'de> for CString {
 crate::macros::decode_from_sized!(CString);
 crate::macros::decode_from_borrowed!(CStr);
 
-/// Decode an owned [`String`].
+/// Read an owned [`String`].
 ///
 /// # Examples
 ///
@@ -413,7 +414,7 @@ impl<'de> SizedReadable<'de> for String {
 crate::macros::decode_from_sized!(String);
 crate::macros::decode_from_borrowed!(str);
 
-/// Decode an owned vector of bytes [`Vec<u8>`].
+/// Read an owned vector of bytes [`Vec<u8>`].
 ///
 /// # Examples
 ///
@@ -442,7 +443,7 @@ impl<'de> SizedReadable<'de> for Vec<u8> {
 crate::macros::decode_from_sized!(Vec<u8>);
 crate::macros::decode_from_borrowed!([u8]);
 
-/// Decode an owned [`OwnedBitmap`].
+/// Read an owned [`OwnedBitmap`].
 ///
 /// # Examples
 ///
@@ -468,7 +469,7 @@ impl<'de> SizedReadable<'de> for OwnedBitmap {
 crate::macros::decode_from_sized!(OwnedBitmap);
 crate::macros::decode_from_borrowed!(Bitmap);
 
-/// [`Decode`] implementation for [`Pointer`].
+/// [`SizedReadable`] implementation for [`Pointer`].
 ///
 /// # Examples
 ///
@@ -498,7 +499,7 @@ impl<'de> SizedReadable<'de> for Pointer {
 #[cfg(feature = "alloc")]
 crate::macros::decode_from_sized!(Pointer);
 
-/// [`Decode`] implementation for [`Fd`].
+/// [`SizedReadable`] implementation for [`Fd`].
 ///
 /// # Examples
 ///

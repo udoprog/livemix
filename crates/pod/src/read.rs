@@ -1,9 +1,3 @@
-mod unsized_readable;
-pub use self::unsized_readable::UnsizedReadable;
-
-pub(crate) mod sized_readable;
-pub use self::sized_readable::SizedReadable;
-
 mod array;
 pub use self::array::Array;
 

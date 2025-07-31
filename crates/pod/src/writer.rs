@@ -36,7 +36,7 @@ where
 
     /// Get the distance from the given position to the current writer position
     /// in bytes.
-    fn distance_from(&self, pos: Self::Pos) -> usize;
+    fn distance_from(&self, pos: &Self::Pos) -> usize;
 
     /// Write a slice of `u32` values to the writer.
     fn write<T>(&mut self, words: &[T]) -> Result<(), Error>
@@ -86,7 +86,7 @@ where
     }
 
     #[inline]
-    fn distance_from(&self, pos: Self::Pos) -> usize {
+    fn distance_from(&self, pos: &Self::Pos) -> usize {
         (**self).distance_from(pos)
     }
 

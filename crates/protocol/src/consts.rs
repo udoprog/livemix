@@ -38,6 +38,21 @@ pod::macros::consts! {
     }
 
     /// Describes `PW_NODE_ACTIVATION_*`.
+    ///
+    /// See [`client::ffi::NodeActivation`] for more information.
+    ///
+    /// Nodes start as `INACTIVE`, when they are ready to be scheduled, they add
+    /// their fd to the loop and change status to FINISHED. When the node shuts
+    /// down, the status is set back to `INACTIVE`.
+    ///
+    /// We have status changes (using compare-and-swap) from
+    ///
+    /// * `INACTIVE -> FINISHED` (node is added to loop and can be scheduled)
+    /// * `* -> INACTIVE` (node can not be scheduled anymore)
+    /// * `!INACTIVE -> NOT_TRIGGERED` (node is prepared by the driver)
+    /// * `NOT_TRIGGERED -> TRIGGERED` (eventfd is written)
+    /// * `TRIGGERED -> AWAKE` (eventfd is read, node starts processing)
+    /// * AWAKE -> FINISHED (node completed processing and triggered the peers)
     #[example = NOT_TRIGGERED]
     #[module = protocol::consts]
     pub struct ActivationStatus(u32) {

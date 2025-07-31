@@ -46,8 +46,8 @@ impl UnsizedWritable for Prop {
     }
 
     #[inline]
-    fn write_content(&self, writer: impl pod::Writer) -> Result<(), pod::Error> {
-        CStr::write_content(&self.0, writer)
+    fn write_unsized(&self, writer: impl pod::Writer) -> Result<(), pod::Error> {
+        CStr::write_unsized(&self.0, writer)
     }
 }
 

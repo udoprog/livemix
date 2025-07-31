@@ -484,6 +484,28 @@ impl State {
                     "Activation status: {:?}",
                     crate::ptr::volatile!(a, status).read()
                 );
+
+                tracing::info!(
+                    "Activation driver id: {:?}",
+                    crate::ptr::volatile!(a, driver_id).read()
+                );
+            }
+
+            for (_, a) in &node.node_activations {
+                tracing::info!(
+                    "Target status: {:?}",
+                    crate::ptr::volatile!(a.region, status).read()
+                );
+
+                tracing::info!(
+                    "Target state: {:?}",
+                    crate::ptr::volatile!(a.region, state).read()
+                );
+
+                tracing::info!(
+                    "Target driver id: {:?}",
+                    crate::ptr::volatile!(a.region, driver_id).read()
+                );
             }
         }
 

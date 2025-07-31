@@ -100,7 +100,7 @@ where
         self.buf.is_empty()
     }
 
-    /// Decode the next field in the struct.
+    /// Read the next field in the struct.
     ///
     /// # Examples
     ///
@@ -253,7 +253,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`Object`].
+/// [`UnsizedWritable`] implementation for [`Object`].
 ///
 /// # Examples
 ///
@@ -309,7 +309,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.object_type, self.object_id])?;
         writer.write(self.buf.as_slice().as_bytes())
     }

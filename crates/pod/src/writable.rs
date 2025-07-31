@@ -1,8 +1,26 @@
 use crate::{Error, PodSink};
 
-/// Helper trait to more easily encode values into a [`Builder`].
+/// Helper trait to more easily read values from a [`Builder`].
 ///
-/// This is used through the [`Builder::encode`] and similar methods.
+/// This is used through the [`Builder::write`] and similar methods.
+///
+/// This is implemented for many types, including tuples and arrays. When tuples
+/// and arrays are used, they write each "contained" value in sequence. For
+/// structs this means each field, for choices each choice, and so forth.
+///
+/// [`Builder`]: crate::Builder
+/// [`Builder::write`]: crate::Builder::write
+///
+/// # Examples
+///
+/// ```
+/// let mut pod = pod::array();
+/// pod.as_mut().write_struct(|st| st.write((1, 2, 3)))?;
+///
+/// let pod = pod.as_ref();
+/// assert_eq!(pod.read_struct()?.read::<(i32, i32, i32)>()?, (1, 2, 3));
+/// # Ok::<_, pod::Error>(())
+/// ```
 pub trait Writable {
     #[doc(hidden)]
     fn write_into(&self, pod: &mut impl PodSink) -> Result<(), Error>;

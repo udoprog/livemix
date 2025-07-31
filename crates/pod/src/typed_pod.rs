@@ -8,8 +8,8 @@ use crate::PodStream;
 use crate::bstr::BStr;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
+use crate::read::{Array, Choice, Object, Sequence, Struct};
 use crate::{
     AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, Pointer, ReadPod, Reader,
     Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
@@ -155,7 +155,7 @@ where
         Ok(self.size)
     }
 
-    /// Encode a value into the pod.
+    /// Read a value.
     ///
     /// # Examples
     ///
@@ -186,7 +186,7 @@ where
         Ok(value)
     }
 
-    /// Read the next unsized value into the pod.
+    /// Read the next unsized value.
     ///
     /// # Examples
     ///
@@ -218,7 +218,7 @@ where
         Ok(value)
     }
 
-    /// Read the next unsized value into the pod.
+    /// Read the next unsized value.
     ///
     /// # Examples
     ///
@@ -328,7 +328,7 @@ where
         }
     }
 
-    /// Decode a struct.
+    /// Read a struct.
     ///
     /// # Examples
     ///
@@ -409,7 +409,7 @@ where
         }
     }
 
-    /// Decode a sequence.
+    /// Read a sequence.
     ///
     /// # Examples
     ///
@@ -456,7 +456,7 @@ where
         }
     }
 
-    /// Decode a choice.
+    /// Read a choice.
     ///
     /// # Examples
     ///
@@ -490,7 +490,7 @@ where
         }
     }
 
-    /// Decode a nested pod.
+    /// Read a nested pod.
     ///
     /// # Examples
     ///
@@ -622,7 +622,7 @@ where
     }
 }
 
-/// [`Encode`] implementation for [`TypedPod`].
+/// [`UnsizedWritable`] implementation for [`TypedPod`].
 ///
 /// # Examples
 ///
@@ -675,7 +675,7 @@ where
     }
 
     #[inline]
-    fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
+    fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
         let Ok(size) = u32::try_from(self.size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
