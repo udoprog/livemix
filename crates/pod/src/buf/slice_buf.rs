@@ -16,9 +16,12 @@ pub struct SliceBuf<'de> {
     ptr: NonNull<u8>,
     ///  The length of the slice in bytes.
     len: usize,
-    /// We need to keep track of the *original* read position to support
-    /// adjusting for alignment.
-    at: usize,
+    /// We need to keep track of some alignment relative to the original slice
+    /// to ensure that we can correctly unpad the slice as it's being read.
+    ///
+    /// Note this means that we don't support alignment requests larger than 256
+    /// bytes.
+    off: u8,
     /// The lifetime of the data in the slice.
     _marker: PhantomData<&'de [u8]>,
 }
@@ -41,7 +44,7 @@ impl<'de> SliceBuf<'de> {
         Self {
             ptr: unsafe { NonNull::new_unchecked(slice.as_ptr().cast_mut()) },
             len: slice.len(),
-            at: 0,
+            off: 0,
             _marker: PhantomData,
         }
     }
@@ -142,18 +145,23 @@ impl<'de> SliceBuf<'de> {
         let a = SliceBuf {
             ptr: self.ptr,
             len: at,
-            at: self.at,
+            off: self.off,
             _marker: PhantomData,
         };
 
         let b = SliceBuf {
             ptr: unsafe { wrapping_add(self.ptr, at) },
             len: self.len.wrapping_sub(at),
-            at: self.at.wrapping_add(at),
+            off: (self.off as usize).wrapping_add(at) as u8,
             _marker: PhantomData,
         };
 
         Some((a, b))
+    }
+
+    #[inline]
+    fn offset(&mut self, size: usize) {
+        self.off = (self.off as usize).wrapping_add(size) as u8;
     }
 }
 
@@ -168,7 +176,7 @@ impl AsReader for SliceBuf<'_> {
         SliceBuf {
             ptr: self.ptr,
             len: self.len,
-            at: self.at,
+            off: self.off,
             _marker: PhantomData,
         }
     }
@@ -176,8 +184,9 @@ impl AsReader for SliceBuf<'_> {
 
 /// A stored slice position.
 #[derive(Clone, Copy)]
-pub struct Pos {
-    at: usize,
+pub struct Pos<'de> {
+    ptr: NonNull<u8>,
+    _marker: PhantomData<&'de [u8]>,
 }
 
 impl<'de> Reader<'de> for SliceBuf<'de> {
@@ -189,7 +198,7 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
     where
         Self: 'this;
 
-    type Pos = Pos;
+    type Pos = Pos<'de>;
 
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
@@ -198,12 +207,15 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
 
     #[inline]
     fn pos(&self) -> Self::Pos {
-        Pos { at: self.at }
+        Pos {
+            ptr: self.ptr,
+            _marker: PhantomData,
+        }
     }
 
     #[inline]
     fn distance_from(&self, pos: Self::Pos) -> usize {
-        self.at.saturating_sub(pos.at)
+        self.ptr.addr().get().wrapping_sub(pos.ptr.addr().get())
     }
 
     #[inline]
@@ -218,7 +230,12 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
 
     #[inline]
     fn unpad(&mut self, align: usize) -> Result<(), Error> {
-        let remaining = self.at % align;
+        debug_assert!(
+            align <= 256,
+            "Alignments larger than 256 bytes are not supported"
+        );
+
+        let remaining = (self.off as usize) % align;
 
         if remaining == 0 {
             return Ok(());
@@ -231,8 +248,8 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
         }
 
         self.len -= pad;
-        self.at += pad;
         self.ptr = unsafe { wrapping_add(self.ptr, pad) };
+        self.off = 0;
         Ok(())
     }
 
@@ -274,7 +291,7 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
 
         self.ptr = unsafe { wrapping_add(self.ptr, out.len()) };
         self.len = self.len.wrapping_sub(out.len());
-        self.at = self.at.wrapping_add(out.len());
+        self.offset(out.len());
         Ok(())
     }
 
@@ -327,7 +344,7 @@ impl SplitReader for SliceBuf<'_> {
         let len = self.len;
         self.ptr = unsafe { wrapping_add(self.ptr, len) };
         self.len = 0;
-        self.at += len;
+        self.offset(len);
         out
     }
 }
