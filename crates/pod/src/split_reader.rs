@@ -2,6 +2,8 @@
 use core::slice;
 
 #[cfg(feature = "alloc")]
+use crate::SliceBuf;
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 use crate::Reader;
@@ -12,14 +14,14 @@ mod sealed {
 
     #[cfg(feature = "alloc")]
     use crate::DynamicBuf;
-    use crate::{ArrayBuf, SplitReader};
+    use crate::{ArrayBuf, SliceBuf, SplitReader};
 
     pub trait Sealed {}
 
     impl<const N: usize> Sealed for ArrayBuf<N> {}
     impl Sealed for DynamicBuf {}
-    impl Sealed for Vec<u64> {}
-    impl Sealed for &[u64] {}
+    impl Sealed for Vec<u8> {}
+    impl Sealed for SliceBuf<'_> {}
     impl<R> Sealed for &mut R where R: ?Sized + SplitReader {}
 }
 
@@ -38,9 +40,9 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl SplitReader for Vec<u64> {
+impl SplitReader for Vec<u8> {
     type TakeReader<'this>
-        = &'this [u64]
+        = SliceBuf<'this>
     where
         Self: 'this;
 
@@ -50,21 +52,7 @@ impl SplitReader for Vec<u64> {
         let len = self.len();
         self.clear();
         // SAFETY: The vector is guaranteed to be initialized up to `len`.
-        unsafe { slice::from_raw_parts(ptr, len) }
-    }
-}
-
-impl SplitReader for &[u64] {
-    type TakeReader<'this>
-        = &'this [u64]
-    where
-        Self: 'this;
-
-    #[inline]
-    fn take_reader(&mut self) -> Self::TakeReader<'_> {
-        let (this, rest) = self.split_at(0);
-        *self = this;
-        rest
+        SliceBuf::new(unsafe { slice::from_raw_parts(ptr, len) })
     }
 }
 

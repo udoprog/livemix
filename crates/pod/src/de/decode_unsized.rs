@@ -57,7 +57,7 @@ where
 /// use core::ffi::CStr;
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(c"hello world")?;
-/// assert_eq!(pod.as_ref().next_borrowed::<CStr>()?, c"hello world");
+/// assert_eq!(pod.as_ref().next_unsized::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for CStr {
@@ -113,7 +113,7 @@ impl<'de> DecodeUnsized<'de> for CStr {
 /// ```
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized("hello world")?;
-/// assert_eq!(pod.as_ref().next_borrowed::<str>()?, "hello world");
+/// assert_eq!(pod.as_ref().next_unsized::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for str {
@@ -158,7 +158,7 @@ impl<'de> DecodeUnsized<'de> for str {
 /// ```
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(&b"hello world"[..])?;
-/// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.as_ref().next_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for [u8] {
@@ -186,7 +186,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
-/// assert_eq!(pod.as_ref().next_borrowed::<Bitmap>()?, b"asdfasdf");
+/// assert_eq!(pod.as_ref().next_unsized::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> DecodeUnsized<'de> for Bitmap {

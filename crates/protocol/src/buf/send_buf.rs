@@ -7,7 +7,7 @@ use core::slice;
 use alloc::alloc;
 
 use pod::utils::BytesInhabited;
-use pod::utils::{AlignableWith, UninitAlign};
+use pod::utils::UninitAlign;
 
 use super::AllocError;
 
@@ -219,7 +219,7 @@ impl SendBuf {
     #[inline]
     pub fn read<T>(&mut self) -> Option<T>
     where
-        T: AlignableWith,
+        T: Copy,
     {
         if self.is_empty() {
             return None;

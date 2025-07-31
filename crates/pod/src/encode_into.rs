@@ -1,12 +1,11 @@
-use crate::builder::PodKind;
-use crate::{Builder, Error, Writer};
+use crate::{BuildPodKind, Builder, Error, Writer};
 
 /// Helper trait to more easily encode values into a [`Builder`].
 ///
 /// This is used through the [`Builder::encode`] and similar methods.
 pub trait EncodeInto {
     #[doc(hidden)]
-    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error>;
+    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPodKind>) -> Result<(), Error>;
 }
 
 impl<T> EncodeInto for &T
@@ -14,7 +13,7 @@ where
     T: ?Sized + EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPodKind>) -> Result<(), Error> {
         (*self).encode_into(pod)
     }
 }
@@ -31,7 +30,7 @@ where
     T: EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPodKind>) -> Result<(), Error> {
         let mut pod = pod.into_envelope()?;
 
         for item in self {
@@ -51,7 +50,7 @@ where
     T: EncodeInto,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPodKind>) -> Result<(), Error> {
         let mut pod = pod.into_envelope()?;
 
         for item in self.iter() {
@@ -80,7 +79,7 @@ where
 /// ```
 impl EncodeInto for () {
     #[inline]
-    fn encode_into(&self, _: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
+    fn encode_into(&self, _: Builder<impl Writer, impl BuildPodKind>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -101,7 +100,7 @@ macro_rules! encode_into_tuple {
         /// let mut st = pod.next_struct()?;
         ///
         /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
-        /// assert_eq!(st.field()?.next_borrowed::<str>()?, "hello world");
+        /// assert_eq!(st.field()?.next_unsized::<str>()?, "hello world");
         /// assert_eq!(st.field()?.next::<u32>()?, 1);
         /// assert_eq!(st.field()?.next::<u32>()?, 2);
         /// assert!(st.is_empty());
@@ -112,7 +111,7 @@ macro_rules! encode_into_tuple {
             $($ident: EncodeInto,)*
         {
             #[inline]
-            fn encode_into(&self, pod: Builder<impl Writer, impl PodKind>) -> Result<(), Error> {
+            fn encode_into(&self, pod: Builder<impl Writer, impl BuildPodKind>) -> Result<(), Error> {
                 let ($(ref $var,)*) = *self;
                 let mut pod = pod.into_envelope()?;
                 $($var.encode_into(pod.as_mut())?;)*

@@ -46,8 +46,7 @@ impl<'de> Decode<'de> for bool {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.read::<[u32; 2]>()?;
-        Ok(value != 0)
+        Ok(reader.read::<u32>()? != 0)
     }
 }
 
@@ -73,8 +72,7 @@ where
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.read()?;
-        Ok(Id(I::from_id(value)))
+        Ok(Id(I::from_id(reader.read()?)))
     }
 }
 
@@ -95,8 +93,7 @@ impl<'de> Decode<'de> for i32 {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.read::<[u32; 2]>()?;
-        Ok(value.cast_signed())
+        Ok(reader.read::<u32>()?.cast_signed())
     }
 }
 
@@ -256,8 +253,7 @@ impl<'de> Decode<'de> for f32 {
 
     #[inline]
     fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        let [value, _pad] = reader.read()?;
-        Ok(f32::from_bits(value))
+        Ok(f32::from_bits(reader.read()?))
     }
 }
 
@@ -341,7 +337,7 @@ crate::macros::decode_from_sized!(Fraction);
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().push(*b"hello world")?;
-/// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.as_ref().next_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de, const N: usize> Decode<'de> for [u8; N] {

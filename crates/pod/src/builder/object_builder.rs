@@ -1,9 +1,6 @@
 use core::mem;
 
-use crate::builder::PodKind;
-use crate::{Builder, Error, RawId, Type, Writer};
-
-use super::PropertyChild;
+use crate::{BuildPodKind, Builder, Error, PropertyChild, RawId, Type, Writer};
 
 /// An encoder for an object.
 pub struct ObjectBuilder<W, P>
@@ -22,7 +19,7 @@ where
 impl<W, P> ObjectBuilder<W, P>
 where
     W: Writer,
-    P: PodKind,
+    P: BuildPodKind,
 {
     #[inline]
     pub(crate) fn to_writer(

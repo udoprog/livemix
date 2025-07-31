@@ -1,16 +1,15 @@
 use core::fmt;
 use core::mem;
 
+use crate::PADDING;
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
+use crate::buf::{AllocError, DynamicBuf};
 use crate::error::ErrorKind;
 use crate::{AsReader, EncodeUnsized, Error, Property, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a struct.
 pub struct Object<B> {
     buf: B,
-    size: usize,
     object_type: u32,
     object_id: u32,
 }
@@ -40,30 +39,20 @@ where
     B: Reader<'de>,
 {
     #[inline]
-    fn new(buf: B, size: usize, object_type: u32, object_id: u32) -> Self {
+    fn new(buf: B, object_type: u32, object_id: u32) -> Self {
         Self {
             buf,
-            size,
             object_type,
             object_id,
         }
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut buf: B, size: usize) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut buf: B) -> Result<Self, Error> {
         let [object_type, object_id] = buf.read::<[u32; 2]>()?;
-
-        // Remove the size of the object header.
-        let Some(size) = size.checked_sub(mem::size_of::<[u32; 2]>()) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size,
-                sub: mem::size_of::<[u32; 2]>(),
-            }));
-        };
 
         Ok(Self {
             buf,
-            size,
             object_type,
             object_id,
         })
@@ -106,8 +95,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn is_empty(&self) -> bool {
-        self.size == 0
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
     }
 
     /// Decode the next field in the struct.
@@ -148,7 +137,7 @@ where
     /// ```
     #[inline]
     pub fn property(&mut self) -> Result<Property<B::Split>, Error> {
-        if self.size == 0 {
+        if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
 
@@ -159,23 +148,8 @@ where
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        let pod = TypedPod::new(head, size, ty);
-
-        let Some(size_with_header) = pod
-            .size_with_header()
-            .and_then(|v| v.checked_add(mem::size_of::<[u32; 2]>()))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let Some(size) = self.size.checked_sub(size_with_header) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size: self.size,
-                sub: size_with_header,
-            }));
-        };
-
-        self.size = size;
+        let pod = TypedPod::packed(head, size, ty);
+        self.buf.unpad(PADDING)?;
         Ok(Property::new(key, flags, pod))
     }
 
@@ -194,7 +168,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let obj = pod.as_ref().next_object()?.to_owned();
+    /// let obj = pod.as_ref().next_object()?.to_owned()?;
     ///
     /// let mut obj = obj.as_ref();
     /// assert!(!obj.is_empty());
@@ -219,13 +193,12 @@ where
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_owned(&self) -> Object<Box<[u64]>> {
-        Object {
-            buf: Box::from(self.buf.as_slice()),
-            size: self.size,
+    pub fn to_owned(&self) -> Result<Object<DynamicBuf>, AllocError> {
+        Ok(Object {
+            buf: DynamicBuf::from_slice(self.buf.as_bytes())?,
             object_type: self.object_type,
             object_id: self.object_id,
-        }
+        })
     }
 }
 
@@ -250,7 +223,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let obj = pod.as_ref().next_object()?.to_owned();
+    /// let obj = pod.as_ref().next_object()?.to_owned()?;
     ///
     /// let mut obj = obj.as_ref();
     /// assert!(!obj.is_empty());
@@ -275,12 +248,7 @@ where
     /// ```
     #[inline]
     pub fn as_ref(&self) -> Object<B::AsReader<'_>> {
-        Object::new(
-            self.buf.as_reader(),
-            self.size,
-            self.object_type,
-            self.object_id,
-        )
+        Object::new(self.buf.as_reader(), self.object_type, self.object_id)
     }
 }
 
@@ -299,7 +267,7 @@ where
 ///     Ok(())
 /// })?;
 ///
-/// let obj = pod.as_ref().next_object()?.to_owned();
+/// let obj = pod.as_ref().next_object()?.to_owned()?;
 ///
 /// let mut pod2 = pod::array();
 /// pod2.as_mut().encode(obj)?;
@@ -335,14 +303,14 @@ where
 
     #[inline]
     fn size(&self) -> usize {
-        let len = self.buf.as_reader().bytes_len();
+        let len = self.buf.as_reader().len();
         len.wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.object_type, self.object_id])?;
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_bytes())
     }
 }
 

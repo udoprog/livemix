@@ -52,37 +52,26 @@ unsafe impl<T, const N: usize> BytesInhabited for [T; N] where T: BytesInhabited
 #[repr(C, align(8))]
 pub struct UninitAlign<T>(MaybeUninit<T>);
 
-impl<T> UninitAlign<T> {
+impl<T> UninitAlign<T>
+where
+    T: Copy,
+{
     /// Get a mutable slice of the aligned value.
     #[inline]
-    pub fn as_mut_slice(&mut self) -> &mut [MaybeUninit<u64>]
-    where
-        T: AlignableWith,
-    {
-        unsafe {
-            slice::from_raw_parts_mut(
-                (&mut self.0 as *mut MaybeUninit<T>).cast::<MaybeUninit<u64>>(),
-                T::WORD_SIZE,
-            )
-        }
+    pub fn as_mut_slice(&mut self) -> &mut [MaybeUninit<u8>] {
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.size()) }
     }
 
     /// Get a pointer to the word representation of the value.
     #[inline]
-    pub fn as_mut_ptr(&mut self) -> *mut MaybeUninit<u64>
-    where
-        T: AlignableWith,
-    {
+    pub fn as_mut_ptr(&mut self) -> *mut MaybeUninit<u8> {
         (&mut self.0 as *mut MaybeUninit<T>).cast()
     }
 
     /// Get the size of the region in word.
     #[inline]
-    pub fn size(&self) -> usize
-    where
-        T: AlignableWith,
-    {
-        T::WORD_SIZE
+    pub fn size(&self) -> usize {
+        mem::size_of::<T>()
     }
 }
 
@@ -155,26 +144,15 @@ pub(crate) fn array_remaining(
     header_size: usize,
 ) -> Result<usize, Error> {
     let Some(size) = size.checked_sub(header_size) else {
-        return Err(Error::new(ErrorKind::SizeOverflow));
+        return Err(Error::new(ErrorKind::ArraySizeUnderflow));
     };
 
-    let remaining = 'out: {
-        if size == 0 {
-            break 'out 0;
-        }
+    if size % child_size != 0 || child_size == 0 {
+        return Err(Error::new(ErrorKind::ArraySizeMismatch {
+            size,
+            child_size,
+        }));
+    }
 
-        let Some(padded_child_size) =
-            child_size.checked_next_multiple_of(mem::size_of::<[u32; 2]>())
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let Some(size) = size.checked_div(padded_child_size) else {
-            break 'out 0;
-        };
-
-        size
-    };
-
-    Ok(remaining)
+    Ok(size / child_size)
 }

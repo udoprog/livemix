@@ -268,7 +268,7 @@ impl Connection {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
 
-        let Ok(size) = u32::try_from(buf.bytes_len()) else {
+        let Ok(size) = u32::try_from(buf.len()) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
@@ -280,7 +280,7 @@ impl Connection {
         };
 
         self.outgoing.push_bytes(&header)?;
-        self.outgoing.extend_from_words(buf.as_slice())?;
+        self.outgoing.extend_from_words(buf.as_bytes())?;
         self.modified |= self.interest.set(Interest::WRITE);
         Ok(())
     }

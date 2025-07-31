@@ -28,7 +28,7 @@ pub trait EncodeUnsized {
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(&b"hello world"[..])?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.next_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for [u8] {
@@ -56,7 +56,7 @@ crate::macros::encode_into_unsized!([u8]);
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(c"hello world")?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_borrowed::<CStr>()?, c"hello world");
+/// assert_eq!(pod.next_unsized::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for CStr {
@@ -96,7 +96,7 @@ crate::macros::encode_into_unsized!(CStr);
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized("hello world")?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_borrowed::<str>()?, "hello world");
+/// assert_eq!(pod.next_unsized::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for str {
@@ -168,7 +168,7 @@ crate::macros::encode_into_unsized!(String);
 /// let mut pod = pod::array();
 /// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_borrowed::<Bitmap>()?, b"asdfasdf");
+/// assert_eq!(pod.next_unsized::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl EncodeUnsized for Bitmap {

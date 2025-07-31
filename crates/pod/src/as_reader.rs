@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use crate::Reader;
+use crate::{Reader, SliceBuf};
 
 mod sealed {
     #[cfg(feature = "alloc")]
@@ -13,15 +13,16 @@ mod sealed {
 
     #[cfg(feature = "alloc")]
     use crate::DynamicBuf;
-    use crate::{ArrayBuf, AsReader};
+    use crate::{ArrayBuf, AsReader, SliceBuf};
 
     pub trait Sealed {}
 
     #[cfg(feature = "alloc")]
-    impl Sealed for Box<[u64]> {}
+    impl Sealed for Box<[u8]> {}
     #[cfg(feature = "alloc")]
-    impl Sealed for Vec<u64> {}
-    impl Sealed for [u64] {}
+    impl Sealed for Vec<u8> {}
+    impl Sealed for [u8] {}
+    impl Sealed for SliceBuf<'_> {}
     impl<const N: usize> Sealed for ArrayBuf<N> {}
     #[cfg(feature = "alloc")]
     impl Sealed for DynamicBuf {}
@@ -44,40 +45,40 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl AsReader for Box<[u64]> {
+impl AsReader for Box<[u8]> {
     type AsReader<'this>
-        = &'this [u64]
+        = SliceBuf<'this>
     where
         Self: 'this;
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
-        self
+        SliceBuf::new(self)
     }
 }
 
 #[cfg(feature = "alloc")]
-impl AsReader for Vec<u64> {
+impl AsReader for Vec<u8> {
     type AsReader<'this>
-        = &'this [u64]
+        = SliceBuf<'this>
     where
         Self: 'this;
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
-        self
+        SliceBuf::new(self)
     }
 }
 
-impl AsReader for [u64] {
+impl AsReader for [u8] {
     type AsReader<'this>
-        = &'this [u64]
+        = SliceBuf<'this>
     where
         Self: 'this;
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
-        self
+        SliceBuf::new(self)
     }
 }
 

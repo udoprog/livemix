@@ -3,31 +3,49 @@ use core::fmt;
 use core::mem;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
+use crate::DynamicBuf;
 use crate::EncodeUnsized;
+use crate::PackedPod;
 use crate::bstr::BStr;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, Pod, Pointer, Reader,
-    Rectangle, Type, Visitor, Writer,
+    AsReader, Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, PaddedPod, Pod, Pointer,
+    ReadPodKind, Reader, Rectangle, Type, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct TypedPod<B> {
+pub struct TypedPod<B, P = PaddedPod> {
     buf: B,
     size: usize,
     ty: Type,
+    kind: P,
 }
 
-impl<B> TypedPod<B> {
-    /// Construct a new [`TypedPod`] arround the specified buffer `B`.
+impl<B> TypedPod<B, PackedPod> {
+    /// Construct a new [`TypedPod`] arround the specified buffer `B` and
+    /// a [`PackedPod`] kind.
     #[inline]
-    pub(crate) const fn new(buf: B, size: usize, ty: Type) -> Self {
-        TypedPod { buf, size, ty }
+    pub(crate) const fn packed(buf: B, size: usize, ty: Type) -> Self {
+        Self::with_kind(buf, size, ty, PackedPod)
+    }
+}
+
+impl<B, P> TypedPod<B, P> {
+    /// Construct a new [`TypedPod`] arround the specified buffer `B` and
+    /// specified kind `P`.
+    #[inline]
+    pub(crate) const fn with_kind(buf: B, size: usize, ty: Type, kind: P) -> Self {
+        TypedPod {
+            buf,
+            size,
+            ty,
+            kind,
+        }
     }
 
     /// Get the type of the pod.
@@ -69,20 +87,12 @@ impl<B> TypedPod<B> {
     pub const fn size(&self) -> usize {
         self.size
     }
-
-    /// Get the size of the padded pod including the header.
-    #[inline]
-    pub(crate) fn size_with_header(&self) -> Option<usize> {
-        const HEADER_SIZE: usize = mem::size_of::<[u32; 2]>();
-        self.size
-            .checked_next_multiple_of(HEADER_SIZE)?
-            .checked_add(HEADER_SIZE)
-    }
 }
 
-impl<'de, B> TypedPod<B>
+impl<'de, B, P> TypedPod<B, P>
 where
     B: Reader<'de>,
+    P: ReadPodKind,
 {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
@@ -99,9 +109,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn from_reader(mut buf: B) -> Result<Self, Error> {
+    pub fn from_reader(mut buf: B, kind: P) -> Result<Self, Error> {
         let (size, ty) = buf.header()?;
-        Ok(TypedPod { size, ty, buf })
+
+        Ok(TypedPod {
+            size,
+            ty,
+            buf,
+            kind,
+        })
     }
 
     /// Skip a value in the pod.
@@ -147,7 +163,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next<T>(self) -> Result<T, Error>
+    pub fn next<T>(mut self) -> Result<T, Error>
     where
         T: Decode<'de>,
     {
@@ -158,7 +174,9 @@ where
             }));
         }
 
-        T::read_content(self.buf, self.size)
+        let value = T::read_content(self.buf.borrow_mut(), self.size)?;
+        self.kind.unpad(self.buf)?;
+        Ok(value)
     }
 
     /// Read the next unsized value into the pod.
@@ -172,11 +190,11 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.next_unsized(<[u8]>::to_owned)?, b"hello world");
+    /// assert_eq!(pod.visit_unsized(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
+    pub fn visit_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
@@ -202,11 +220,11 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_unsized::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_borrowed<T>(self) -> Result<&'de T, Error>
+    pub fn next_unsized<T>(self) -> Result<&'de T, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
@@ -249,10 +267,12 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_option(self) -> Result<Option<TypedPod<B>>, Error> {
+    pub fn next_option(self) -> Result<Option<TypedPod<B, P>>, Error> {
         match self.ty {
             Type::NONE => Ok(None),
-            _ => Ok(Some(TypedPod::new(self.buf, self.size, self.ty))),
+            _ => Ok(Some(TypedPod::with_kind(
+                self.buf, self.size, self.ty, self.kind,
+            ))),
         }
     }
 
@@ -321,9 +341,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_struct(self) -> Result<Struct<B>, Error> {
+    pub fn next_struct(mut self) -> Result<Struct<B::Split>, Error> {
         match self.ty {
-            Type::STRUCT => Ok(Struct::new(self.buf, self.size)),
+            Type::STRUCT => {
+                let Some(buf) = self.buf.split(self.size) else {
+                    return Err(Error::new(ErrorKind::BufferUnderflow));
+                };
+
+                Ok(Struct::new(buf))
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::STRUCT,
                 actual: self.ty,
@@ -368,9 +394,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_object(self) -> Result<Object<B>, Error> {
+    pub fn next_object(mut self) -> Result<Object<B::Split>, Error> {
         match self.ty {
-            Type::OBJECT => Object::from_reader(self.buf, self.size),
+            Type::OBJECT => {
+                let Some(buf) = self.buf.split(self.size) else {
+                    return Err(Error::new(ErrorKind::BufferUnderflow));
+                };
+
+                Object::from_reader(buf)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::OBJECT,
                 actual: self.ty,
@@ -415,9 +447,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_sequence(self) -> Result<Sequence<B>, Error> {
+    pub fn next_sequence(mut self) -> Result<Sequence<B::Split>, Error> {
         match self.ty {
-            Type::SEQUENCE => Sequence::from_reader(self.buf, self.size),
+            Type::SEQUENCE => {
+                let Some(buf) = self.buf.split(self.size) else {
+                    return Err(Error::new(ErrorKind::BufferUnderflow));
+                };
+
+                Sequence::from_reader(buf)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::SEQUENCE,
                 actual: self.ty,
@@ -486,9 +524,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<B>, Error> {
+    pub fn next_pod(self) -> Result<Pod<B, P>, Error> {
         match self.ty {
-            Type::POD => Ok(Pod::new(self.buf)),
+            Type::POD => Ok(Pod::with_kind(self.buf, self.kind)),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::POD,
                 actual: self.ty,
@@ -497,9 +535,10 @@ where
     }
 }
 
-impl<B> TypedPod<B>
+impl<B, P> TypedPod<B, P>
 where
     B: AsReader,
+    P: Copy,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -509,31 +548,33 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.to_owned();
+    /// let pod = pod.as_ref().into_typed()?.to_owned()?;
     ///
     /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
-    pub fn to_owned(&self) -> TypedPod<Box<[u64]>> {
-        TypedPod {
-            buf: Box::from(self.buf.as_reader().as_slice()),
+    pub fn to_owned(&self) -> Result<TypedPod<DynamicBuf, P>, AllocError> {
+        Ok(TypedPod {
+            buf: self.buf.as_reader().as_slice().to_owned()?,
             size: self.size,
             ty: self.ty,
-        }
+            kind: self.kind,
+        })
     }
 
     /// Convert the [`TypedPod`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> TypedPod<B::AsReader<'_>> {
-        TypedPod::new(self.buf.as_reader(), self.size, self.ty)
+    pub fn as_ref(&self) -> TypedPod<B::AsReader<'_>, P> {
+        TypedPod::with_kind(self.buf.as_reader(), self.size, self.ty, self.kind)
     }
 }
 
-impl<B> Clone for TypedPod<B>
+impl<B, P> Clone for TypedPod<B, P>
 where
     B: Clone,
+    P: Copy,
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -541,6 +582,7 @@ where
             size: self.size,
             ty: self.ty,
             buf: self.buf.clone(),
+            kind: self.kind,
         }
     }
 }
@@ -584,15 +626,16 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> EncodeUnsized for TypedPod<B>
+impl<B, P> EncodeUnsized for TypedPod<B, P>
 where
     B: AsReader,
+    P: ReadPodKind,
 {
     const TYPE: Type = Type::POD;
 
     #[inline]
     fn size(&self) -> usize {
-        let len = self.buf.as_reader().bytes_len();
+        let len = self.buf.as_reader().len();
         len.wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
@@ -603,16 +646,17 @@ where
         };
 
         writer.write(&[size, self.ty.into_u32()])?;
-        writer.write(self.buf.as_reader().as_slice())?;
+        writer.write(self.buf.as_reader().as_bytes())?;
         Ok(())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsReader, P: ReadPodKind);
 
-impl<B> fmt::Debug for TypedPod<B>
+impl<B, P> fmt::Debug for TypedPod<B, P>
 where
     B: AsReader,
+    P: ReadPodKind,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -634,11 +678,11 @@ where
             };
         }
 
-        macro_rules! next_unsized {
+        macro_rules! visit_unsized {
             ($ty:ty, $pat:pat => $expr:expr) => {{
                 let mut outer = Ok(());
 
-                let result = self.as_ref().next_unsized(|$pat: &$ty| {
+                let result = self.as_ref().visit_unsized(|$pat: &$ty| {
                     outer = $expr;
                 });
 
@@ -671,10 +715,10 @@ where
                 decode!(f64, value => write!(f, "{value:?}"))
             }
             Type::STRING => {
-                next_unsized!(CStr, value => write!(f, "{value:?}"))
+                visit_unsized!(CStr, value => write!(f, "{value:?}"))
             }
             Type::BYTES => {
-                next_unsized!([u8], value => write!(f, "{:?}", BStr::new(value)))
+                visit_unsized!([u8], value => write!(f, "{:?}", BStr::new(value)))
             }
             Type::RECTANGLE => {
                 decode!(Rectangle, value => value.fmt(f))
@@ -683,7 +727,7 @@ where
                 decode!(Fraction, value => value.fmt(f))
             }
             Type::BITMAP => {
-                next_unsized!(Bitmap, value => value.fmt(f))
+                visit_unsized!(Bitmap, value => value.fmt(f))
             }
             Type::ARRAY => tri!(self.as_ref().next_array()).fmt(f),
             Type::STRUCT => tri!(self.as_ref().next_struct()).fmt(f),

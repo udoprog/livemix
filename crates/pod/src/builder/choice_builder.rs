@@ -1,9 +1,7 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{Builder, ChoiceType, Error, Type, Writer};
-
-use super::{ChildPod, PodKind};
+use crate::{BuildPodKind, Builder, ChildPod, ChoiceType, Error, Type, Writer};
 
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, P>
@@ -24,7 +22,7 @@ where
 impl<W, P> ChoiceBuilder<W, P>
 where
     W: Writer,
-    P: PodKind,
+    P: BuildPodKind,
 {
     #[inline]
     pub(crate) fn to_writer(
@@ -81,7 +79,7 @@ where
     /// ```
     #[inline]
     pub fn child(&mut self) -> Builder<W::Mut<'_>, ChildPod> {
-        Builder::new_unpadded_child(self.writer.borrow_mut(), self.child_size, self.child_type)
+        Builder::new_child(self.writer.borrow_mut(), self.child_size, self.child_type)
     }
 
     #[inline]

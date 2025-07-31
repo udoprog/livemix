@@ -2,11 +2,12 @@ use core::fmt;
 use core::mem;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
+use crate::DynamicBuf;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
+use crate::{AsReader, EncodeUnsized, Error, PackedPod, Reader, Type, TypedPod, Writer};
 
 /// A decoder for an array.
 ///
@@ -55,33 +56,9 @@ use crate::{AsReader, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
 ///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
-/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "foo");
-/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "bar");
-/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "baz");
-/// assert!(array.is_empty());
-/// assert_eq!(array.len(), 0);
-/// # Ok::<_, pod::Error>(())
-/// ```
-///
-/// Decoding borrowed values:
-///
-/// ```
-/// use pod::{Pod, Type};
-///
-/// let mut pod = pod::array();
-/// pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
-///     array.child().push_unsized("foo")?;
-///     array.child().push_unsized("bar")?;
-///     array.child().push_unsized("baz")?;
-///     Ok(())
-/// })?;
-///
-/// let mut array = pod.as_ref().next_array()?;
-/// assert!(!array.is_empty());
-/// assert_eq!(array.len(), 3);
-/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "foo");
-/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "bar");
-/// assert_eq!(array.next().unwrap().next_borrowed::<str>()?, "baz");
+/// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "foo");
+/// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "bar");
+/// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "baz");
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
@@ -165,12 +142,12 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: usize) -> Result<Self, Error> {
-        let (child_size, child_type) = reader.header()?;
+    pub(crate) fn from_reader(mut buf: B, size: usize) -> Result<Self, Error> {
+        let (child_size, child_type) = buf.header()?;
         let remaining = array_remaining(size, child_size, mem::size_of::<[u32; 2]>())?;
 
         Ok(Self {
-            buf: reader,
+            buf,
             child_size,
             child_type,
             remaining,
@@ -207,13 +184,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<B::Split>> {
+    pub fn next(&mut self) -> Option<TypedPod<B::Split, PackedPod>> {
         if self.remaining == 0 {
             return None;
         }
 
         let tail = self.buf.split(self.child_size)?;
-        let pod = TypedPod::new(tail, self.child_size, self.child_type);
+        let pod = TypedPod::packed(tail, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }
@@ -233,7 +210,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let array = pod.as_ref().next_array()?.to_owned();
+    /// let array = pod.as_ref().next_array()?.to_owned()?;
     /// let mut array = array.as_ref();
     ///
     /// let mut count = 0;
@@ -250,13 +227,13 @@ where
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_owned(&self) -> Array<Box<[u64]>> {
-        Array {
-            buf: Box::from(self.buf.as_slice()),
+    pub fn to_owned(&self) -> Result<Array<DynamicBuf>, AllocError> {
+        Ok(Array {
+            buf: DynamicBuf::from_slice(self.buf.as_bytes())?,
             child_size: self.child_size,
             child_type: self.child_type,
             remaining: self.remaining,
-        }
+        })
     }
 }
 
@@ -281,7 +258,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let array = pod.as_ref().next_array()?.to_owned();
+    /// let array = pod.as_ref().next_array()?.to_owned()?;
     /// let mut array = array.as_ref();
     ///
     /// let mut count = 0;
@@ -347,8 +324,9 @@ where
 
     #[inline]
     fn size(&self) -> usize {
-        let len = self.buf.as_reader().bytes_len();
-        len.wrapping_add(mem::size_of::<[u32; 2]>())
+        self.child_size
+            .wrapping_mul(self.remaining)
+            .wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
@@ -358,7 +336,7 @@ where
         };
 
         writer.write(&[child_size, self.child_type.into_u32()])?;
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_bytes())
     }
 }
 

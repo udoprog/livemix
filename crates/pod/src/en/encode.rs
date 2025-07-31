@@ -317,7 +317,7 @@ crate::macros::encode_into_sized!(Fraction);
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().push(*b"hello world")?;
-/// assert_eq!(pod.as_ref().next_borrowed::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.as_ref().next_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<const N: usize> Encode for [u8; N] {

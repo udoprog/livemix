@@ -9,12 +9,14 @@ mod dynamic_buf;
 #[cfg(feature = "alloc")]
 pub use self::dynamic_buf::{AllocError, DynamicBuf};
 
+mod slice_buf;
+pub use self::slice_buf::SliceBuf;
+
 use core::error;
 use core::fmt;
 
 /// Capacity overflow when writing to an [`ArrayBuf`].
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
+#[derive(Debug, PartialEq)]
 #[non_exhaustive]
 pub struct CapacityError;
 

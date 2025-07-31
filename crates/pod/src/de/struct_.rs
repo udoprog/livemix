@@ -1,15 +1,18 @@
 use core::fmt;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
+use crate::DynamicBuf;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
 use crate::error::ErrorKind;
-use crate::{AsReader, DecodeFrom, EncodeUnsized, Error, Pod, Reader, Type, TypedPod, Writer};
+use crate::{
+    AsReader, DecodeFrom, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPodKind, Reader,
+    SliceBuf, Type, TypedPod, Writer,
+};
 
 /// A decoder for a struct.
 pub struct Struct<B> {
     buf: B,
-    size: usize,
 }
 
 impl<B> Struct<B> {
@@ -25,8 +28,8 @@ where
     B: Reader<'de>,
 {
     #[inline]
-    pub(crate) fn new(buf: B, size: usize) -> Self {
-        Self { buf, size }
+    pub(crate) fn new(buf: B) -> Self {
+        Self { buf }
     }
 
     /// Test if the decoder is empty.
@@ -53,7 +56,7 @@ where
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.size == 0
+        self.buf.is_empty()
     }
 
     /// Decode from the struct using the [`DecodeFrom`] trait.
@@ -83,19 +86,7 @@ where
     where
         T: DecodeFrom<'de>,
     {
-        let pos = self.buf.pos();
-        let value = T::decode_from(Pod::new(self.buf.borrow_mut()))?;
-        let distance = self.buf.distance_from(pos);
-
-        let Some(size) = self.size.checked_sub(distance) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size: self.size,
-                sub: distance,
-            }));
-        };
-
-        self.size = size;
-        Ok(value)
+        T::decode_from(Pod::new(self.buf.borrow_mut()))
     }
 
     /// Decode the next field in the struct.
@@ -121,8 +112,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Result<TypedPod<B::Split>, Error> {
-        if self.size == 0 {
+    pub fn field(&mut self) -> Result<TypedPod<B::Split, PackedPod>, Error> {
+        if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::StructUnderflow));
         }
 
@@ -132,20 +123,8 @@ where
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        let pod = TypedPod::new(head, size, ty);
-
-        let Some(size_with_header) = pod.size_with_header() else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let Some(size) = self.size.checked_sub(size_with_header) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size: self.size,
-                sub: size_with_header,
-            }));
-        };
-
-        self.size = size;
+        let pod = TypedPod::packed(head, size, ty);
+        self.buf.unpad(PADDING)?;
         Ok(pod)
     }
 
@@ -162,7 +141,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let st = pod.as_ref().next_struct()?.to_owned();
+    /// let st = pod.as_ref().next_struct()?.to_owned()?;
     ///
     /// let mut st = st.as_ref();
     ///
@@ -175,18 +154,16 @@ where
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_owned(&self) -> Struct<Box<[u64]>> {
-        Struct {
-            buf: Box::from(self.buf.as_slice()),
-            size: self.size,
-        }
+    pub fn to_owned(&self) -> Result<Struct<DynamicBuf>, AllocError> {
+        Ok(Struct {
+            buf: DynamicBuf::from_slice(self.buf.as_bytes())?,
+        })
     }
 
     #[inline]
-    fn into_slice(self) -> Struct<&'de [u64]> {
+    fn into_slice(self) -> Struct<SliceBuf<'de>> {
         Struct {
             buf: self.buf.as_slice(),
-            size: self.size,
         }
     }
 }
@@ -210,7 +187,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let st = pod.as_ref().next_struct()?.to_owned();
+    /// let st = pod.as_ref().next_struct()?.to_owned()?;
     /// let mut st = st.as_ref();
     ///
     /// assert!(!st.is_empty());
@@ -222,7 +199,7 @@ where
     /// ```
     #[inline]
     pub fn as_ref(&self) -> Struct<B::AsReader<'_>> {
-        Struct::new(self.buf.as_reader(), self.size)
+        Struct::new(self.buf.as_reader())
     }
 }
 
@@ -261,20 +238,20 @@ where
 
     #[inline]
     fn size(&self) -> usize {
-        self.buf.as_reader().bytes_len()
+        self.buf.as_reader().len()
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_bytes())
     }
 }
 
 crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader);
 
-impl<'de> DecodeFrom<'de> for Struct<&'de [u64]> {
+impl<'de> DecodeFrom<'de> for Struct<SliceBuf<'de>> {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de>>) -> Result<Self, Error> {
+    fn decode_from(pod: Pod<impl Reader<'de>, impl ReadPodKind>) -> Result<Self, Error> {
         Ok(pod.next_struct()?.into_slice())
     }
 }

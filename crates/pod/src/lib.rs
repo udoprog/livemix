@@ -6,6 +6,8 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub(crate) const PADDING: usize = core::mem::size_of::<u64>();
+
 #[cfg(all(test, feature = "alloc"))]
 mod tests;
 
@@ -19,6 +21,11 @@ pub use self::pod::Pod;
 
 mod typed_pod;
 pub use self::typed_pod::TypedPod;
+
+mod pod_kind;
+pub use self::pod_kind::{
+    BuildPodKind, ChildPod, ControlChild, PackedPod, PaddedPod, PropertyChild, ReadPodKind,
+};
 
 pub(crate) mod ty;
 pub use self::ty::Type;
@@ -41,11 +48,11 @@ mod de;
 pub use self::de::{Array, Choice, Decode, DecodeUnsized, Object, Sequence, Struct};
 
 pub mod buf;
-#[doc(inline)]
-pub use self::buf::ArrayBuf;
 #[cfg(feature = "alloc")]
 #[doc(inline)]
 pub use self::buf::DynamicBuf;
+#[doc(inline)]
+pub use self::buf::{ArrayBuf, SliceBuf};
 
 mod writer;
 pub use self::writer::Writer;

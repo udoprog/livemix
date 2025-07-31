@@ -1,5 +1,4 @@
-use crate::builder::PodKind;
-use crate::{Builder, EncodeInto, Error, Type, Writer};
+use crate::{BuildPodKind, Builder, EncodeInto, Error, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -15,7 +14,7 @@ where
 impl<W, P> StructBuilder<W, P>
 where
     W: Writer,
-    P: PodKind,
+    P: BuildPodKind,
 {
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: P) -> Result<Self, Error> {

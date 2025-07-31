@@ -1,31 +1,87 @@
 use core::fmt;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
-#[cfg(feature = "alloc")]
-use crate::DynamicBuf;
+use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
-use crate::{ArrayBuf, DecodeFrom};
 use crate::{
-    AsReader, Decode, DecodeUnsized, EncodeUnsized, Error, Reader, Type, TypedPod, Visitor, Writer,
+    ArrayBuf, AsReader, Decode, DecodeFrom, DecodeUnsized, EncodeUnsized, Error, PackedPod,
+    ReadPodKind, Reader, Type, TypedPod, Visitor, Writer,
 };
+#[cfg(feature = "alloc")]
+use crate::{DynamicBuf, PaddedPod};
 
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct Pod<B> {
+pub struct Pod<B, P = PaddedPod> {
     buf: B,
+    kind: P,
 }
 
-impl<B> Clone for Pod<B>
+impl<B, P> Pod<B, P>
+where
+    P: ReadPodKind,
+{
+    #[inline]
+    pub(crate) const fn with_kind(buf: B, kind: P) -> Self {
+        Pod { buf, kind }
+    }
+}
+
+impl<B> Pod<B> {
+    /// Construct a new [`Pod`] arround the specified buffer `B`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod};
+    ///
+    /// let mut buf = ArrayBuf::default();
+    /// _ = Pod::new(&mut buf);
+    ///
+    /// _ = Pod::new(ArrayBuf::<16>::new());
+    /// ```
+    #[inline]
+    pub const fn new(buf: B) -> Self {
+        Pod {
+            buf,
+            kind: PaddedPod,
+        }
+    }
+}
+
+impl<B> Pod<B, PackedPod> {
+    /// Construct a new [`Pod`] arround the specified buffer `B`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Pod};
+    ///
+    /// let mut buf = ArrayBuf::default();
+    /// _ = Pod::new(&mut buf);
+    ///
+    /// _ = Pod::new(ArrayBuf::<16>::new());
+    /// ```
+    #[inline]
+    pub const fn packed(buf: B) -> Self {
+        Pod {
+            buf,
+            kind: PackedPod,
+        }
+    }
+}
+
+impl<B, P> Clone for Pod<B, P>
 where
     B: Clone,
+    P: Copy,
 {
     #[inline]
     fn clone(&self) -> Self {
         Pod {
             buf: self.buf.clone(),
+            kind: self.kind,
         }
     }
 }
@@ -46,7 +102,13 @@ impl Pod<DynamicBuf> {
     pub const fn dynamic() -> Self {
         Self::new(DynamicBuf::new())
     }
+}
 
+#[cfg(feature = "alloc")]
+impl<P> Pod<DynamicBuf, P>
+where
+    P: ReadPodKind,
+{
     /// Clear the current builder.
     ///
     /// This will clear the buffer and reset the pod to an empty state.
@@ -82,7 +144,12 @@ impl Pod<ArrayBuf> {
     pub const fn array() -> Self {
         Self::new(ArrayBuf::new())
     }
+}
 
+impl<P> Pod<ArrayBuf, P>
+where
+    P: ReadPodKind,
+{
     /// Clear the current builder.
     ///
     /// This will clear the buffer and reset the pod to an empty state.
@@ -103,26 +170,10 @@ impl Pod<ArrayBuf> {
     }
 }
 
-impl<B> Pod<B> {
-    /// Construct a new [`Pod`] arround the specified buffer `B`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Pod};
-    ///
-    /// let mut buf = ArrayBuf::default();
-    /// _ = Pod::new(&mut buf);
-    ///
-    /// _ = Pod::new(ArrayBuf::<16>::new());
-    /// ```
-    #[inline]
-    pub const fn new(buf: B) -> Self {
-        Pod { buf }
-    }
-}
-
-impl<B> Pod<B> {
+impl<B, P> Pod<B, P>
+where
+    P: ReadPodKind,
+{
     /// Access the underlying buffer.
     ///
     /// # Examples
@@ -132,7 +183,7 @@ impl<B> Pod<B> {
     /// pod.as_mut().push(10i32)?;
     ///
     /// let buf = pod.as_buf();
-    /// assert_eq!(buf.as_slice().len(), 2);
+    /// assert_eq!(buf.as_slice().len(), 16);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -149,7 +200,7 @@ impl<B> Pod<B> {
     /// pod.as_mut().push(10i32)?;
     ///
     /// let buf = pod.into_buf();
-    /// assert_eq!(buf.as_slice().len(), 2);
+    /// assert_eq!(buf.as_slice().len(), 16);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -158,9 +209,10 @@ impl<B> Pod<B> {
     }
 }
 
-impl<'de, B> Pod<B>
+impl<'de, B, P> Pod<B, P>
 where
     B: Reader<'de>,
+    P: ReadPodKind,
 {
     /// Skip a value in the pod.
     ///
@@ -236,16 +288,16 @@ where
     /// ```
     /// let mut pod = pod::array();
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
-    /// assert_eq!(pod.as_ref().next_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");
+    /// assert_eq!(pod.as_ref().visit_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
+    pub fn visit_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
     {
-        self.into_typed()?.next_unsized(visitor)
+        self.into_typed()?.visit_unsized(visitor)
     }
 
     /// Read the next unsized value from the pod.
@@ -257,15 +309,15 @@ where
     /// pod.as_mut().push_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref();
-    /// assert_eq!(pod.next_borrowed::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.next_unsized::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_borrowed<T>(self) -> Result<&'de T, Error>
+    pub fn next_unsized<T>(self) -> Result<&'de T, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
-        self.into_typed()?.next_borrowed()
+        self.into_typed()?.next_unsized()
     }
 
     /// Read the next optional value from the pod.
@@ -386,7 +438,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_struct(self) -> Result<Struct<B>, Error> {
+    pub fn next_struct(self) -> Result<Struct<B::Split>, Error> {
         self.into_typed()?.next_struct()
     }
 
@@ -440,7 +492,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_object(self) -> Result<Object<B>, Error> {
+    pub fn next_object(self) -> Result<Object<B::Split>, Error> {
         self.into_typed()?.next_object()
     }
 
@@ -494,7 +546,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_sequence(self) -> Result<Sequence<B>, Error> {
+    pub fn next_sequence(self) -> Result<Sequence<B::Split>, Error> {
         self.into_typed()?.next_sequence()
     }
 
@@ -566,15 +618,18 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<B>, Error> {
+    pub fn next_pod(self) -> Result<Pod<B, P>, Error> {
         self.into_typed()?.next_pod()
     }
 
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
     #[inline]
-    pub fn as_read_mut(&mut self) -> Pod<B::Mut<'_>> {
-        Pod::new(self.buf.borrow_mut())
+    pub fn as_read_mut(&mut self) -> Pod<B::Mut<'_>, P>
+    where
+        P: Copy,
+    {
+        Pod::with_kind(self.buf.borrow_mut(), self.kind)
     }
 
     /// Convert the [`Pod`] into a [`TypedPod`] taking ownership of the current
@@ -588,8 +643,8 @@ where
     ///
     /// This errors if the pod does not wrap a buffer containing a valid pod.
     #[inline]
-    pub fn into_typed(self) -> Result<TypedPod<B>, Error> {
-        TypedPod::from_reader(self.buf)
+    pub fn into_typed(self) -> Result<TypedPod<B, P>, Error> {
+        TypedPod::from_reader(self.buf, self.kind)
     }
 
     /// Convert the [`Pod`] into a [`TypedPod`] mutably borrowing the current
@@ -603,14 +658,18 @@ where
     ///
     /// This errors if the pod does not wrap a buffer containing a valid pod.
     #[inline]
-    pub fn as_typed_mut(&mut self) -> Result<TypedPod<B::Mut<'_>>, Error> {
-        TypedPod::from_reader(self.buf.borrow_mut())
+    pub fn as_typed_mut(&mut self) -> Result<TypedPod<B::Mut<'_>, P>, Error>
+    where
+        P: Copy,
+    {
+        TypedPod::from_reader(self.buf.borrow_mut(), self.kind)
     }
 }
 
-impl<B> Pod<B>
+impl<B, P> Pod<B, P>
 where
     B: AsReader,
+    P: ReadPodKind,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -620,16 +679,20 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
-    /// let pod = pod.to_owned();
+    /// let pod = pod.to_owned()?;
     ///
     /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
-    pub fn to_owned(&self) -> Pod<Box<[u64]>> {
-        Pod {
-            buf: Box::from(self.buf.as_reader().as_slice()),
-        }
+    pub fn to_owned(&self) -> Result<Pod<DynamicBuf, P>, AllocError>
+    where
+        P: Copy,
+    {
+        Ok(Pod::with_kind(
+            self.buf.as_reader().as_slice().to_owned()?,
+            self.kind,
+        ))
     }
 
     /// Coerce an owned pod into a borrowed pod which can be used for reading.
@@ -640,16 +703,16 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
-    /// let pod = pod.to_owned();
-    ///
+    /// let pod = pod.to_owned()?;
     /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Pod<B::AsReader<'_>> {
-        Pod {
-            buf: self.buf.as_reader(),
-        }
+    pub fn as_ref(&self) -> Pod<B::AsReader<'_>, P>
+    where
+        P: Copy,
+    {
+        Pod::with_kind(self.buf.as_reader(), self.kind)
     }
 }
 
@@ -692,32 +755,34 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> EncodeUnsized for Pod<B>
+impl<B, P> EncodeUnsized for Pod<B, P>
 where
     B: AsReader,
+    P: ReadPodKind,
 {
     const TYPE: Type = Type::POD;
 
     #[inline]
     fn size(&self) -> usize {
-        self.buf.as_reader().bytes_len()
+        self.buf.as_reader().len()
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_slice().as_slice())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Pod<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B, P] Pod<B, P> where B: AsReader, P: ReadPodKind);
 
-impl<B> fmt::Debug for Pod<B>
+impl<B, P> fmt::Debug for Pod<B, P>
 where
     B: AsReader,
+    P: Copy + ReadPodKind,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.as_reader()) {
+        match TypedPod::from_reader(self.buf.as_reader(), self.kind) {
             Ok(pod) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }

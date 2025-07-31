@@ -4,7 +4,7 @@ use core::slice;
 
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
-use crate::{AsReader, Error, SplitReader, Writer};
+use crate::{AsReader, Error, SliceBuf, SplitReader, Writer};
 
 use super::CapacityError;
 
@@ -20,11 +20,14 @@ const DEFAULT_SIZE: usize = 1024;
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let mut buf = ArrayBuf::<128>::from_slice(&[1, 2, 3, 4]);
-/// assert_eq!(buf.len(), 32);
-/// buf.extend_from_words(&[5u64])?;
-/// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5]);
-/// assert_eq!(buf.len(), 40);
+/// let expected = u64::to_ne_bytes(42);
+///
+/// let mut buf = ArrayBuf::<128>::from_slice(&[1u8, 2, 3, 4])?;
+/// assert_eq!(buf.len(), 4);
+/// buf.extend_from_words(&[42u64])?;
+/// assert_eq!(&buf.as_slice()[..4], &[1, 2, 3, 4]);
+/// assert_eq!(&buf.as_slice()[4..], &expected);
+/// assert_eq!(buf.len(), 12);
 /// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
 #[repr(C, align(8))]
@@ -61,7 +64,8 @@ impl<const N: usize> ArrayBuf<N> {
     /// use pod::ArrayBuf;
     ///
     /// let mut buf = ArrayBuf::default();
-    /// buf.extend_from_words(&[1u64, 2, 3, 4])?;
+    ///
+    /// buf.extend_from_words(&[1u8, 2, 3, 4])?;
     /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
@@ -100,14 +104,16 @@ impl Default for ArrayBuf {
 impl<const N: usize> ArrayBuf<N> {
     /// Construct from an initialized array.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the length of the slice exceeds the buffer size.
+    /// This errors with a [`CapacityError`] if the provided slice is larger
+    /// than the array being constructed.
     ///
     /// ```should_panic
     /// use pod::ArrayBuf;
     ///
-    /// ArrayBuf::<16>::from_slice(&[0; 32]);
+    /// ArrayBuf::<16>::from_slice(&[0u32; 32])?;
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     ///
     /// # Examples
@@ -115,38 +121,19 @@ impl<const N: usize> ArrayBuf<N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let buf = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-    /// assert_eq!(buf.len(), 24);
+    /// let buf = ArrayBuf::<128>::from_slice(&[1u32, 2, 3])?;
+    /// assert_eq!(buf.len(), 12);
     /// assert_eq!(buf.capacity(), 128);
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
+    /// assert_eq!(buf.as_slice(), &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
+    /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
-    pub const fn from_slice(words: &[u64]) -> Self {
-        assert!(
-            words.len() * mem::size_of::<u64>() <= N,
-            "Slice size exceeds buffer size"
-        );
-
-        // SAFETY: The array is a sequence of initialized elements.
-        unsafe {
-            let mut dest: [MaybeUninit<u8>; N] = MaybeUninit::uninit().assume_init();
-            let mut from = 0;
-            let mut to = 0;
-
-            while from < words.len() {
-                let bytes = u64::to_ne_bytes(words[from]);
-                dest.as_mut_ptr()
-                    .cast::<u8>()
-                    .wrapping_add(to)
-                    .copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-                from += 1;
-                to += mem::size_of::<u64>();
-            }
-
-            Self {
-                data: dest,
-                len: to,
-            }
-        }
+    pub fn from_slice<T>(words: &[T]) -> Result<Self, CapacityError>
+    where
+        T: BytesInhabited,
+    {
+        let mut buf = Self::new();
+        buf.extend_from_words(words)?;
+        Ok(buf)
     }
 
     /// Returns the length of the buffer.
@@ -194,8 +181,8 @@ impl<const N: usize> ArrayBuf<N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let buf = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-    /// assert_eq!(buf.len(), 24);
+    /// let buf = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
+    /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.capacity(), 128);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
@@ -213,15 +200,15 @@ impl<const N: usize> ArrayBuf<N> {
     /// ```
     /// use pod::{ArrayBuf, Reader};
     ///
-    /// let mut buf = ArrayBuf::<24>::from_slice(&[1, 2, 3]);
-    /// assert_eq!(buf.len(), 24);
+    /// let mut buf = ArrayBuf::<24>::from_slice(&[1u8, 2, 3])?;
+    /// assert_eq!(buf.len(), 3);
     /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     /// buf.clear();
     /// assert!(buf.as_slice().is_empty());
     ///
-    /// let mut buf = ArrayBuf::<16>::from_slice(&[100, 200]);
-    /// assert_eq!(buf.len(), 16);
-    /// assert_eq!(buf.as_slice(), &[100, 200]);
+    /// let mut buf = ArrayBuf::<16>::from_slice(&[0x10u8, 0x20])?;
+    /// assert_eq!(buf.len(), 2);
+    /// assert_eq!(buf.as_slice(), &[0x10, 0x20]);
     /// buf.clear();
     /// assert!(buf.is_empty());
     /// # Ok::<_, pod::buf::CapacityError>(())
@@ -240,40 +227,15 @@ impl<const N: usize> ArrayBuf<N> {
     ///
     /// let expected = u64::to_ne_bytes(42);
     ///
-    /// let mut buf = ArrayBuf::default();
-    /// assert_eq!(buf.as_bytes().len(), 0);
-    /// buf.extend_from_words(&[42u64])?;
-    /// assert_eq!(buf.as_bytes(), &expected[..]);
+    /// let mut buf = ArrayBuf::<128>::from_slice(&[42u64])?;
+    /// assert_eq!(buf.as_slice().len(), 8);
+    /// assert_eq!(buf.as_slice(), &expected);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_slice(&self) -> &[u8] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().cast(), self.len) }
-    }
-
-    /// Returns the slice of data in the buffer.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::ArrayBuf;
-    ///
-    /// let mut buf = ArrayBuf::default();
-    /// assert_eq!(buf.as_slice().len(), 0);
-    /// buf.extend_from_words(&[42u64])?;
-    /// assert_eq!(buf.as_slice(), &[42]);
-    /// # Ok::<_, pod::buf::CapacityError>(())
-    /// ```
-    #[inline]
-    pub fn as_slice(&self) -> &[u64] {
-        // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
-        unsafe {
-            slice::from_raw_parts(
-                self.data.as_ptr().cast(),
-                self.len.wrapping_div(mem::size_of::<u64>()),
-            )
-        }
     }
 
     /// Returns a mutable slice of data in the buffer.
@@ -283,24 +245,20 @@ impl<const N: usize> ArrayBuf<N> {
     /// ```
     /// use pod::ArrayBuf;
     ///
-    /// let mut buf = ArrayBuf::default();
-    /// assert_eq!(buf.as_slice().len(), 0);
-    /// buf.extend_from_words(&[42u64])?;
-    /// assert_eq!(buf.as_slice(), &[42]);
+    /// let expected = u64::to_ne_bytes(42);
     ///
-    /// buf.as_slice_mut()[0] = 43;
-    /// assert_eq!(buf.as_slice(), &[43]);
+    /// let mut buf = ArrayBuf::<128>::from_slice(&[42u64])?;
+    /// assert_eq!(buf.as_slice().len(), 8);
+    /// assert_eq!(buf.as_slice(), &expected);
+    ///
+    /// buf.as_slice_mut()[0] = u8::MAX;
+    /// assert_eq!(buf.as_slice()[0], u8::MAX);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
-    pub fn as_slice_mut(&mut self) -> &mut [u64] {
+    pub fn as_slice_mut(&mut self) -> &mut [u8] {
         // SAFETY: The buffer is guaranteed to be initialized from the
         // `self.read..self.write` range.
-        unsafe {
-            slice::from_raw_parts_mut(
-                self.data.as_mut_ptr().cast(),
-                self.len.wrapping_div(mem::size_of::<u64>()),
-            )
-        }
+        unsafe { slice::from_raw_parts_mut(self.data.as_mut_ptr().cast(), self.len) }
     }
 }
 
@@ -311,7 +269,7 @@ impl<const N: usize> ArrayBuf<N> {
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let mut buf = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
+/// let mut buf = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
 /// assert_eq!(format!("{buf:?}"), "[1, 2, 3]");
 /// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
@@ -329,11 +287,12 @@ impl<const N: usize> fmt::Debug for ArrayBuf<N> {
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let buf1 = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-/// let buf2 = ArrayBuf::<128>::from_slice(&[1, 2, 3, 4]);
+/// let buf1 = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
+/// let buf2 = ArrayBuf::<128>::from_slice(&[1u8, 2, 3, 4])?;
 ///
 /// assert_ne!(buf1, buf2);
 /// assert_eq!(buf1, buf1);
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
 impl<const A: usize, const B: usize> PartialEq<ArrayBuf<B>> for ArrayBuf<A> {
     #[inline]
@@ -349,19 +308,17 @@ impl<const A: usize, const B: usize> PartialEq<ArrayBuf<B>> for ArrayBuf<A> {
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let array1 = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-/// let slice2: &[u64] = &[1, 2, 3, 4][..];
+/// let array1 = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
+/// let slice2: &[u8] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, *slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
-impl<U, const N: usize> PartialEq<[U]> for ArrayBuf<N>
-where
-    u64: PartialEq<U>,
-{
+impl<const N: usize> PartialEq<[u8]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &[U]) -> bool {
+    fn eq(&self, other: &[u8]) -> bool {
         self.as_slice() == other
     }
 }
@@ -373,19 +330,17 @@ where
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let array1 = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-/// let slice2: &[u64] = &[1, 2, 3, 4][..];
+/// let array1 = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
+/// let slice2: &[u8] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, *slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(*slice2, *slice2);
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
-impl<U, const N: usize> PartialEq<[U; N]> for ArrayBuf<N>
-where
-    u64: PartialEq<U>,
-{
+impl<const N: usize> PartialEq<[u8; N]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &[U; N]) -> bool {
+    fn eq(&self, other: &[u8; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -397,19 +352,17 @@ where
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let slice1 = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-/// let slice2: &[u64] = &[1, 2, 3, 4][..];
+/// let slice1 = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
+/// let slice2: &[u8] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(slice1, *slice2);
 /// assert_eq!(slice1, slice1);
 /// assert_eq!(*slice2, *slice2);
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
-impl<U, const N: usize> PartialEq<&[U; N]> for ArrayBuf<N>
-where
-    u64: PartialEq<U>,
-{
+impl<const N: usize> PartialEq<&[u8; N]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &&[U; N]) -> bool {
+    fn eq(&self, other: &&[u8; N]) -> bool {
         self.as_slice() == &other[..]
     }
 }
@@ -421,19 +374,17 @@ where
 /// ```
 /// use pod::ArrayBuf;
 ///
-/// let array1 = ArrayBuf::<128>::from_slice(&[1, 2, 3]);
-/// let slice2: &[u64] = &[1, 2, 3, 4][..];
+/// let array1 = ArrayBuf::<128>::from_slice(&[1u8, 2, 3])?;
+/// let slice2: &[u8] = &[1, 2, 3, 4][..];
 ///
 /// assert_ne!(array1, slice2);
 /// assert_eq!(array1, array1);
 /// assert_eq!(slice2, slice2);
+/// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
-impl<U, const N: usize> PartialEq<&[U]> for ArrayBuf<N>
-where
-    u64: PartialEq<U>,
-{
+impl<const N: usize> PartialEq<&[u8]> for ArrayBuf<N> {
     #[inline]
-    fn eq(&self, other: &&[U]) -> bool {
+    fn eq(&self, other: &&[u8]) -> bool {
         self.as_slice() == *other
     }
 }
@@ -540,12 +491,21 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         Ok(())
     }
 
+    /// Write a slice of bytes to the buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Writer};
+    ///
+    /// let mut buf = ArrayBuf::default();
+    /// buf.write_bytes(&[1, 2, 3], 3)?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn write_bytes(&mut self, bytes: &[u8], pad: usize) -> Result<(), Error> {
-        let len = self
-            .len
-            .wrapping_add(bytes.len().wrapping_add(pad))
-            .next_multiple_of(mem::size_of::<u64>());
+        let len = self.len.wrapping_add(bytes.len().wrapping_add(pad));
 
         if !(self.len..=N).contains(&len) {
             return Err(Error::new(ErrorKind::CapacityError(CapacityError)));
@@ -555,7 +515,6 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         unsafe {
             let ptr = self.data.as_mut_ptr().add(self.len).cast::<u8>();
             ptr.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-            let pad = mem::size_of::<u64>() - bytes.len() % mem::size_of::<u64>();
             ptr.add(bytes.len()).write_bytes(0, pad);
         }
 
@@ -563,6 +522,20 @@ impl<const N: usize> Writer for ArrayBuf<N> {
         Ok(())
     }
 
+    /// Pad a buffer to the specified alignment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ArrayBuf, Writer};
+    ///
+    /// let mut buf = ArrayBuf::default();
+    /// buf.write_bytes(&[1, 2, 3], 3)?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0]);
+    /// buf.pad(8)?;
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0, 0, 0]);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn pad(&mut self, align: usize) -> Result<(), Error> {
         let remaining = self.len % align;
@@ -589,23 +562,22 @@ impl<const N: usize> Writer for ArrayBuf<N> {
 }
 
 impl<const N: usize> AsReader for ArrayBuf<N> {
-    type AsReader<'this> = &'this [u64];
+    type AsReader<'this> = SliceBuf<'this>;
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
-        self.as_slice()
+        SliceBuf::new(self.as_slice())
     }
 }
 
 impl<const N: usize> SplitReader for ArrayBuf<N> {
-    type TakeReader<'this> = &'this [u64];
+    type TakeReader<'this> = SliceBuf<'this>;
 
     #[inline]
     fn take_reader(&mut self) -> Self::TakeReader<'_> {
-        let ptr = self.data.as_ptr().cast::<u64>();
-        let len = self.len.wrapping_div(mem::size_of::<u64>());
-        self.len = 0;
+        let ptr = self.data.as_ptr().cast::<u8>();
+        let len = mem::take(&mut self.len);
         // SAFETY: The buffer is guaranteed to be initialized up to `len`.
-        unsafe { slice::from_raw_parts(ptr, len) }
+        SliceBuf::new(unsafe { slice::from_raw_parts(ptr, len) })
     }
 }

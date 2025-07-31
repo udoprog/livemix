@@ -1,21 +1,22 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{Encode, EncodeUnsized, Error, RawId, Type, Writer};
+use crate::{Encode, EncodeUnsized, Error, PADDING, RawId, Reader, Type, Writer};
 
 use super::Builder;
 
 mod sealed {
-    use super::{ChildPod, ControlChild, EnvelopePod, PropertyChild};
+    use super::{ChildPod, ControlChild, PackedPod, PaddedPod, PropertyChild};
 
     pub trait Sealed {}
-    impl Sealed for EnvelopePod {}
+    impl Sealed for PaddedPod {}
     impl Sealed for ChildPod {}
-    impl<K> Sealed for PropertyChild<K> {}
+    impl<K> Sealed for PropertyChild<K> where K: Copy {}
     impl Sealed for ControlChild {}
+    impl Sealed for PackedPod {}
 }
 
-pub trait PodKind
+pub trait BuildPodKind
 where
     Self: self::sealed::Sealed,
 {
@@ -26,11 +27,11 @@ where
         Ok(())
     }
 
-    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: Encode;
 
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized;
 
@@ -66,16 +67,18 @@ where
     }
 }
 
-/// An unlimited pod.
+/// A padded pod.
+///
+/// This is the default.
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
-pub struct EnvelopePod;
+pub struct PaddedPod;
 
-impl PodKind for EnvelopePod {
+impl BuildPodKind for PaddedPod {
     const ENVELOPE: bool = true;
 
     #[inline]
-    fn push<T>(&self, value: T, mut buf: impl Writer) -> Result<(), Error>
+    fn push<T>(self, value: T, mut buf: impl Writer) -> Result<(), Error>
     where
         T: Encode,
     {
@@ -84,11 +87,13 @@ impl PodKind for EnvelopePod {
         };
 
         buf.write(&[size, T::TYPE.into_u32()])?;
-        value.write_content(buf)
+        value.write_content(buf.borrow_mut())?;
+        buf.pad(PADDING)?;
+        Ok(())
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, mut buf: impl Writer) -> Result<(), Error>
+    fn push_unsized<T>(self, value: &T, mut buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
@@ -97,7 +102,9 @@ impl PodKind for EnvelopePod {
         };
 
         buf.write(&[size, T::TYPE.into_u32()])?;
-        value.write_content(buf)
+        value.write_content(buf.borrow_mut())?;
+        buf.pad(PADDING)?;
+        Ok(())
     }
 
     #[inline]
@@ -111,40 +118,27 @@ impl PodKind for EnvelopePod {
 pub struct ChildPod {
     pub(crate) size: usize,
     pub(crate) ty: Type,
-    pub(crate) padded: bool,
 }
 
-impl PodKind for ChildPod {
+impl BuildPodKind for ChildPod {
     const ENVELOPE: bool = false;
 
     #[inline]
-    fn push<T>(&self, value: T, mut buf: impl Writer) -> Result<(), Error>
+    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: Encode,
     {
         self.check(T::TYPE, T::SIZE)?;
-        value.write_content(buf.borrow_mut())?;
-
-        if self.padded {
-            buf.pad(8)?;
-        }
-
-        Ok(())
+        value.write_content(buf)
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, mut buf: impl Writer) -> Result<(), Error>
+    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + EncodeUnsized,
     {
         self.check(T::TYPE, value.size())?;
-        value.write_content(buf.borrow_mut())?;
-
-        if self.padded {
-            buf.pad(8)?;
-        }
-
-        Ok(())
+        value.write_content(buf)
     }
 
     #[inline]
@@ -167,27 +161,44 @@ impl PodKind for ChildPod {
     }
 }
 
-pub struct PropertyChild<K> {
+impl ReadPodKind for ChildPod {
+    #[inline]
+    fn unpad<'de>(&self, _: impl Reader<'de>) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct PropertyChild<K>
+where
+    K: Copy,
+{
     key: K,
     flags: u32,
 }
 
-impl<K> PropertyChild<K> {
+impl<K> PropertyChild<K>
+where
+    K: Copy,
+{
     #[inline]
     pub(crate) fn new(key: K) -> Self {
         Self { key, flags: 0 }
     }
 }
 
-impl<B, K> Builder<B, PropertyChild<K>> {
+impl<B, K> Builder<B, PropertyChild<K>>
+where
+    K: RawId,
+{
     /// Modify the flags of a property.
     pub fn flags(mut self, flags: u32) -> Self {
-        self.kind.flags = flags;
+        self.as_kind_mut().flags = flags;
         self
     }
 }
 
-impl<K> PodKind for PropertyChild<K>
+impl<K> BuildPodKind for PropertyChild<K>
 where
     K: RawId,
 {
@@ -199,23 +210,24 @@ where
     }
 
     #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: crate::Encode,
     {
-        EnvelopePod.push(value, buf)
+        PaddedPod.push(value, buf)
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + crate::EncodeUnsized,
     {
-        EnvelopePod.push_unsized(value, buf)
+        PaddedPod.push_unsized(value, buf)
     }
 }
 
 /// A control child for a sequence.
+#[derive(Debug)]
 pub struct ControlChild {
     offset: u32,
     ty: u32,
@@ -231,18 +243,18 @@ impl ControlChild {
 impl<B> Builder<B, ControlChild> {
     /// Modify the offset of a control.
     pub fn offset(mut self, offset: u32) -> Self {
-        self.kind.offset = offset;
+        self.as_kind_mut().offset = offset;
         self
     }
 
     /// Modify the type of a control.
     pub fn ty(mut self, ty: u32) -> Self {
-        self.kind.ty = ty;
+        self.as_kind_mut().ty = ty;
         self
     }
 }
 
-impl PodKind for ControlChild {
+impl BuildPodKind for ControlChild {
     const ENVELOPE: bool = true;
 
     #[inline]
@@ -251,23 +263,51 @@ impl PodKind for ControlChild {
     }
 
     #[inline]
-    fn push<T>(&self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
         T: crate::Encode,
     {
-        EnvelopePod.push(value, buf)
+        PaddedPod.push(value, buf)
     }
 
     #[inline]
-    fn push_unsized<T>(&self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
         T: ?Sized + crate::EncodeUnsized,
     {
-        EnvelopePod.push_unsized(value, buf)
+        PaddedPod.push_unsized(value, buf)
     }
 
     #[inline]
     fn check(&self, _: Type, _: usize) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+pub trait ReadPodKind
+where
+    Self: Copy + self::sealed::Sealed,
+{
+    #[doc(hidden)]
+    fn unpad<'de>(&self, buf: impl Reader<'de>) -> Result<(), Error>;
+}
+
+/// A packed pod. This is used when unpacking packed fields, like those of
+/// choices or arrays.
+#[derive(Clone, Copy)]
+#[non_exhaustive]
+pub struct PackedPod;
+
+impl ReadPodKind for PaddedPod {
+    #[inline]
+    fn unpad<'de>(&self, mut buf: impl Reader<'de>) -> Result<(), Error> {
+        buf.unpad(PADDING)
+    }
+}
+
+impl ReadPodKind for PackedPod {
+    #[inline]
+    fn unpad<'de>(&self, _: impl Reader<'de>) -> Result<(), Error> {
         Ok(())
     }
 }

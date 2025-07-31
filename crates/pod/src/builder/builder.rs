@@ -2,39 +2,39 @@ use core::fmt;
 use core::mem;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
-#[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::ReadPodKind;
 use crate::SplitReader;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
 use crate::error::ErrorKind;
 use crate::{ArrayBuf, Encode, EncodeInto};
 use crate::{
-    AsReader, ChoiceType, EncodeUnsized, Error, Pod, RawId, Reader, Type, TypedPod, Writer,
+    AsReader, BuildPodKind, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId,
+    Reader, Type, TypedPod, Writer,
 };
-
-use super::{ChildPod, EnvelopePod, PodKind};
 
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct Builder<B, P = EnvelopePod> {
+pub struct Builder<B, P = PaddedPod> {
     buf: B,
-    pub(crate) kind: P,
+    kind: P,
 }
 
-impl<B, P> Clone for Builder<B, P>
+impl<B, P> Builder<B, P>
 where
-    B: Clone,
-    P: Clone,
+    P: BuildPodKind,
 {
     #[inline]
-    fn clone(&self) -> Self {
-        Builder {
-            buf: self.buf.clone(),
-            kind: self.kind.clone(),
-        }
+    pub(crate) fn with_kind(buf: B, kind: P) -> Self {
+        Builder { buf, kind }
+    }
+
+    #[inline]
+    pub(crate) fn as_kind_mut(&mut self) -> &mut P {
+        &mut self.kind
     }
 }
 
@@ -130,7 +130,7 @@ impl<B> Builder<B> {
     pub const fn new(buf: B) -> Self {
         Builder {
             buf,
-            kind: EnvelopePod,
+            kind: PaddedPod,
         }
     }
 
@@ -140,15 +140,16 @@ impl<B> Builder<B> {
     }
 }
 
-impl<B> Builder<B>
+impl<B, P> Builder<B, P>
 where
     B: Writer,
+    P: Copy + BuildPodKind,
 {
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
     #[inline]
-    pub fn as_mut(&mut self) -> Builder<B::Mut<'_>> {
-        Builder::new(self.buf.borrow_mut())
+    pub fn as_mut(&mut self) -> Builder<B::Mut<'_>, P> {
+        Builder::with_kind(self.buf.borrow_mut(), self.kind)
     }
 }
 
@@ -190,14 +191,14 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
-    /// let pod = pod.to_owned();
+    /// let pod = pod.to_owned()?;
     ///
     /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
-    pub fn to_owned(&self) -> Pod<Box<[u64]>> {
-        Pod::new(Box::from(self.buf.as_reader().as_slice()))
+    pub fn to_owned(&self) -> Result<Pod<DynamicBuf>, AllocError> {
+        Ok(Pod::new(self.buf.as_reader().as_slice().to_owned()?))
     }
 
     /// Coerce an owned pod into a borrowed pod which can be used for reading.
@@ -208,8 +209,7 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
     ///
-    /// let pod = pod.to_owned();
-    ///
+    /// let pod = pod.to_owned()?;
     /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -224,28 +224,15 @@ impl<B> Builder<B, ChildPod> {
     pub(crate) const fn new_child(buf: B, size: usize, ty: Type) -> Self {
         Builder {
             buf,
-            kind: ChildPod {
-                size,
-                ty,
-                padded: true,
-            },
-        }
-    }
-
-    /// Construct a new child pod.
-    pub(crate) const fn new_unpadded_child(buf: B, size: usize, ty: Type) -> Self {
-        Builder {
-            buf,
-            kind: ChildPod {
-                size,
-                ty,
-                padded: true,
-            },
+            kind: ChildPod { size, ty },
         }
     }
 }
 
-impl<B, P> Builder<B, P> {
+impl<B, P> Builder<B, P>
+where
+    P: BuildPodKind,
+{
     #[inline]
     pub(crate) fn new_with(buf: B, kind: P) -> Self
     where
@@ -263,7 +250,7 @@ impl<B, P> Builder<B, P> {
     /// pod.as_mut().push(10i32)?;
     ///
     /// let buf = pod.as_buf();
-    /// assert_eq!(buf.as_slice().len(), 2);
+    /// assert_eq!(buf.as_slice().len(), 16);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -280,7 +267,7 @@ impl<B, P> Builder<B, P> {
     /// pod.as_mut().push(10i32)?;
     ///
     /// let buf = pod.into_buf();
-    /// assert_eq!(buf.as_slice().len(), 2);
+    /// assert_eq!(buf.as_slice().len(), 16);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -292,7 +279,7 @@ impl<B, P> Builder<B, P> {
 impl<B, P> Builder<B, P>
 where
     B: Writer,
-    P: PodKind,
+    P: BuildPodKind,
 {
     /// Conveniently encode a value into the pod.
     ///
@@ -306,7 +293,7 @@ where
     /// let mut st = pod.next_struct()?;
     ///
     /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
-    /// assert_eq!(st.field()?.next_borrowed::<str>()?, "hello world");
+    /// assert_eq!(st.field()?.next_unsized::<str>()?, "hello world");
     /// assert_eq!(st.field()?.next::<u32>()?, 1);
     /// assert_eq!(st.field()?.next::<u32>()?, 2);
     /// assert!(st.is_empty());
@@ -481,8 +468,11 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let buf = pod.into_buf();
-    /// assert_eq!(buf.as_slice().len(), 5);
+    /// let mut array = pod.as_ref().next_array()?;
+    /// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "foo");
+    /// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "bar");
+    /// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "baz");
+    /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -721,32 +711,48 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> EncodeUnsized for Builder<B>
+impl<B, P> EncodeUnsized for Builder<B, P>
 where
     B: AsReader,
+    P: BuildPodKind,
 {
     const TYPE: Type = Type::POD;
 
     #[inline]
     fn size(&self) -> usize {
-        self.buf.as_reader().bytes_len()
+        self.buf.as_reader().len()
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_slice().as_slice())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Builder<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B, P] Builder<B, P> where B: AsReader, P: BuildPodKind);
 
-impl<B, K> fmt::Debug for Builder<B, K>
+impl<B, P> Clone for Builder<B, P>
+where
+    B: Clone,
+    P: Copy,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        Builder {
+            buf: self.buf.clone(),
+            kind: self.kind,
+        }
+    }
+}
+
+impl<B, P> fmt::Debug for Builder<B, P>
 where
     B: AsReader,
+    P: BuildPodKind + ReadPodKind,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.as_reader()) {
+        match TypedPod::from_reader(self.buf.as_reader(), self.kind) {
             Ok(pod) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }

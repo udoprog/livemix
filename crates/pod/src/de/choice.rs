@@ -2,11 +2,14 @@ use core::fmt;
 use core::mem;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
+use crate::DynamicBuf;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, ChoiceType, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
+use crate::{
+    AsReader, ChoiceType, EncodeUnsized, Error, PackedPod, Reader, Type, TypedPod, Writer,
+};
 
 /// A decoder for a choice.
 ///
@@ -253,13 +256,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<B::Split>> {
+    pub fn next(&mut self) -> Option<TypedPod<B::Split, PackedPod>> {
         if self.remaining == 0 {
             return None;
         }
 
         let tail = self.buf.split(self.child_size)?;
-        let pod = TypedPod::new(tail, self.child_size, self.child_type);
+        let pod = TypedPod::packed(tail, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }
@@ -279,7 +282,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.as_ref().next_choice()?.to_owned();
+    /// let choice = pod.as_ref().next_choice()?.to_owned()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
@@ -297,15 +300,15 @@ where
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_owned(&self) -> Choice<Box<[u64]>> {
-        Choice {
-            buf: Box::from(self.buf.as_slice()),
+    pub fn to_owned(&self) -> Result<Choice<DynamicBuf>, AllocError> {
+        Ok(Choice {
+            buf: DynamicBuf::from_slice(self.buf.as_bytes())?,
             choice_type: self.choice_type,
             flags: self.flags,
             child_size: self.child_size,
             child_type: self.child_type,
             remaining: self.remaining,
-        }
+        })
     }
 }
 
@@ -330,7 +333,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.as_ref().next_choice()?.to_owned();
+    /// let choice = pod.as_ref().next_choice()?.to_owned()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
@@ -380,17 +383,27 @@ where
 /// pod2.as_mut().encode(choice)?;
 ///
 /// let mut choice = pod2.as_ref().next_choice()?;
+///
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
+/// assert_eq!(choice.len(), 3);
 ///
-/// let mut count = 0;
+/// let c = choice.next().unwrap();
+/// assert_eq!(choice.len(), 2);
+/// assert_eq!(c.ty(), Type::INT);
+/// assert_eq!(c.size(), 4);
+/// assert_eq!(c.next::<i32>()?, 10);
 ///
-/// while let Some(pod) = choice.next() {
-///     assert_eq!(pod.ty(), Type::INT);
-///     assert_eq!(pod.size(), 4);
-///     count += 1;
-/// }
+/// let c = choice.next().unwrap();
+/// assert_eq!(choice.len(), 1);
+/// assert_eq!(c.ty(), Type::INT);
+/// assert_eq!(c.size(), 4);
+/// assert_eq!(c.next::<i32>()?, 0);
 ///
-/// assert_eq!(count, 3);
+/// let c = choice.next().unwrap();
+/// assert_eq!(choice.len(), 0);
+/// assert_eq!(c.ty(), Type::INT);
+/// assert_eq!(c.size(), 4);
+/// assert_eq!(c.next::<i32>()?, 30);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<B> EncodeUnsized for Choice<B>
@@ -401,8 +414,9 @@ where
 
     #[inline]
     fn size(&self) -> usize {
-        let len = self.buf.as_reader().bytes_len();
-        len.wrapping_add(mem::size_of::<[u32; 4]>())
+        self.remaining
+            .wrapping_mul(self.child_size)
+            .wrapping_add(mem::size_of::<[u32; 4]>())
     }
 
     #[inline]
@@ -418,7 +432,7 @@ where
             self.child_type.into_u32(),
         ])?;
 
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_bytes())
     }
 }
 

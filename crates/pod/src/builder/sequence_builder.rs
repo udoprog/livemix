@@ -1,8 +1,6 @@
 use core::mem;
 
-use crate::{Builder, Error, Type, Writer};
-
-use super::{ControlChild, PodKind};
+use crate::{BuildPodKind, Builder, ControlChild, Error, Type, Writer};
 
 /// An encoder for a sequence.
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
@@ -20,7 +18,7 @@ where
 impl<W, P> SequenceBuilder<W, P>
 where
     W: Writer,
-    P: PodKind,
+    P: BuildPodKind,
 {
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: P) -> Result<Self, Error> {

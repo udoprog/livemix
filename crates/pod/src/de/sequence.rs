@@ -2,15 +2,16 @@ use core::fmt;
 use core::mem;
 
 #[cfg(feature = "alloc")]
-use alloc::boxed::Box;
-
+use crate::DynamicBuf;
+use crate::PADDING;
+#[cfg(feature = "alloc")]
+use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{AsReader, Control, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
 
 /// A decoder for a sequence.
 pub struct Sequence<B> {
     buf: B,
-    size: usize,
     unit: u32,
     pad: u32,
 }
@@ -72,30 +73,16 @@ where
     B: Reader<'de>,
 {
     #[inline]
-    pub fn new(buf: B, size: usize, unit: u32, pad: u32) -> Self {
-        Self {
-            buf,
-            size,
-            unit,
-            pad,
-        }
+    pub fn new(buf: B, unit: u32, pad: u32) -> Self {
+        Self { buf, unit, pad }
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: usize) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut reader: B) -> Result<Self, Error> {
         let [unit, pad] = reader.read::<[u32; 2]>()?;
-
-        // Remove the size of the object header.
-        let Some(size) = size.checked_sub(mem::size_of::<[u32; 2]>()) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size,
-                sub: mem::size_of::<[u32; 2]>(),
-            }));
-        };
 
         Ok(Self {
             buf: reader,
-            size,
             unit,
             pad,
         })
@@ -123,8 +110,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub const fn is_empty(&self) -> bool {
-        self.size == 0
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
     }
 
     /// Decode the next field in the struct.
@@ -152,35 +139,22 @@ where
     /// ```
     #[inline]
     pub fn control(&mut self) -> Result<Control<B::Split>, Error> {
-        if self.size == 0 {
+        if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
 
-        let [control_offset, control_ty] = self.buf.read::<[u32; 2]>()?;
+        let [control_offset, control_type] = self.buf.read::<[u32; 2]>()?;
         let (size, ty) = self.buf.header()?;
+
+        std::dbg!(control_offset, control_type, size, ty);
 
         let Some(head) = self.buf.split(size) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        let pod = TypedPod::new(head, size, ty);
-
-        let Some(size_with_header) = pod
-            .size_with_header()
-            .and_then(|v| v.checked_add(mem::size_of::<[u32; 2]>()))
-        else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
-        let Some(size) = self.size.checked_sub(size_with_header) else {
-            return Err(Error::new(ErrorKind::SizeUnderflow {
-                size: self.size,
-                sub: size_with_header,
-            }));
-        };
-
-        self.size = size;
-        Ok(Control::new(control_offset, control_ty, pod))
+        let pod = TypedPod::packed(head, size, ty);
+        self.buf.unpad(PADDING)?;
+        Ok(Control::new(control_offset, control_type, pod))
     }
 
     /// Coerce into an owned [`Sequence`].
@@ -198,7 +172,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.as_ref().next_sequence()?.to_owned();
+    /// let seq = pod.as_ref().next_sequence()?.to_owned()?;
     ///
     /// let mut seq = seq.as_ref();
     /// assert!(!seq.is_empty());
@@ -210,13 +184,12 @@ where
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_owned(&self) -> Sequence<Box<[u64]>> {
-        Sequence {
-            buf: Box::from(self.buf.as_slice()),
-            size: self.size,
+    pub fn to_owned(&self) -> Result<Sequence<DynamicBuf>, AllocError> {
+        Ok(Sequence {
+            buf: DynamicBuf::from_slice(self.buf.as_bytes())?,
             unit: self.unit,
             pad: self.pad,
-        }
+        })
     }
 }
 
@@ -241,7 +214,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let seq = pod.as_ref().next_sequence()?.to_owned();
+    /// let seq = pod.as_ref().next_sequence()?.to_owned()?;
     ///
     /// let mut seq = seq.as_ref();
     /// assert!(!seq.is_empty());
@@ -253,7 +226,7 @@ where
     /// ```
     #[inline]
     pub fn as_ref(&self) -> Sequence<B::AsReader<'_>> {
-        Sequence::new(self.buf.as_reader(), self.size, self.unit, self.pad)
+        Sequence::new(self.buf.as_reader(), self.unit, self.pad)
     }
 }
 
@@ -295,14 +268,14 @@ where
 
     #[inline]
     fn size(&self) -> usize {
-        let len = self.buf.as_reader().bytes_len();
-        len.wrapping_add(mem::size_of::<u64>())
+        let len = self.buf.as_reader().len();
+        len.wrapping_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.unit, self.pad])?;
-        writer.write(self.buf.as_reader().as_slice())
+        writer.write(self.buf.as_reader().as_bytes())
     }
 }
 
