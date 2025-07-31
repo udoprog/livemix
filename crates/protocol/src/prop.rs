@@ -55,7 +55,7 @@ impl EncodeInto for Prop {
     #[inline]
     fn encode_into(
         &self,
-        pod: pod::Builder<impl pod::Writer, impl pod::BuildPodKind>,
+        pod: pod::Builder<impl pod::Writer, impl pod::BuildPod>,
     ) -> Result<(), pod::Error> {
         CStr::encode_into(&self.0, pod)
     }

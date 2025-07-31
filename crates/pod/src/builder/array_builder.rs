@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{BuildPodKind, Builder, ChildPod, Error, PADDING, Type, Writer};
+use crate::{BuildPod, Builder, ChildPod, Error, PADDING, Type, Writer};
 
 /// An encoder for an array.
 ///
@@ -50,7 +50,7 @@ where
 impl<W, P> ArrayBuilder<W, P>
 where
     W: Writer,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: P, child_type: Type) -> Result<Self, Error> {

@@ -1,4 +1,4 @@
-use crate::{BuildPodKind, Builder, EncodeInto, Error, Type, Writer};
+use crate::{BuildPod, Builder, EncodeInto, Error, Type, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -14,7 +14,7 @@ where
 impl<W, P> StructBuilder<W, P>
 where
     W: Writer,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: P) -> Result<Self, Error> {

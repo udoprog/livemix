@@ -1,6 +1,6 @@
 use core::mem;
 
-use crate::{BuildPodKind, Builder, ControlChild, Error, Type, Writer};
+use crate::{BuildPod, Builder, ControlPod, Error, Type, Writer};
 
 /// An encoder for a sequence.
 #[must_use = "Sequence encoders must be closed to ensure all elements are initialized"]
@@ -18,7 +18,7 @@ where
 impl<W, P> SequenceBuilder<W, P>
 where
     W: Writer,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn to_writer(mut writer: W, kind: P) -> Result<Self, Error> {
@@ -56,8 +56,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn control(&mut self) -> Builder<W::Mut<'_>, ControlChild> {
-        Builder::new_with(self.writer.borrow_mut(), ControlChild::new())
+    pub fn control(&mut self) -> Builder<W::Mut<'_>, ControlPod> {
+        Builder::new_with(self.writer.borrow_mut(), ControlPod::new())
     }
 
     #[inline]

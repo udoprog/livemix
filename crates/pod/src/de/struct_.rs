@@ -6,8 +6,8 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, DecodeFrom, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPodKind, Reader,
-    SliceBuf, Type, TypedPod, Writer,
+    AsReader, DecodeFrom, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPod, Reader, SliceBuf,
+    Type, TypedPod, Writer,
 };
 
 /// A decoder for a struct.
@@ -251,7 +251,7 @@ crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader);
 
 impl<'de> DecodeFrom<'de> for Struct<SliceBuf<'de>> {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de>, impl ReadPodKind>) -> Result<Self, Error> {
+    fn decode_from(pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
         Ok(pod.next_struct()?.into_slice())
     }
 }

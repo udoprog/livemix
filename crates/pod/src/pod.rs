@@ -5,7 +5,7 @@ use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::{
     ArrayBuf, AsReader, Decode, DecodeFrom, DecodeUnsized, EncodeUnsized, Error, PackedPod,
-    ReadPodKind, Reader, Type, TypedPod, Visitor, Writer,
+    ReadPod, Reader, Type, TypedPod, Visitor, Writer,
 };
 #[cfg(feature = "alloc")]
 use crate::{DynamicBuf, PaddedPod};
@@ -20,7 +20,7 @@ pub struct Pod<B, P = PaddedPod> {
 
 impl<B, P> Pod<B, P>
 where
-    P: ReadPodKind,
+    P: ReadPod,
 {
     #[inline]
     pub(crate) const fn with_kind(buf: B, kind: P) -> Self {
@@ -107,7 +107,7 @@ impl Pod<DynamicBuf> {
 #[cfg(feature = "alloc")]
 impl<P> Pod<DynamicBuf, P>
 where
-    P: ReadPodKind,
+    P: ReadPod,
 {
     /// Clear the current builder.
     ///
@@ -148,7 +148,7 @@ impl Pod<ArrayBuf> {
 
 impl<P> Pod<ArrayBuf, P>
 where
-    P: ReadPodKind,
+    P: ReadPod,
 {
     /// Clear the current builder.
     ///
@@ -172,7 +172,7 @@ where
 
 impl<B, P> Pod<B, P>
 where
-    P: ReadPodKind,
+    P: ReadPod,
 {
     /// Access the underlying buffer.
     ///
@@ -212,7 +212,7 @@ where
 impl<'de, B, P> Pod<B, P>
 where
     B: Reader<'de>,
-    P: ReadPodKind,
+    P: ReadPod,
 {
     /// Skip a value in the pod.
     ///
@@ -669,7 +669,7 @@ where
 impl<B, P> Pod<B, P>
 where
     B: AsReader,
-    P: ReadPodKind,
+    P: ReadPod,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -758,7 +758,7 @@ where
 impl<B, P> EncodeUnsized for Pod<B, P>
 where
     B: AsReader,
-    P: ReadPodKind,
+    P: ReadPod,
 {
     const TYPE: Type = Type::POD;
 
@@ -773,12 +773,12 @@ where
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] Pod<B, P> where B: AsReader, P: ReadPodKind);
+crate::macros::encode_into_unsized!(impl [B, P] Pod<B, P> where B: AsReader, P: ReadPod);
 
 impl<B, P> fmt::Debug for Pod<B, P>
 where
     B: AsReader,
-    P: Copy + ReadPodKind,
+    P: Copy + ReadPod,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

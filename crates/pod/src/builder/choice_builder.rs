@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{BuildPodKind, Builder, ChildPod, ChoiceType, Error, PADDING, Type, Writer};
+use crate::{BuildPod, Builder, ChildPod, ChoiceType, Error, PADDING, Type, Writer};
 
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, P>
@@ -22,7 +22,7 @@ where
 impl<W, P> ChoiceBuilder<W, P>
 where
     W: Writer,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn to_writer(

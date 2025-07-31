@@ -6,22 +6,20 @@ use crate::{Encode, EncodeUnsized, Error, PADDING, RawId, Reader, Type, Writer};
 use super::Builder;
 
 mod sealed {
-    use super::{ChildPod, ControlChild, PackedPod, PaddedPod, PropertyChild};
+    use super::{ChildPod, ControlPod, PackedPod, PaddedPod, PropertyPod};
 
     pub trait Sealed {}
     impl Sealed for PaddedPod {}
     impl Sealed for ChildPod {}
-    impl<K> Sealed for PropertyChild<K> where K: Copy {}
-    impl Sealed for ControlChild {}
+    impl<K> Sealed for PropertyPod<K> where K: Copy {}
+    impl Sealed for ControlPod {}
     impl Sealed for PackedPod {}
 }
 
-pub trait BuildPodKind
+pub trait BuildPod
 where
     Self: self::sealed::Sealed,
 {
-    const ENVELOPE: bool;
-
     #[inline]
     fn header(&self, _: impl Writer) -> Result<(), Error> {
         Ok(())
@@ -74,9 +72,7 @@ where
 #[non_exhaustive]
 pub struct PaddedPod;
 
-impl BuildPodKind for PaddedPod {
-    const ENVELOPE: bool = true;
-
+impl BuildPod for PaddedPod {
     #[inline]
     fn push<T>(self, value: T, mut buf: impl Writer) -> Result<(), Error>
     where
@@ -120,9 +116,7 @@ pub struct ChildPod {
     pub(crate) ty: Type,
 }
 
-impl BuildPodKind for ChildPod {
-    const ENVELOPE: bool = false;
-
+impl BuildPod for ChildPod {
     #[inline]
     fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
@@ -161,15 +155,8 @@ impl BuildPodKind for ChildPod {
     }
 }
 
-impl ReadPodKind for ChildPod {
-    #[inline]
-    fn unpad<'de>(&self, _: impl Reader<'de>) -> Result<(), Error> {
-        Ok(())
-    }
-}
-
 #[derive(Clone, Copy)]
-pub struct PropertyChild<K>
+pub struct PropertyPod<K>
 where
     K: Copy,
 {
@@ -177,7 +164,7 @@ where
     flags: u32,
 }
 
-impl<K> PropertyChild<K>
+impl<K> PropertyPod<K>
 where
     K: Copy,
 {
@@ -187,7 +174,7 @@ where
     }
 }
 
-impl<B, K> Builder<B, PropertyChild<K>>
+impl<B, K> Builder<B, PropertyPod<K>>
 where
     K: RawId,
 {
@@ -198,12 +185,10 @@ where
     }
 }
 
-impl<K> BuildPodKind for PropertyChild<K>
+impl<K> BuildPod for PropertyPod<K>
 where
     K: RawId,
 {
-    const ENVELOPE: bool = true;
-
     #[inline]
     fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
         buf.write(&[self.key.into_id(), self.flags])
@@ -228,19 +213,19 @@ where
 
 /// A control child for a sequence.
 #[derive(Debug)]
-pub struct ControlChild {
+pub struct ControlPod {
     offset: u32,
     ty: u32,
 }
 
-impl ControlChild {
+impl ControlPod {
     #[inline]
     pub(crate) fn new() -> Self {
         Self { offset: 0, ty: 0 }
     }
 }
 
-impl<B> Builder<B, ControlChild> {
+impl<B> Builder<B, ControlPod> {
     /// Modify the offset of a control.
     pub fn offset(mut self, offset: u32) -> Self {
         self.as_kind_mut().offset = offset;
@@ -254,9 +239,7 @@ impl<B> Builder<B, ControlChild> {
     }
 }
 
-impl BuildPodKind for ControlChild {
-    const ENVELOPE: bool = true;
-
+impl BuildPod for ControlPod {
     #[inline]
     fn header(&self, mut buf: impl Writer) -> Result<(), Error> {
         buf.write(&[self.offset, self.ty])
@@ -284,7 +267,8 @@ impl BuildPodKind for ControlChild {
     }
 }
 
-pub trait ReadPodKind
+/// Trait for specializing a pod for reading.
+pub trait ReadPod
 where
     Self: Copy + self::sealed::Sealed,
 {
@@ -298,14 +282,14 @@ where
 #[non_exhaustive]
 pub struct PackedPod;
 
-impl ReadPodKind for PaddedPod {
+impl ReadPod for PaddedPod {
     #[inline]
     fn unpad<'de>(&self, mut buf: impl Reader<'de>) -> Result<(), Error> {
         buf.unpad(PADDING)
     }
 }
 
-impl ReadPodKind for PackedPod {
+impl ReadPod for PackedPod {
     #[inline]
     fn unpad<'de>(&self, _: impl Reader<'de>) -> Result<(), Error> {
         Ok(())

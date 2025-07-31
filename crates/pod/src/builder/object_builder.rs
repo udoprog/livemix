@@ -1,6 +1,6 @@
 use core::mem;
 
-use crate::{BuildPodKind, Builder, Error, PropertyChild, RawId, Type, Writer};
+use crate::{BuildPod, Builder, Error, PropertyPod, RawId, Type, Writer};
 
 /// An encoder for an object.
 pub struct ObjectBuilder<W, P>
@@ -19,7 +19,7 @@ where
 impl<W, P> ObjectBuilder<W, P>
 where
     W: Writer,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn to_writer(
@@ -78,11 +78,11 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property<K>(&mut self, key: K) -> Builder<W::Mut<'_>, PropertyChild<K>>
+    pub fn property<K>(&mut self, key: K) -> Builder<W::Mut<'_>, PropertyPod<K>>
     where
         K: RawId,
     {
-        Builder::new_with(self.writer.borrow_mut(), PropertyChild::new(key))
+        Builder::new_with(self.writer.borrow_mut(), PropertyPod::new(key))
     }
 
     #[inline]

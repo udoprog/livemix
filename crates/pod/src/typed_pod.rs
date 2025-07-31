@@ -13,7 +13,7 @@ use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
     AsReader, Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, PaddedPod, Pod, Pointer,
-    ReadPodKind, Reader, Rectangle, Type, Visitor, Writer,
+    ReadPod, Reader, Rectangle, Type, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -92,7 +92,7 @@ impl<B, P> TypedPod<B, P> {
 impl<'de, B, P> TypedPod<B, P>
 where
     B: Reader<'de>,
-    P: ReadPodKind,
+    P: ReadPod,
 {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
@@ -625,7 +625,7 @@ where
 impl<B, P> EncodeUnsized for TypedPod<B, P>
 where
     B: AsReader,
-    P: ReadPodKind,
+    P: ReadPod,
 {
     const TYPE: Type = Type::POD;
 
@@ -647,12 +647,12 @@ where
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsReader, P: ReadPodKind);
+crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsReader, P: ReadPod);
 
 impl<B, P> fmt::Debug for TypedPod<B, P>
 where
     B: AsReader,
-    P: ReadPodKind,
+    P: ReadPod,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

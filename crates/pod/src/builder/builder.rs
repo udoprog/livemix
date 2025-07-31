@@ -3,7 +3,7 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
-use crate::ReadPodKind;
+use crate::ReadPod;
 use crate::SplitReader;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
@@ -11,8 +11,8 @@ use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder
 use crate::error::ErrorKind;
 use crate::{ArrayBuf, Encode, EncodeInto};
 use crate::{
-    AsReader, BuildPodKind, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId,
-    Reader, Type, TypedPod, Writer,
+    AsReader, BuildPod, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId, Reader,
+    Type, TypedPod, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -25,7 +25,7 @@ pub struct Builder<B, P = PaddedPod> {
 
 impl<B, P> Builder<B, P>
 where
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn with_kind(buf: B, kind: P) -> Self {
@@ -143,7 +143,7 @@ impl<B> Builder<B> {
 impl<B, P> Builder<B, P>
 where
     B: Writer,
-    P: Copy + BuildPodKind,
+    P: Copy + BuildPod,
 {
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
@@ -231,7 +231,7 @@ impl<B> Builder<B, ChildPod> {
 
 impl<B, P> Builder<B, P>
 where
-    P: BuildPodKind,
+    P: BuildPod,
 {
     #[inline]
     pub(crate) fn new_with(buf: B, kind: P) -> Self
@@ -279,7 +279,7 @@ where
 impl<B, P> Builder<B, P>
 where
     B: Writer,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     /// Conveniently encode a value into the pod.
     ///
@@ -352,11 +352,7 @@ where
     #[inline]
     pub fn push_none(mut self) -> Result<(), Error> {
         self.kind.check(Type::NONE, 0)?;
-
-        if P::ENVELOPE {
-            self.buf.write(&[0, Type::NONE.into_u32()])?;
-        }
-
+        self.buf.write(&[0, Type::NONE.into_u32()])?;
         Ok(())
     }
 
@@ -714,7 +710,7 @@ where
 impl<B, P> EncodeUnsized for Builder<B, P>
 where
     B: AsReader,
-    P: BuildPodKind,
+    P: BuildPod,
 {
     const TYPE: Type = Type::POD;
 
@@ -729,7 +725,7 @@ where
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] Builder<B, P> where B: AsReader, P: BuildPodKind);
+crate::macros::encode_into_unsized!(impl [B, P] Builder<B, P> where B: AsReader, P: BuildPod);
 
 impl<B, P> Clone for Builder<B, P>
 where
@@ -748,7 +744,7 @@ where
 impl<B, P> fmt::Debug for Builder<B, P>
 where
     B: AsReader,
-    P: BuildPodKind + ReadPodKind,
+    P: BuildPod + ReadPod,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

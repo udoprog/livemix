@@ -54,14 +54,14 @@ macro_rules! __id {
 
             impl $crate::EncodeInto for $ty {
                 #[inline]
-                fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+                fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                     pod.push(self)
                 }
             }
 
             impl<'de> $crate::DecodeFrom<'de> for $ty {
                 #[inline]
-                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPodKind>) -> Result<Self, $crate::Error> {
+                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
                     pod.next()
                 }
             }
@@ -230,14 +230,14 @@ macro_rules! __consts {
 
             impl $crate::EncodeInto for $ty {
                 #[inline]
-                fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+                fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                     pod.push(self)
                 }
             }
 
             impl<'de> $crate::DecodeFrom<'de> for $ty {
                 #[inline]
-                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPodKind>) -> Result<Self, $crate::Error> {
+                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
                     pod.next()
                 }
             }
@@ -426,14 +426,14 @@ macro_rules! __flags {
 
             impl $crate::EncodeInto for $ty {
                 #[inline]
-                fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+                fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                     pod.push(self)
                 }
             }
 
             impl<'de> $crate::DecodeFrom<'de> for $ty {
                 #[inline]
-                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPodKind>) -> Result<Self, $crate::Error> {
+                fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
                     pod.next()
                 }
             }
@@ -630,7 +630,7 @@ macro_rules! __encode_into_sized {
         $(where $($where)*)*
         {
             #[inline]
-            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                 pod.push(self)
             }
         }
@@ -639,7 +639,7 @@ macro_rules! __encode_into_sized {
     ($ty:ty) => {
         impl $crate::EncodeInto for $ty {
             #[inline]
-            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                 pod.push(self)
             }
         }
@@ -654,7 +654,7 @@ macro_rules! __decode_from_sized {
         $(where $($where)*)*
         {
             #[inline]
-            fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPodKind>) -> Result<Self, $crate::Error> {
+            fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
                 pod.next()
             }
         }
@@ -663,7 +663,7 @@ macro_rules! __decode_from_sized {
     ($ty:ty) => {
         impl<'de> $crate::DecodeFrom<'de> for $ty {
             #[inline]
-            fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPodKind>) -> Result<Self, $crate::Error> {
+            fn decode_from(pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>) -> Result<Self, $crate::Error> {
                 pod.next()
             }
         }
@@ -677,7 +677,7 @@ macro_rules! __decode_from_borrowed {
         impl<'de> $crate::DecodeFrom<'de> for &'de $ty {
             #[inline]
             fn decode_from(
-                pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPodKind>,
+                pod: $crate::Pod<impl $crate::Reader<'de>, impl $crate::ReadPod>,
             ) -> Result<Self, $crate::Error> {
                 pod.next_unsized()
             }
@@ -696,7 +696,7 @@ macro_rules! __encode_into_unsized {
         )*
         {
             #[inline]
-            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                 pod.push_unsized(self)
             }
         }
@@ -705,7 +705,7 @@ macro_rules! __encode_into_unsized {
     ($ty:ty) => {
         impl $crate::EncodeInto for $ty {
             #[inline]
-            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPodKind>) -> Result<(), $crate::Error> {
+            fn encode_into(&self, pod: $crate::Builder<impl $crate::Writer, impl $crate::BuildPod>) -> Result<(), $crate::Error> {
                 pod.push_unsized(self)
             }
         }

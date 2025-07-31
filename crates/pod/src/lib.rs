@@ -24,7 +24,7 @@ pub use self::typed_pod::TypedPod;
 
 mod pod_kind;
 pub use self::pod_kind::{
-    BuildPodKind, ChildPod, ControlChild, PackedPod, PaddedPod, PropertyChild, ReadPodKind,
+    BuildPod, ChildPod, ControlPod, PackedPod, PaddedPod, PropertyPod, ReadPod,
 };
 
 pub(crate) mod ty;
