@@ -135,8 +135,8 @@ crate::macros::encode_into_unsized!(str);
 /// pod.as_mut().push_unsized(&String::from("this is right"))?;
 ///
 /// let mut pod = pod.as_ref();
-/// assert_eq!(pod.as_read_mut().next::<String>()?, "hello world");
-/// assert_eq!(pod.as_read_mut().next::<String>()?, "this is right");
+/// assert_eq!(pod.as_mut().next::<String>()?, "hello world");
+/// assert_eq!(pod.as_mut().next::<String>()?, "this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]

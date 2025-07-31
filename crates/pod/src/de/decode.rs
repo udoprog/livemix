@@ -395,8 +395,8 @@ crate::macros::decode_from_borrowed!(CStr);
 /// pod.as_mut().push_unsized("this is right")?;
 ///
 /// let mut pod = pod.as_ref();
-/// assert_eq!(pod.as_read_mut().next::<String>()?, "hello world");
-/// assert_eq!(pod.as_read_mut().next::<String>()?, "this is right");
+/// assert_eq!(pod.as_mut().next::<String>()?, "hello world");
+/// assert_eq!(pod.as_mut().next::<String>()?, "this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
@@ -424,8 +424,8 @@ crate::macros::decode_from_borrowed!(str);
 /// pod.as_mut().push(*b"this is right")?;
 ///
 /// let mut pod = pod.as_ref();
-/// assert_eq!(pod.as_read_mut().next::<Vec<u8>>()?, b"hello world");
-/// assert_eq!(pod.as_read_mut().next::<Vec<u8>>()?, b"this is right");
+/// assert_eq!(pod.as_mut().next::<Vec<u8>>()?, b"hello world");
+/// assert_eq!(pod.as_mut().next::<Vec<u8>>()?, b"this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]

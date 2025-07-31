@@ -9,7 +9,7 @@ use crate::buf::{ArrayVec, CapacityError};
 use crate::error::ErrorKind;
 use crate::{
     ArrayBuf, AsReader, Bitmap, Builder, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle,
-    SliceBuf, Type, Writer,
+    Type, Writer,
 };
 use crate::{ChoiceType, Reader};
 
@@ -47,7 +47,7 @@ fn test_push_decode_u64() -> Result<(), Error> {
     let mut buf = ArrayBuf::<128>::new();
     buf.write(&[0x1234567890abcdefu64])?;
 
-    let mut buf = SliceBuf::new(buf.as_bytes());
+    let mut buf = crate::buf::slice(buf.as_bytes());
 
     let Ok([a, b]) = buf.peek::<[u32; 2]>() else {
         panic!();
@@ -81,7 +81,8 @@ fn test_write_overflow() -> Result<(), Error> {
 
 #[test]
 fn test_slice_underflow() -> Result<(), Error> {
-    let mut buf = SliceBuf::new(&[1, 2, 3]);
+    let mut buf = crate::buf::slice(&[1, 2, 3]);
+
     assert_eq!(buf.read::<u8>()?, 1);
     assert_eq!(buf.read::<u8>()?, 2);
     assert_eq!(
@@ -98,7 +99,7 @@ fn test_slice_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_array_underflow() -> Result<(), Error> {
-    let mut buf = SliceBuf::new(&[1, 2, 3]);
+    let mut buf = crate::buf::slice(&[1, 2, 3]);
 
     assert_eq!(buf.read::<u8>()?, 1);
     assert_eq!(buf.read::<u8>()?, 2);

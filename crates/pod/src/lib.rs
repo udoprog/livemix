@@ -117,6 +117,22 @@ pub fn array() -> Builder<ArrayBuf> {
     Builder::array()
 }
 
+/// Construct a new [`Pod`] with a 128 word-sized array buffer.
+///
+/// # Examples
+///
+/// ```
+/// use pod::Reader;
+///
+/// let mut pod = pod::buf::slice(&[0x7f; 32]);
+/// assert_eq!(pod.read::<u32>()?, 0x7f7f7f7f);
+/// # Ok::<_, pod::Error>(())
+/// ```
+#[inline]
+pub fn slice(data: &[u8]) -> SliceBuf<'_> {
+    SliceBuf::new(data)
+}
+
 /// Construct a new [`Pod`] with a dynamically sized buffer.
 ///
 /// # Examples

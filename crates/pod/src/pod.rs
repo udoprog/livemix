@@ -208,29 +208,25 @@ where
     B: Reader<'de>,
     P: ReadPod,
 {
-    /// Skip a value in the pod.
+    /// Skip a value in the pod and return the number of bytes skipped.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
     /// let mut pod = pod::array();
     ///
-    /// let mut array = pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child().push(10i32)?;
-    ///     array.child().push(20i32)?;
-    ///     Ok(())
-    /// })?;
+    /// pod.as_mut().encode((1, 2, "hello world", 4));
     ///
-    /// let pod = pod.as_ref();
-    /// let mut array = pod.next_array()?;
-    /// assert!(!array.is_empty());
-    /// array.next().unwrap();
-    /// assert_eq!(array.next().unwrap().next::<i32>()?, 20i32);
+    /// let mut pod = pod.as_ref();
+    /// assert_eq!(pod.as_mut().next::<i32>()?, 1);
+    /// assert_eq!(pod.as_mut().next::<i32>()?, 2);
+    /// assert_eq!(pod.as_mut().skip()?, 12);
+    /// assert_eq!(pod.as_mut().next::<i32>()?, 4);
+    /// assert!(pod.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn skip(self) -> Result<(), Error> {
+    pub fn skip(self) -> Result<usize, Error> {
         self.into_typed()?.skip()
     }
 
@@ -619,7 +615,7 @@ where
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
     #[inline]
-    pub fn as_read_mut(&mut self) -> Pod<B::Mut<'_>, P>
+    pub fn as_mut(&mut self) -> Pod<B::Mut<'_>, P>
     where
         P: Copy,
     {
@@ -657,6 +653,31 @@ where
         P: Copy,
     {
         TypedPod::from_reader(self.buf.borrow_mut(), self.kind)
+    }
+}
+
+impl<B, P> Pod<B, P>
+where
+    B: AsReader,
+{
+    /// Test if the typed pod is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    /// let mut pod = pod::array();
+    ///
+    /// pod.as_mut().encode(1);
+    ///
+    /// let mut pod = pod.as_ref();
+    /// assert!(!pod.is_empty());
+    /// assert_eq!(pod.as_mut().next::<i32>()?, 1);
+    /// assert!(pod.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.buf.as_reader().is_empty()
     }
 }
 

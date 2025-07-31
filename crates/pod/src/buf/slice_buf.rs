@@ -32,9 +32,7 @@ impl<'de> SliceBuf<'de> {
     /// # Examples
     ///
     /// ```
-    /// use pod::SliceBuf;
-    ///
-    /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
+    /// let slice = pod::buf::slice(&[1, 2, 3, 4]);
     /// assert_eq!(slice.len(), 4);
     /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
     /// ```
@@ -54,9 +52,7 @@ impl<'de> SliceBuf<'de> {
     /// # Examples
     ///
     /// ```
-    /// use pod::SliceBuf;
-    ///
-    /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
+    /// let slice = pod::buf::slice(&[1, 2, 3, 4]);
     /// let buf = slice.to_owned()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -76,9 +72,7 @@ impl<'de> SliceBuf<'de> {
     /// # Examples
     ///
     /// ```
-    /// use pod::SliceBuf;
-    ///
-    /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
+    /// let slice = pod::buf::slice(&[1, 2, 3, 4]);
     /// assert!(!slice.is_empty());
     /// assert_eq!(slice.len(), 4);
     /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
@@ -92,14 +86,12 @@ impl<'de> SliceBuf<'de> {
     /// # Examples
     ///
     /// ```
-    /// use pod::SliceBuf;
-    ///
-    /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
+    /// let slice = pod::buf::slice(&[1, 2, 3, 4]);
     /// assert!(!slice.is_empty());
     /// assert_eq!(slice.len(), 4);
     /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
     ///
-    /// let slice = SliceBuf::new(&[]);
+    /// let slice = pod::buf::slice(&[]);
     /// assert!(slice.is_empty());
     /// assert_eq!(slice.len(), 0);
     /// assert_eq!(slice.as_bytes(), &[]);
@@ -113,9 +105,7 @@ impl<'de> SliceBuf<'de> {
     /// # Examples
     ///
     /// ```
-    /// use pod::SliceBuf;
-    ///
-    /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
+    /// let slice = pod::buf::slice(&[1, 2, 3, 4]);
     /// assert!(!slice.is_empty());
     /// assert_eq!(slice.len(), 4);
     /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
@@ -130,9 +120,7 @@ impl<'de> SliceBuf<'de> {
     /// # Examples
     ///
     /// ```
-    /// use pod::SliceBuf;
-    ///
-    /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
+    /// let slice = pod::buf::slice(&[1, 2, 3, 4]);
     /// let (a, b) = slice.split_at_checked(2).unwrap();
     /// assert_eq!(a.as_bytes(), &[1, 2]);
     /// assert_eq!(b.as_bytes(), &[3, 4]);
@@ -205,6 +193,22 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
         self
     }
 
+    /// Get the current reader position.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Reader;
+    ///
+    /// let mut buf = pod::buf::slice(&[0; 32]);
+    ///
+    /// let pos = buf.pos();
+    /// _ = buf.read::<u32>()?;
+    /// assert_eq!(buf.distance_from(pos), 4);
+    /// _ = buf.read::<u32>()?;
+    /// assert_eq!(buf.distance_from(pos), 8);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn pos(&self) -> Self::Pos {
         Pos {
@@ -213,11 +217,42 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
         }
     }
 
+    /// Get the distance from a stored reader position to the current reader
+    /// position.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Reader;
+    ///
+    /// let mut buf = pod::buf::slice(&[0; 32]);
+    ///
+    /// let pos = buf.pos();
+    /// _ = buf.read::<u32>()?;
+    /// assert_eq!(buf.distance_from(pos), 4);
+    /// _ = buf.read::<u32>()?;
+    /// assert_eq!(buf.distance_from(pos), 8);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn distance_from(&self, pos: Self::Pos) -> usize {
         self.ptr.addr().get().wrapping_sub(pos.ptr.addr().get())
     }
 
+    /// Skip the given number of bytes in the reader.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Reader;
+    ///
+    /// let mut buf = pod::buf::slice(&[0; 32]);
+    ///
+    /// assert_eq!(buf.len(), 32);
+    /// buf.skip(4)?;
+    /// assert_eq!(buf.len(), 28);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn skip(&mut self, size: usize) -> Result<(), Error> {
         let Some((_, tail)) = self.split_at_checked(size) else {
@@ -228,10 +263,29 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
         Ok(())
     }
 
+    /// Unpad the given buffer to the specified alignment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Reader;
+    ///
+    /// let mut buf = pod::buf::slice(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7b, 0x7b, 0x7b, 0x7b]);
+    ///
+    /// let pos = buf.pos();
+    /// buf.skip(4)?;
+    /// assert_eq!(buf.distance_from(pos), 4);
+    /// buf.unpad(8)?;
+    /// assert_eq!(buf.distance_from(pos), 8);
+    /// buf.unpad(6)?;
+    /// assert_eq!(buf.distance_from(pos), 12);
+    /// assert_eq!(buf.read::<u32>()?, 0x7b7b7b7b);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn unpad(&mut self, align: usize) -> Result<(), Error> {
         debug_assert!(
-            align <= 256,
+            align <= u8::MAX as usize,
             "Alignments larger than 256 bytes are not supported"
         );
 
@@ -249,10 +303,24 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
 
         self.len -= pad;
         self.ptr = unsafe { wrapping_add(self.ptr, pad) };
-        self.off = 0;
+        self.offset(pad);
         Ok(())
     }
 
+    /// Split the given buffer to the specified distance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Reader;
+    ///
+    /// let mut buf = pod::buf::slice(&[0xa8, 0xa8, 0xa8, 0xa8, 0x7b, 0x7b, 0x7b, 0x7b]);
+    ///
+    /// let mut buf1 = buf.split(4).unwrap();
+    /// assert_eq!(buf1.read::<u32>()?, 0xa8a8a8a8);
+    /// assert_eq!(buf.read::<u32>()?, 0x7b7b7b7b);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     fn split(&mut self, at: usize) -> Option<Self::Split> {
         let (head, tail) = self.split_at_checked(at)?;
@@ -312,7 +380,7 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
 
     #[inline]
     fn as_bytes(&self) -> &[u8] {
-        self.as_bytes()
+        (*self).as_bytes()
     }
 
     #[inline]

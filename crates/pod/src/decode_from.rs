@@ -51,7 +51,7 @@ where
         let mut values = ArrayVec::<T, N>::new();
 
         for _ in 0..N {
-            values.push(T::decode_from(pod.as_read_mut())?)?;
+            values.push(T::decode_from(pod.as_mut())?)?;
         }
 
         let Some(values) = values.into_inner() else {
@@ -108,7 +108,7 @@ macro_rules! encode_into_tuple {
         {
             #[inline]
             fn decode_from(mut pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
-                $(let $var = $ident::decode_from(pod.as_read_mut())?;)*
+                $(let $var = $ident::decode_from(pod.as_mut())?;)*
                 Ok(($($var,)*))
             }
         }

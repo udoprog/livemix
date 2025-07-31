@@ -1356,5 +1356,5 @@ fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<Sli
         return Ok(None);
     };
 
-    Ok(Some(Pod::new(SliceBuf::new(bytes))))
+    Ok(Some(Pod::new(pod::buf::slice(bytes))))
 }

@@ -92,6 +92,7 @@ impl<B, P> TypedPod<B, P> {
 impl<'de, B, P> TypedPod<B, P>
 where
     B: Reader<'de>,
+    P: Copy,
 {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
@@ -112,11 +113,17 @@ where
         let (size, ty) = buf.header()?;
 
         Ok(TypedPod {
+            buf,
             size,
             ty,
-            buf,
             kind,
         })
+    }
+
+    /// Convert the [`TypedPod`] into a one borrowing from mutably.
+    #[inline]
+    pub fn as_mut(&mut self) -> TypedPod<B::Mut<'_>, P> {
+        TypedPod::with_kind(self.buf.borrow_mut(), self.size, self.ty, self.kind)
     }
 }
 
@@ -130,28 +137,23 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod, Type};
-    ///
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child().push(10i32)?;
-    ///     array.child().push(20i32)?;
-    ///     Ok(())
-    /// })?;
+    /// pod.as_mut().encode((1, 2, "hello world", 4));
     ///
-    /// let pod = pod.as_ref().into_typed()?;
-    /// let mut array = pod.next_array()?;
-    /// assert!(!array.is_empty());
-    /// array.next().unwrap();
-    /// assert_eq!(array.next().unwrap().next::<i32>()?, 20i32);
+    /// let mut pod = pod.as_ref();
+    /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 1);
+    /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 2);
+    /// assert_eq!(pod.as_mut().into_typed()?.skip()?, 12);
+    /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 4);
+    /// assert!(pod.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn skip(mut self) -> Result<(), Error> {
+    pub fn skip(mut self) -> Result<usize, Error> {
         self.buf.skip(self.size)?;
         self.kind.unpad(self.buf)?;
-        Ok(())
+        Ok(self.size)
     }
 
     /// Encode a value into the pod.
@@ -533,6 +535,31 @@ where
 
         self.kind.unpad(self.buf)?;
         Ok(buf)
+    }
+}
+
+impl<B, P> TypedPod<B, P>
+where
+    B: AsReader,
+{
+    /// Test if the typed pod is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    /// let mut pod = pod::array();
+    ///
+    /// pod.as_mut().encode(1);
+    ///
+    /// let mut pod = pod.as_ref().into_typed()?;
+    /// assert!(!pod.is_empty());
+    /// assert_eq!(pod.as_mut().next::<i32>()?, 1);
+    /// assert!(pod.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.buf.as_reader().is_empty()
     }
 }
 

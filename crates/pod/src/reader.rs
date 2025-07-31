@@ -77,10 +77,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, SliceBuf, Reader};
+    /// use pod::{ArrayBuf, Reader};
     ///
     /// let array = ArrayBuf::<128>::from_slice(&[1u64, 2, 3])?;
-    /// let mut buf = SliceBuf::new(array.as_bytes());
+    /// let mut buf = pod::buf::slice(array.as_bytes());
     ///
     /// assert_eq!(buf.len(), 24);
     /// assert_eq!(buf.read::<[u64; 1]>(), Ok([1]));
@@ -140,7 +140,7 @@ where
         Ok(unsafe { out.assume_init() })
     }
 
-    /// Read an array of words.
+    /// Read type `T` from the reader.
     #[inline]
     fn read<T>(&mut self) -> Result<T, Error>
     where

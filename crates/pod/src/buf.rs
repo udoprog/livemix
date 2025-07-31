@@ -15,6 +15,11 @@ pub use self::slice_buf::SliceBuf;
 use core::error;
 use core::fmt;
 
+/// Convenience function to construct a reader from a slice.
+pub fn slice(data: &[u8]) -> SliceBuf<'_> {
+    SliceBuf::new(data)
+}
+
 /// Capacity overflow when writing to an [`ArrayBuf`].
 #[derive(Debug, PartialEq)]
 #[non_exhaustive]
