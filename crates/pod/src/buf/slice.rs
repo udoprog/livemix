@@ -5,13 +5,13 @@ use core::ptr::NonNull;
 use core::slice;
 
 use crate::error::ErrorKind;
-use crate::{AsReader, DynamicBuf, Error, Reader, SplitReader, Visitor};
+use crate::{AsSlice, DynamicBuf, Error, Reader, SplitReader, Visitor};
 
 use super::AllocError;
 
 /// A buffer that represents a slice of bytes.
 #[derive(Clone, Copy)]
-pub struct SliceBuf<'de> {
+pub struct Slice<'de> {
     /// The pointer to the start of the slice.
     ptr: NonNull<u8>,
     ///  The length of the slice in bytes.
@@ -26,7 +26,7 @@ pub struct SliceBuf<'de> {
     _marker: PhantomData<&'de [u8]>,
 }
 
-impl<'de> SliceBuf<'de> {
+impl<'de> Slice<'de> {
     /// Construct a new slice buffer from a slice.
     ///
     /// # Examples
@@ -125,19 +125,19 @@ impl<'de> SliceBuf<'de> {
     /// assert_eq!(a.as_bytes(), &[1, 2]);
     /// assert_eq!(b.as_bytes(), &[3, 4]);
     /// ```
-    pub fn split_at_checked(&self, at: usize) -> Option<(SliceBuf<'de>, SliceBuf<'de>)> {
+    pub fn split_at_checked(&self, at: usize) -> Option<(Slice<'de>, Slice<'de>)> {
         if at > self.len() {
             return None;
         }
 
-        let a = SliceBuf {
+        let a = Slice {
             ptr: self.ptr,
             len: at,
             off: self.off,
             _marker: PhantomData,
         };
 
-        let b = SliceBuf {
+        let b = Slice {
             ptr: unsafe { wrapping_add(self.ptr, at) },
             len: self.len.wrapping_sub(at),
             off: (self.off as usize).wrapping_add(at) as u8,
@@ -153,15 +153,10 @@ impl<'de> SliceBuf<'de> {
     }
 }
 
-impl AsReader for SliceBuf<'_> {
-    type AsReader<'this>
-        = SliceBuf<'this>
-    where
-        Self: 'this;
-
+impl AsSlice for Slice<'_> {
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf {
+    fn as_slice(&self) -> Slice<'_> {
+        Slice {
             ptr: self.ptr,
             len: self.len,
             off: self.off,
@@ -177,12 +172,9 @@ pub struct Pos<'de> {
     _marker: PhantomData<&'de [u8]>,
 }
 
-impl<'de> Reader<'de> for SliceBuf<'de> {
-    /// The type of a split off reader.
-    type Split = SliceBuf<'de>;
-
+impl<'de> Reader<'de> for Slice<'de> {
     type Mut<'this>
-        = &'this mut SliceBuf<'de>
+        = &'this mut Slice<'de>
     where
         Self: 'this;
 
@@ -322,7 +314,7 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    fn split(&mut self, at: usize) -> Option<Self::Split> {
+    fn split(&mut self, at: usize) -> Option<Slice<'de>> {
         let (head, tail) = self.split_at_checked(at)?;
         *self = tail;
         Some(head)
@@ -394,9 +386,9 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
     }
 }
 
-impl SplitReader for SliceBuf<'_> {
+impl SplitReader for Slice<'_> {
     type TakeReader<'this>
-        = SliceBuf<'this>
+        = Slice<'this>
     where
         Self: 'this;
 
@@ -412,7 +404,7 @@ impl SplitReader for SliceBuf<'_> {
     }
 }
 
-impl fmt::Debug for SliceBuf<'_> {
+impl fmt::Debug for Slice<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_bytes()).finish()

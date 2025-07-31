@@ -4,7 +4,7 @@ use core::slice;
 
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
-use crate::{AsReader, Error, SliceBuf, SplitReader, Writer};
+use crate::{AsSlice, Error, Slice, SplitReader, Writer};
 
 use super::CapacityError;
 
@@ -561,23 +561,21 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     }
 }
 
-impl<const N: usize> AsReader for ArrayBuf<N> {
-    type AsReader<'this> = SliceBuf<'this>;
-
+impl<const N: usize> AsSlice for ArrayBuf<N> {
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self.as_bytes())
+    fn as_slice(&self) -> Slice<'_> {
+        Slice::new(self.as_bytes())
     }
 }
 
 impl<const N: usize> SplitReader for ArrayBuf<N> {
-    type TakeReader<'this> = SliceBuf<'this>;
+    type TakeReader<'this> = Slice<'this>;
 
     #[inline]
     fn take_reader(&mut self) -> Self::TakeReader<'_> {
         let ptr = self.data.as_ptr().cast::<u8>();
         let len = mem::take(&mut self.len);
         // SAFETY: The buffer is guaranteed to be initialized up to `len`.
-        SliceBuf::new(unsafe { slice::from_raw_parts(ptr, len) })
+        Slice::new(unsafe { slice::from_raw_parts(ptr, len) })
     }
 }

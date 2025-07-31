@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use crate::{Reader, SliceBuf};
+use crate::Slice;
 
 mod sealed {
     #[cfg(feature = "alloc")]
@@ -13,7 +13,7 @@ mod sealed {
 
     #[cfg(feature = "alloc")]
     use crate::DynamicBuf;
-    use crate::{ArrayBuf, AsReader, SliceBuf};
+    use crate::{ArrayBuf, AsSlice, Slice};
 
     pub trait Sealed {}
 
@@ -22,92 +22,62 @@ mod sealed {
     #[cfg(feature = "alloc")]
     impl Sealed for Vec<u8> {}
     impl Sealed for [u8] {}
-    impl Sealed for SliceBuf<'_> {}
+    impl Sealed for Slice<'_> {}
     impl<const N: usize> Sealed for ArrayBuf<N> {}
     #[cfg(feature = "alloc")]
     impl Sealed for DynamicBuf {}
-    impl<R> Sealed for &mut R where R: ?Sized + AsReader {}
-    impl<R> Sealed for &R where R: ?Sized + AsReader {}
+    impl<R> Sealed for &mut R where R: ?Sized + AsSlice {}
+    impl<R> Sealed for &R where R: ?Sized + AsSlice {}
 }
 
 /// Base trait to convert something into a reader which borrows from `&self`.
-pub trait AsReader
+pub trait AsSlice
 where
     Self: self::sealed::Sealed,
 {
-    /// A clone of the reader.
-    type AsReader<'this>: Reader<'this>
-    where
-        Self: 'this;
-
     /// Borrow the value as a reader.
-    fn as_reader(&self) -> Self::AsReader<'_>;
+    fn as_slice(&self) -> Slice<'_>;
 }
 
 #[cfg(feature = "alloc")]
-impl AsReader for Box<[u8]> {
-    type AsReader<'this>
-        = SliceBuf<'this>
-    where
-        Self: 'this;
-
+impl AsSlice for Box<[u8]> {
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self)
+    fn as_slice(&self) -> Slice<'_> {
+        Slice::new(self)
     }
 }
 
 #[cfg(feature = "alloc")]
-impl AsReader for Vec<u8> {
-    type AsReader<'this>
-        = SliceBuf<'this>
-    where
-        Self: 'this;
-
+impl AsSlice for Vec<u8> {
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self)
+    fn as_slice(&self) -> Slice<'_> {
+        Slice::new(self)
     }
 }
 
-impl AsReader for [u8] {
-    type AsReader<'this>
-        = SliceBuf<'this>
-    where
-        Self: 'this;
-
+impl AsSlice for [u8] {
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self)
+    fn as_slice(&self) -> Slice<'_> {
+        Slice::new(self)
     }
 }
 
-impl<R> AsReader for &mut R
+impl<R> AsSlice for &mut R
 where
-    R: ?Sized + AsReader,
+    R: ?Sized + AsSlice,
 {
-    type AsReader<'this>
-        = R::AsReader<'this>
-    where
-        Self: 'this;
-
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        (**self).as_reader()
+    fn as_slice(&self) -> Slice<'_> {
+        (**self).as_slice()
     }
 }
 
-impl<R> AsReader for &R
+impl<R> AsSlice for &R
 where
-    R: ?Sized + AsReader,
+    R: ?Sized + AsSlice,
 {
-    type AsReader<'this>
-        = R::AsReader<'this>
-    where
-        Self: 'this;
-
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        (**self).as_reader()
+    fn as_slice(&self) -> Slice<'_> {
+        (**self).as_slice()
     }
 }

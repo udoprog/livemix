@@ -3,11 +3,12 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
-use crate::PADDING;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
-use crate::{AsReader, Control, EncodeUnsized, Error, Reader, Type, TypedPod, Writer};
+use crate::{
+    AsSlice, Control, EncodeUnsized, Error, PADDING, Reader, Slice, Type, TypedPod, Writer,
+};
 
 /// A decoder for a sequence.
 pub struct Sequence<B> {
@@ -138,7 +139,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn control(&mut self) -> Result<Control<B::Split>, Error> {
+    pub fn control(&mut self) -> Result<Control<Slice<'de>>, Error> {
         if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
@@ -193,7 +194,7 @@ where
 
 impl<B> Sequence<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Coerce into a borrowed [`Sequence`].
     ///
@@ -223,8 +224,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Sequence<B::AsReader<'_>> {
-        Sequence::new(self.buf.as_reader(), self.unit, self.pad)
+    pub fn as_ref(&self) -> Sequence<Slice<'_>> {
+        Sequence::new(self.buf.as_slice(), self.unit, self.pad)
     }
 }
 
@@ -260,28 +261,28 @@ where
 /// ```
 impl<B> EncodeUnsized for Sequence<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     const TYPE: Type = Type::SEQUENCE;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        let len = self.buf.as_reader().len();
+        let len = self.buf.as_slice().len();
         len.checked_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.unit, self.pad])?;
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Sequence<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B] Sequence<B> where B: AsSlice);
 
 impl<B> fmt::Debug for Sequence<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -289,7 +290,7 @@ where
 
         impl<B> fmt::Debug for Controls<'_, B>
         where
-            B: AsReader,
+            B: AsSlice,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

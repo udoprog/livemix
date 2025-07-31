@@ -7,11 +7,11 @@ use core::slice;
 
 use alloc::alloc;
 
-use crate::SliceBuf;
+use crate::Slice;
 use crate::SplitReader;
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
-use crate::{AsReader, Error, Writer};
+use crate::{AsSlice, Error, Writer};
 
 use super::CapacityError;
 
@@ -304,24 +304,22 @@ impl Drop for DynamicBuf {
     }
 }
 
-impl AsReader for DynamicBuf {
-    type AsReader<'this> = SliceBuf<'this>;
-
+impl AsSlice for DynamicBuf {
     #[inline]
-    fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self.as_bytes())
+    fn as_slice(&self) -> Slice<'_> {
+        Slice::new(self.as_bytes())
     }
 }
 
 impl SplitReader for DynamicBuf {
-    type TakeReader<'this> = SliceBuf<'this>;
+    type TakeReader<'this> = Slice<'this>;
 
     #[inline]
     fn take_reader(&mut self) -> Self::TakeReader<'_> {
         let ptr = self.data.as_ptr().cast_const();
         let len = mem::take(&mut self.len);
         // SAFETY: The buffer is guaranteed to be initialized up to `len`.
-        SliceBuf::new(unsafe { slice::from_raw_parts(ptr, len) })
+        Slice::new(unsafe { slice::from_raw_parts(ptr, len) })
     }
 }
 

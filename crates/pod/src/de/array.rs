@@ -7,7 +7,7 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsReader, EncodeUnsized, Error, PackedPod, Reader, Type, TypedPod, Writer};
+use crate::{AsSlice, EncodeUnsized, Error, PackedPod, Reader, Slice, Type, TypedPod, Writer};
 
 /// A decoder for an array.
 ///
@@ -184,7 +184,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<B::Split, PackedPod>> {
+    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>, PackedPod>> {
         if self.remaining == 0 {
             return None;
         }
@@ -239,7 +239,7 @@ where
 
 impl<B> Array<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Coerce into a borrowed [`Array`].
     ///
@@ -273,9 +273,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Array<B::AsReader<'_>> {
+    pub fn as_ref(&self) -> Array<Slice<'_>> {
         Array::new(
-            self.buf.as_reader(),
+            self.buf.as_slice(),
             self.child_size,
             self.child_type,
             self.remaining,
@@ -318,7 +318,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Array<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     const TYPE: Type = Type::ARRAY;
 
@@ -335,15 +335,15 @@ where
         };
 
         writer.write(&[child_size, self.child_type.into_u32()])?;
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Array<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B] Array<B> where B: AsSlice);
 
 impl<B> fmt::Debug for Array<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -351,7 +351,7 @@ where
 
         impl<B> fmt::Debug for Entries<'_, B>
         where
-            B: AsReader,
+            B: AsSlice,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

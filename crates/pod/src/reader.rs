@@ -2,14 +2,14 @@ use core::mem::MaybeUninit;
 
 use crate::error::ErrorKind;
 use crate::utils::UninitAlign;
-use crate::{AsReader, Error, Type, Visitor};
+use crate::{AsSlice, Error, Slice, Type, Visitor};
 
 mod sealed {
-    use crate::{ArrayBuf, Reader, SliceBuf};
+    use crate::{ArrayBuf, Reader, Slice};
 
     pub trait Sealed {}
 
-    impl Sealed for SliceBuf<'_> {}
+    impl Sealed for Slice<'_> {}
     impl<const N: usize> Sealed for ArrayBuf<N> {}
     impl<'de, R> Sealed for &mut R where R: ?Sized + Reader<'de> {}
 }
@@ -17,11 +17,8 @@ mod sealed {
 /// A type that u32 words can be read from.
 pub trait Reader<'de>
 where
-    Self: AsReader + self::sealed::Sealed,
+    Self: AsSlice + self::sealed::Sealed,
 {
-    /// The type of a split off reader.
-    type Split: Reader<'de>;
-
     /// The mutable borrow of a reader.
     type Mut<'this>: Reader<'de>
     where
@@ -43,7 +40,7 @@ where
     fn skip(&mut self, size: usize) -> Result<(), Error>;
 
     /// Split off the head of the current buffer.
-    fn split(&mut self, at: usize) -> Option<Self::Split>;
+    fn split(&mut self, at: usize) -> Option<Slice<'de>>;
 
     /// Peek into the provided buffer without consuming the reader.
     fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error>;
@@ -96,10 +93,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{ArrayBuf, AsReader, Reader};
+    /// use pod::{ArrayBuf, AsSlice, Reader};
     ///
-    /// fn is_empty(buf: impl AsReader) -> bool {
-    ///    buf.as_reader().is_empty()
+    /// fn is_empty(buf: impl AsSlice) -> bool {
+    ///    buf.as_slice().is_empty()
     /// }
     ///
     /// let mut buf = ArrayBuf::<128>::new();
@@ -117,9 +114,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{SliceBuf, Reader};
+    /// use pod::{Slice, Reader};
     ///
-    /// let mut buf = SliceBuf::new(&[1u8, 2, 3, 0, 4]);
+    /// let mut buf = Slice::new(&[1u8, 2, 3, 0, 4]);
     /// assert_eq!(buf.read::<[u8; 3]>(), Ok([1, 2, 3]));
     ///
     /// buf.unpad(4)?;
@@ -169,8 +166,6 @@ impl<'de, R> Reader<'de> for &mut R
 where
     R: ?Sized + Reader<'de>,
 {
-    type Split = R::Split;
-
     type Mut<'this>
         = R::Mut<'this>
     where
@@ -199,7 +194,7 @@ where
     }
 
     #[inline]
-    fn split(&mut self, at: usize) -> Option<Self::Split> {
+    fn split(&mut self, at: usize) -> Option<Slice<'de>> {
         (**self).split(at)
     }
 

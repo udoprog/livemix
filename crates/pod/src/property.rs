@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{PackedPod, Reader, TypedPod};
+use crate::{AsSlice, PackedPod, TypedPod};
 
 /// A property inside of an object.
 pub struct Property<B> {
@@ -85,9 +85,9 @@ impl<B> Property<B> {
     }
 }
 
-impl<'de, B> fmt::Debug for Property<B>
+impl<B> fmt::Debug for Property<B>
 where
-    B: Reader<'de>,
+    B: AsSlice,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Property")

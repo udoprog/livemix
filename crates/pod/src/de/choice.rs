@@ -3,14 +3,13 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
-use crate::Pod;
-use crate::Readable;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
 use crate::{
-    AsReader, ChoiceType, EncodeUnsized, Error, PackedPod, Reader, Type, TypedPod, Writer,
+    AsSlice, ChoiceType, EncodeUnsized, Error, PackedPod, Pod, Readable, Reader, Slice, Type,
+    TypedPod, Writer,
 };
 
 /// A decoder for a choice.
@@ -293,7 +292,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<B::Split, PackedPod>> {
+    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>, PackedPod>> {
         if self.remaining == 0 {
             return None;
         }
@@ -351,7 +350,7 @@ where
 
 impl<B> Choice<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Coerce into a borrowed [`Choice`].
     ///
@@ -387,9 +386,9 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Choice<B::AsReader<'_>> {
+    pub fn as_ref(&self) -> Choice<Slice<'_>> {
         Choice::new(
-            self.buf.as_reader(),
+            self.buf.as_slice(),
             self.choice_type,
             self.flags,
             self.child_size,
@@ -445,7 +444,7 @@ where
 /// ```
 impl<B> EncodeUnsized for Choice<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     const TYPE: Type = Type::CHOICE;
 
@@ -468,15 +467,15 @@ where
             self.child_type.into_u32(),
         ])?;
 
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Choice<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B] Choice<B> where B: AsSlice);
 
 impl<B> fmt::Debug for Choice<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -484,7 +483,7 @@ where
 
         impl<B> fmt::Debug for Entries<'_, B>
         where
-            B: AsReader,
+            B: AsSlice,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

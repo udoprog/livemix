@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{PackedPod, Reader, TypedPod};
+use crate::{AsSlice, PackedPod, TypedPod};
 
 /// A control item inside of a sequence.
 ///
@@ -105,9 +105,9 @@ impl<B> Control<B> {
     }
 }
 
-impl<'de, B> fmt::Debug for Control<B>
+impl<B> fmt::Debug for Control<B>
 where
-    B: Reader<'de>,
+    B: AsSlice,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

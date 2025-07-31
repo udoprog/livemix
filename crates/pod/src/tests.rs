@@ -9,7 +9,7 @@ use alloc::string::String;
 use crate::buf::{ArrayVec, CapacityError};
 use crate::error::ErrorKind;
 use crate::{
-    ArrayBuf, AsReader, Bitmap, Builder, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle,
+    ArrayBuf, AsSlice, Bitmap, Builder, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle,
     Type, Writer,
 };
 use crate::{ChoiceType, Reader};
@@ -32,7 +32,7 @@ fn sandbox() -> Result<(), Error> {
 }
 
 #[inline]
-fn push_none() -> Result<Pod<impl AsReader>, Error> {
+fn push_none() -> Result<Pod<impl AsSlice>, Error> {
     let mut pod = crate::array();
     pod.as_mut().push_none()?;
     Ok(pod.into_pod())

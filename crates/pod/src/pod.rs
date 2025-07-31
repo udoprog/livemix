@@ -4,8 +4,8 @@ use core::fmt;
 use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::{
-    ArrayBuf, AsReader, Decode, DecodeUnsized, EncodeUnsized, Error, PackedPod, ReadPod, Readable,
-    Reader, Type, TypedPod, Visitor, Writer,
+    ArrayBuf, AsSlice, Decode, DecodeUnsized, EncodeUnsized, Error, PackedPod, ReadPod, Readable,
+    Reader, Slice, Type, TypedPod, Visitor, Writer,
 };
 #[cfg(feature = "alloc")]
 use crate::{DynamicBuf, PaddedPod};
@@ -238,7 +238,7 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().write((10i32, "hello world", [1u32, 2u32]))?;
     ///
-    /// let (a, s, [c, d]) = pod.as_ref().decode::<(i32, String, [u32; 2])>()?;
+    /// let (a, s, [c, d]) = pod.as_ref().read::<(i32, String, [u32; 2])>()?;
     ///
     /// assert_eq!(a, 10i32);
     /// assert_eq!(s, "hello world");
@@ -387,7 +387,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_array(self) -> Result<Array<B::Split>, Error> {
+    pub fn next_array(self) -> Result<Array<Slice<'de>>, Error> {
         self.into_typed()?.next_array()
     }
 
@@ -428,7 +428,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_struct(self) -> Result<Struct<B::Split>, Error> {
+    pub fn next_struct(self) -> Result<Struct<Slice<'de>>, Error> {
         self.into_typed()?.next_struct()
     }
 
@@ -482,7 +482,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_object(self) -> Result<Object<B::Split>, Error> {
+    pub fn next_object(self) -> Result<Object<Slice<'de>>, Error> {
         self.into_typed()?.next_object()
     }
 
@@ -536,7 +536,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_sequence(self) -> Result<Sequence<B::Split>, Error> {
+    pub fn next_sequence(self) -> Result<Sequence<Slice<'de>>, Error> {
         self.into_typed()?.next_sequence()
     }
 
@@ -577,7 +577,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_choice(self) -> Result<Choice<B::Split>, Error> {
+    pub fn next_choice(self) -> Result<Choice<Slice<'de>>, Error> {
         self.into_typed()?.next_choice()
     }
 
@@ -608,7 +608,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<B::Split, PackedPod>, Error> {
+    pub fn next_pod(self) -> Result<Pod<Slice<'de>, PackedPod>, Error> {
         self.into_typed()?.next_pod()
     }
 
@@ -658,7 +658,7 @@ where
 
 impl<B, P> Pod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Test if the typed pod is empty.
     ///
@@ -677,13 +677,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.buf.as_reader().is_empty()
+        self.buf.as_slice().is_empty()
     }
 }
 
 impl<B, P> Pod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: Copy,
 {
     /// Coerce any pod into an owned pod.
@@ -702,7 +702,7 @@ where
     #[cfg(feature = "alloc")]
     pub fn to_owned(&self) -> Result<Pod<DynamicBuf, P>, AllocError> {
         Ok(Pod::with_kind(
-            DynamicBuf::from_slice(self.buf.as_reader().as_bytes())?,
+            DynamicBuf::from_slice(self.buf.as_slice().as_bytes())?,
             self.kind,
         ))
     }
@@ -720,8 +720,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Pod<B::AsReader<'_>, P> {
-        Pod::with_kind(self.buf.as_reader(), self.kind)
+    pub fn as_ref(&self) -> Pod<Slice<'_>, P> {
+        Pod::with_kind(self.buf.as_slice(), self.kind)
     }
 }
 
@@ -766,27 +766,27 @@ where
 /// ```
 impl<B, P> EncodeUnsized for Pod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: ReadPod,
 {
     const TYPE: Type = Type::POD;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        Some(self.buf.as_reader().len())
+        Some(self.buf.as_slice().len())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] Pod<B, P> where B: AsReader, P: ReadPod);
+crate::macros::encode_into_unsized!(impl [B, P] Pod<B, P> where B: AsSlice, P: ReadPod);
 
 impl<B, P> fmt::Debug for Pod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: ReadPod,
 {
     #[inline]

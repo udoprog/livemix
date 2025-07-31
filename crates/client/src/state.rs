@@ -11,7 +11,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
-use pod::{DynamicBuf, Fd, Object, Pod, SliceBuf, Struct};
+use pod::{DynamicBuf, Fd, Object, Pod, Slice, Struct};
 use protocol::EventFd;
 use protocol::Prop;
 use protocol::buf::RecvBuf;
@@ -599,7 +599,7 @@ impl State {
         Ok(())
     }
 
-    fn core(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         match self.header.op() {
             op::CORE_INFO_EVENT => {
                 self.core_info_event(pod).context("Core::Info")?;
@@ -630,7 +630,7 @@ impl State {
         Ok(())
     }
 
-    fn client(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         match self.header.op() {
             op::CLIENT_INFO_EVENT => {
                 self.client_info(pod).context("Client::Info")?;
@@ -646,7 +646,7 @@ impl State {
         Ok(())
     }
 
-    fn dynamic(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn dynamic(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(kind) = self.local_id_to_kind.get(&self.header.id()) else {
             tracing::warn!(?self.header, "Unknown receiver");
             return Ok(());
@@ -712,7 +712,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_info_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_info_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
         let cookie = st.field()?.next::<i32>()?;
@@ -745,7 +745,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_done_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_done_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let (id, seq) = pod.next_struct()?.read::<(u32, u32)>()?;
 
         match id {
@@ -765,7 +765,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_ping_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_ping_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next()?;
         let seq = st.field()?.next()?;
@@ -776,7 +776,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_error_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_error_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<i32>()?;
         let seq = st.field()?.next::<i32>()?;
@@ -788,7 +788,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_bound_id_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_bound_id_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let local_id = st.field()?.next::<u32>()?;
         let global_id = st.field()?.next::<u32>()?;
@@ -799,7 +799,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_add_mem_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_add_mem_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let (id, ty, fd, flags) = pod
             .next_struct()?
             .read::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
@@ -816,7 +816,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_destroy(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn core_destroy(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
 
@@ -825,7 +825,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn client_info(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_info(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
         let change_mask = st.field()?.next::<u64>()?;
@@ -850,7 +850,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn client_error(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_error(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<i32>()?;
         let res = st.field()?.next::<i32>()?;
@@ -860,7 +860,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn registry_global(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn registry_global(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let (id, permissions, ty, version, mut props) =
             pod.read::<Struct<_>>()?.read::<(_, _, _, _, Struct<_>)>()?;
 
@@ -907,7 +907,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn registry_global_remove(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn registry_global_remove(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
 
@@ -945,7 +945,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_transport(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_transport(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let read_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
         let write_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
@@ -993,7 +993,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_param(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_set_param(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1015,7 +1015,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_io(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_set_io(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1082,7 +1082,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_command(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_command(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(..) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1107,7 +1107,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_port_set_param(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_port_set_param(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1133,7 +1133,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_use_buffers(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_use_buffers(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1229,7 +1229,7 @@ impl State {
         Ok(())
     }
 
-    fn client_node_port_set_io(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_port_set_io(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1303,7 +1303,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_activation(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_set_activation(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
 
         let peer_id = st.field()?.next::<u32>()?;
@@ -1336,7 +1336,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_mix_info(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
+    fn client_node_set_mix_info(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
         let Some(..) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1348,7 +1348,7 @@ impl State {
 }
 
 /// Read a frame from the current buffer.
-fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<SliceBuf<'buf>>>> {
+fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<Slice<'buf>>>> {
     let size = header.size() as usize;
 
     let Some(bytes) = buf.read_bytes(size) else {

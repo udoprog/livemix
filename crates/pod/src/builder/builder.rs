@@ -4,6 +4,7 @@ use core::mem;
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
 use crate::ReadPod;
+use crate::Slice;
 use crate::SplitReader;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
@@ -11,8 +12,8 @@ use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder
 use crate::error::ErrorKind;
 use crate::{ArrayBuf, Encode, Writable};
 use crate::{
-    AsReader, BuildPod, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId, Reader,
-    Type, TypedPod, Writer,
+    AsSlice, BuildPod, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId, Type,
+    TypedPod, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -181,7 +182,7 @@ where
 
 impl<B> Builder<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -199,7 +200,7 @@ where
     #[cfg(feature = "alloc")]
     pub fn to_owned(&self) -> Result<Pod<DynamicBuf>, AllocError> {
         Ok(Pod::new(DynamicBuf::from_slice(
-            self.buf.as_reader().as_bytes(),
+            self.buf.as_slice().as_bytes(),
         )?))
     }
 
@@ -216,8 +217,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Pod<B::AsReader<'_>> {
-        Pod::new(self.buf.as_reader())
+    pub fn as_ref(&self) -> Pod<Slice<'_>> {
+        Pod::new(self.buf.as_slice())
     }
 }
 
@@ -711,23 +712,23 @@ where
 /// ```
 impl<B, P> EncodeUnsized for Builder<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: BuildPod,
 {
     const TYPE: Type = Type::POD;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        Some(self.buf.as_reader().len())
+        Some(self.buf.as_slice().len())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] Builder<B, P> where B: AsReader, P: BuildPod);
+crate::macros::encode_into_unsized!(impl [B, P] Builder<B, P> where B: AsSlice, P: BuildPod);
 
 impl<B, P> Clone for Builder<B, P>
 where
@@ -745,12 +746,12 @@ where
 
 impl<B, P> fmt::Debug for Builder<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: BuildPod + ReadPod,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.as_reader(), self.kind) {
+        match TypedPod::from_reader(self.buf.as_slice(), self.kind) {
             Ok(pod) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }

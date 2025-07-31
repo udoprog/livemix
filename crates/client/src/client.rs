@@ -3,14 +3,12 @@ use std::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use anyhow::Result;
-use pod::AsReader;
-use pod::Object;
-use protocol::Connection;
-use protocol::Properties;
+use pod::{AsSlice, Object};
 use protocol::consts;
 use protocol::flags;
 use protocol::id;
 use protocol::op;
+use protocol::{Connection, Properties};
 use tracing::Level;
 
 use crate::ports::PortParam;
@@ -184,7 +182,7 @@ impl Client {
         id: u32,
         max_input_ports: u32,
         max_output_ports: u32,
-        params: &BTreeMap<id::Param, Vec<Object<impl AsReader>>>,
+        params: &BTreeMap<id::Param, Vec<Object<impl AsSlice>>>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
             (id::Param::ENUM_FORMAT, flags::Param::READWRITE),

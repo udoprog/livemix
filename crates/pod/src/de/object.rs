@@ -1,11 +1,12 @@
 use core::fmt;
 use core::mem;
 
-use crate::PADDING;
 #[cfg(feature = "alloc")]
 use crate::buf::{AllocError, DynamicBuf};
 use crate::error::ErrorKind;
-use crate::{AsReader, EncodeUnsized, Error, Property, Reader, Type, TypedPod, Writer};
+use crate::{
+    AsSlice, EncodeUnsized, Error, PADDING, Property, Reader, Slice, Type, TypedPod, Writer,
+};
 
 /// A decoder for a struct.
 pub struct Object<B> {
@@ -136,7 +137,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn property(&mut self) -> Result<Property<B::Split>, Error> {
+    pub fn property(&mut self) -> Result<Property<Slice<'de>>, Error> {
         if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::ObjectUnderflow));
         }
@@ -204,7 +205,7 @@ where
 
 impl<B> Object<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Coerce into a borrowed [`Object`].
     ///
@@ -247,8 +248,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Object<B::AsReader<'_>> {
-        Object::new(self.buf.as_reader(), self.object_type, self.object_id)
+    pub fn as_ref(&self) -> Object<Slice<'_>> {
+        Object::new(self.buf.as_slice(), self.object_type, self.object_id)
     }
 }
 
@@ -297,28 +298,28 @@ where
 /// ```
 impl<B> EncodeUnsized for Object<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     const TYPE: Type = Type::OBJECT;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        let len = self.buf.as_reader().len();
+        let len = self.buf.as_slice().len();
         len.checked_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
         writer.write(&[self.object_type, self.object_id])?;
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Object<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B] Object<B> where B: AsSlice);
 
 impl<'de, B> fmt::Debug for Object<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -326,7 +327,7 @@ where
 
         impl<B> fmt::Debug for Properties<'_, B>
         where
-            B: AsReader,
+            B: AsSlice,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

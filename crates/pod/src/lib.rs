@@ -52,13 +52,13 @@ pub mod buf;
 #[doc(inline)]
 pub use self::buf::DynamicBuf;
 #[doc(inline)]
-pub use self::buf::{ArrayBuf, SliceBuf};
+pub use self::buf::{ArrayBuf, Slice};
 
 mod writer;
 pub use self::writer::Writer;
 
 mod as_reader;
-pub use self::as_reader::AsReader;
+pub use self::as_reader::AsSlice;
 
 mod split_reader;
 pub use self::split_reader::SplitReader;
@@ -129,8 +129,8 @@ pub fn array() -> Builder<ArrayBuf> {
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[inline]
-pub fn slice(data: &[u8]) -> SliceBuf<'_> {
-    SliceBuf::new(data)
+pub fn slice(data: &[u8]) -> Slice<'_> {
+    Slice::new(data)
 }
 
 /// Construct a new [`Pod`] with a dynamically sized buffer.

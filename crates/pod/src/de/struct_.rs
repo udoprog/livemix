@@ -6,8 +6,8 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPod, Readable, Reader, SliceBuf,
-    Type, TypedPod, Writer,
+    AsSlice, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPod, Readable, Reader, Slice, Type,
+    TypedPod, Writer,
 };
 
 /// A decoder for a struct.
@@ -111,7 +111,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Result<TypedPod<B::Split, PackedPod>, Error> {
+    pub fn field(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
         if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::StructUnderflow));
         }
@@ -160,16 +160,16 @@ where
     }
 
     #[inline]
-    fn into_slice(self) -> Struct<SliceBuf<'de>> {
+    fn into_slice(self) -> Struct<Slice<'de>> {
         Struct {
-            buf: SliceBuf::new(self.buf.as_bytes()),
+            buf: Slice::new(self.buf.as_bytes()),
         }
     }
 }
 
 impl<B> Struct<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Coerce into an owned [`Struct`].
     ///
@@ -197,8 +197,8 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Struct<B::AsReader<'_>> {
-        Struct::new(self.buf.as_reader())
+    pub fn as_ref(&self) -> Struct<Slice<'_>> {
+        Struct::new(self.buf.as_slice())
     }
 }
 
@@ -231,24 +231,24 @@ where
 /// ```
 impl<B> EncodeUnsized for Struct<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     const TYPE: Type = Type::STRUCT;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        Some(self.buf.as_reader().len())
+        Some(self.buf.as_slice().len())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_bytes())
+        writer.write(self.buf.as_slice().as_bytes())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader);
+crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsSlice);
 
-impl<'de> Readable<'de> for Struct<SliceBuf<'de>> {
+impl<'de> Readable<'de> for Struct<Slice<'de>> {
     #[inline]
     fn read_from(pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
         Ok(pod.next_struct()?.into_slice())
@@ -257,7 +257,7 @@ impl<'de> Readable<'de> for Struct<SliceBuf<'de>> {
 
 impl<B> fmt::Debug for Struct<B>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -265,7 +265,7 @@ where
 
         impl<B> fmt::Debug for Fields<'_, B>
         where
-            B: AsReader,
+            B: AsSlice,
         {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

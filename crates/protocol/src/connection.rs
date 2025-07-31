@@ -9,7 +9,7 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
-use pod::{AsReader, Pod, Reader};
+use pod::{AsSlice, Pod};
 use tracing::Level;
 
 use crate::Error;
@@ -264,7 +264,7 @@ impl Connection {
     ///
     /// This will write the request to the outgoing buffer.
     #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.len()), ret(level = Level::DEBUG))]
-    pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsReader>) -> Result<(), Error> {
+    pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsSlice>) -> Result<(), Error> {
         let pod = pod.as_ref();
         let buf = pod.as_buf();
 

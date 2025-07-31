@@ -4,16 +4,14 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
-use crate::EncodeUnsized;
-use crate::PackedPod;
 use crate::bstr::BStr;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, Bitmap, Decode, DecodeUnsized, Error, Fd, Fraction, Id, PaddedPod, Pod, Pointer,
-    ReadPod, Reader, Rectangle, Type, Visitor, Writer,
+    AsSlice, Bitmap, Decode, DecodeUnsized, EncodeUnsized, Error, Fd, Fraction, Id, PackedPod,
+    PaddedPod, Pod, Pointer, ReadPod, Reader, Rectangle, Slice, Type, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -319,7 +317,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_array(self) -> Result<Array<B::Split>, Error> {
+    pub fn next_array(self) -> Result<Array<Slice<'de>>, Error> {
         match self.ty {
             Type::ARRAY => Array::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -353,7 +351,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_struct(self) -> Result<Struct<B::Split>, Error> {
+    pub fn next_struct(self) -> Result<Struct<Slice<'de>>, Error> {
         match self.ty {
             Type::STRUCT => Ok(Struct::new(self.split_buffer()?)),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -400,7 +398,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_object(self) -> Result<Object<B::Split>, Error> {
+    pub fn next_object(self) -> Result<Object<Slice<'de>>, Error> {
         match self.ty {
             Type::OBJECT => Object::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -447,7 +445,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_sequence(self) -> Result<Sequence<B::Split>, Error> {
+    pub fn next_sequence(self) -> Result<Sequence<Slice<'de>>, Error> {
         match self.ty {
             Type::SEQUENCE => Sequence::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -481,7 +479,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_choice(self) -> Result<Choice<B::Split>, Error> {
+    pub fn next_choice(self) -> Result<Choice<Slice<'de>>, Error> {
         match self.ty {
             Type::CHOICE => Choice::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -518,7 +516,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<B::Split, PackedPod>, Error> {
+    pub fn next_pod(self) -> Result<Pod<Slice<'de>, PackedPod>, Error> {
         match self.ty {
             Type::POD => Ok(Pod::packed(self.split_buffer()?)),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -528,7 +526,7 @@ where
         }
     }
 
-    fn split_buffer(mut self) -> Result<B::Split, Error> {
+    fn split_buffer(mut self) -> Result<Slice<'de>, Error> {
         let Some(buf) = self.buf.split(self.size) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
@@ -540,7 +538,7 @@ where
 
 impl<B, P> TypedPod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
 {
     /// Test if the typed pod is empty.
     ///
@@ -559,13 +557,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.buf.as_reader().is_empty()
+        self.buf.as_slice().is_empty()
     }
 }
 
 impl<B, P> TypedPod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: Copy,
 {
     /// Coerce any pod into an owned pod.
@@ -584,7 +582,7 @@ where
     #[cfg(feature = "alloc")]
     pub fn to_owned(&self) -> Result<TypedPod<DynamicBuf, P>, AllocError> {
         Ok(TypedPod {
-            buf: DynamicBuf::from_slice(self.buf.as_reader().as_bytes())?,
+            buf: DynamicBuf::from_slice(self.buf.as_slice().as_bytes())?,
             size: self.size,
             ty: self.ty,
             kind: self.kind,
@@ -594,8 +592,8 @@ where
     /// Convert the [`TypedPod`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> TypedPod<B::AsReader<'_>, P> {
-        TypedPod::with_kind(self.buf.as_reader(), self.size, self.ty, self.kind)
+    pub fn as_ref(&self) -> TypedPod<Slice<'_>, P> {
+        TypedPod::with_kind(self.buf.as_slice(), self.size, self.ty, self.kind)
     }
 }
 
@@ -656,14 +654,14 @@ where
 /// ```
 impl<B, P> EncodeUnsized for TypedPod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: ReadPod,
 {
     const TYPE: Type = Type::POD;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        let len = self.buf.as_reader().len();
+        let len = self.buf.as_slice().len();
         len.checked_add(mem::size_of::<[u32; 2]>())
     }
 
@@ -674,16 +672,16 @@ where
         };
 
         writer.write(&[size, self.ty.into_u32()])?;
-        writer.write(self.buf.as_reader().as_bytes())?;
+        writer.write(self.buf.as_slice().as_bytes())?;
         Ok(())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsReader, P: ReadPod);
+crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsSlice, P: ReadPod);
 
 impl<B, P> fmt::Debug for TypedPod<B, P>
 where
-    B: AsReader,
+    B: AsSlice,
     P: ReadPod,
 {
     #[inline]
