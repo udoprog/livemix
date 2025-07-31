@@ -14,11 +14,11 @@ use crate::buf::ArrayVec;
 use crate::error::ErrorKind;
 use crate::utils::WordBytes;
 #[cfg(feature = "alloc")]
-use crate::{Bitmap, DecodeUnsized, OwnedBitmap};
+use crate::{Bitmap, OwnedBitmap, UnsizedReadable};
 use crate::{Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type};
 
 /// A trait for types that can be decoded.
-pub trait Decode<'de>
+pub trait SizedReadable<'de>
 where
     Self: Sized,
 {
@@ -37,11 +37,11 @@ where
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for bool {
+impl<'de> SizedReadable<'de> for bool {
     const TYPE: Type = Type::BOOL;
 
     #[inline]
@@ -60,11 +60,11 @@ crate::macros::decode_from_sized!(bool);
 /// use pod::{Pod, Id};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Id(142u32))?;
-/// assert_eq!(pod.as_ref().next::<Id<u32>>()?, Id(142u32));
+/// pod.as_mut().write(Id(142u32))?;
+/// assert_eq!(pod.as_ref().read_sized::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de, I> Decode<'de> for Id<I>
+impl<'de, I> SizedReadable<'de> for Id<I>
 where
     I: RawId,
 {
@@ -84,11 +84,11 @@ crate::macros::decode_from_sized!(impl [I] Id<I> where I: RawId);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for i32 {
+impl<'de> SizedReadable<'de> for i32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
@@ -105,15 +105,15 @@ crate::macros::decode_from_sized!(i32);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10u32)?;
-/// assert_eq!(pod.as_ref().next::<u32>()?, 10u32);
+/// pod.as_mut().write(10u32)?;
+/// assert_eq!(pod.as_ref().read_sized::<u32>()?, 10u32);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<u32>()?, 10u32);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<u32>()?, 10u32);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for u32 {
+impl<'de> SizedReadable<'de> for u32 {
     const TYPE: Type = Type::INT;
 
     #[inline]
@@ -133,15 +133,15 @@ crate::macros::decode_from_sized!(u32);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10u32)?;
-/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
+/// pod.as_mut().write(10u32)?;
+/// assert_eq!(pod.as_ref().read_sized::<usize>()?, 10);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<usize>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for usize {
+impl<'de> SizedReadable<'de> for usize {
     const TYPE: Type = Type::INT;
 
     #[inline]
@@ -167,15 +167,15 @@ crate::macros::decode_from_sized!(usize);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(-10)?;
-/// assert_eq!(pod.as_ref().next::<isize>()?, -10);
+/// pod.as_mut().write(-10)?;
+/// assert_eq!(pod.as_ref().read_sized::<isize>()?, -10);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(-10)?;
-/// assert_eq!(pod.as_ref().next::<isize>()?, -10);
+/// pod.as_mut().write(-10)?;
+/// assert_eq!(pod.as_ref().read_sized::<isize>()?, -10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for isize {
+impl<'de> SizedReadable<'de> for isize {
     const TYPE: Type = Type::INT;
 
     #[inline]
@@ -198,11 +198,11 @@ crate::macros::decode_from_sized!(isize);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i64)?;
-/// assert_eq!(pod.as_ref().next::<i64>()?, 10i64);
+/// pod.as_mut().write(10i64)?;
+/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for i64 {
+impl<'de> SizedReadable<'de> for i64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
@@ -219,15 +219,15 @@ crate::macros::decode_from_sized!(i64);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10u64)?;
-/// assert_eq!(pod.as_ref().next::<i64>()?, 10);
+/// pod.as_mut().write(10u64)?;
+/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i64)?;
-/// assert_eq!(pod.as_ref().next::<i64>()?, 10);
+/// pod.as_mut().write(10i64)?;
+/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for u64 {
+impl<'de> SizedReadable<'de> for u64 {
     const TYPE: Type = Type::LONG;
 
     #[inline]
@@ -244,11 +244,11 @@ crate::macros::decode_from_sized!(u64);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(42.42f32)?;
-/// assert_eq!(pod.as_ref().next::<f32>()?, 42.42f32);
+/// pod.as_mut().write(42.42f32)?;
+/// assert_eq!(pod.as_ref().read_sized::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for f32 {
+impl<'de> SizedReadable<'de> for f32 {
     const TYPE: Type = Type::FLOAT;
 
     #[inline]
@@ -265,11 +265,11 @@ crate::macros::decode_from_sized!(f32);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(42.42f64)?;
-/// assert_eq!(pod.as_ref().next::<f64>()?, 42.42f64);
+/// pod.as_mut().write(42.42f64)?;
+/// assert_eq!(pod.as_ref().read_sized::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for f64 {
+impl<'de> SizedReadable<'de> for f64 {
     const TYPE: Type = Type::DOUBLE;
 
     #[inline]
@@ -288,11 +288,11 @@ crate::macros::decode_from_sized!(f64);
 /// use pod::{Pod, Rectangle};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Rectangle::new(100, 200))?;
-/// assert_eq!(pod.as_ref().next::<Rectangle>()?, Rectangle::new(100, 200));
+/// pod.as_mut().write(Rectangle::new(100, 200))?;
+/// assert_eq!(pod.as_ref().read_sized::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for Rectangle {
+impl<'de> SizedReadable<'de> for Rectangle {
     const TYPE: Type = Type::RECTANGLE;
 
     #[inline]
@@ -312,11 +312,11 @@ crate::macros::decode_from_sized!(Rectangle);
 /// use pod::{Pod, Fraction};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Fraction::new(800, 600))?;
-/// assert_eq!(pod.as_ref().next::<Fraction>()?, Fraction::new(800, 600));
+/// pod.as_mut().write(Fraction::new(800, 600))?;
+/// assert_eq!(pod.as_ref().read_sized::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for Fraction {
+impl<'de> SizedReadable<'de> for Fraction {
     const TYPE: Type = Type::FRACTION;
 
     #[inline]
@@ -336,11 +336,11 @@ crate::macros::decode_from_sized!(Fraction);
 /// use pod::{Pod, Fraction};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(*b"hello world")?;
-/// assert_eq!(pod.as_ref().next_unsized::<[u8]>()?, b"hello world");
+/// pod.as_mut().write(*b"hello world")?;
+/// assert_eq!(pod.as_ref().read_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de, const N: usize> Decode<'de> for [u8; N] {
+impl<'de, const N: usize> SizedReadable<'de> for [u8; N] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
@@ -366,12 +366,12 @@ crate::macros::decode_from_sized!(impl [const N: usize] [u8; N]);
 /// ```
 /// use std::ffi::CString;
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(c"hello world")?;
-/// assert_eq!(pod.as_ref().next::<CString>()?.as_c_str(), c"hello world");
+/// pod.as_mut().write_unsized(c"hello world")?;
+/// assert_eq!(pod.as_ref().read_sized::<CString>()?.as_c_str(), c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
-impl<'de> Decode<'de> for CString {
+impl<'de> SizedReadable<'de> for CString {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -391,16 +391,16 @@ crate::macros::decode_from_borrowed!(CStr);
 /// ```
 /// let mut pod = pod::array();
 ///
-/// pod.as_mut().push_unsized("hello world")?;
-/// pod.as_mut().push_unsized("this is right")?;
+/// pod.as_mut().write_unsized("hello world")?;
+/// pod.as_mut().write_unsized("this is right")?;
 ///
 /// let mut pod = pod.as_ref();
-/// assert_eq!(pod.as_mut().next::<String>()?, "hello world");
-/// assert_eq!(pod.as_mut().next::<String>()?, "this is right");
+/// assert_eq!(pod.as_mut().read_sized::<String>()?, "hello world");
+/// assert_eq!(pod.as_mut().read_sized::<String>()?, "this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
-impl<'de> Decode<'de> for String {
+impl<'de> SizedReadable<'de> for String {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -420,16 +420,16 @@ crate::macros::decode_from_borrowed!(str);
 /// ```
 /// let mut pod = pod::array();
 ///
-/// pod.as_mut().push(*b"hello world")?;
-/// pod.as_mut().push(*b"this is right")?;
+/// pod.as_mut().write(*b"hello world")?;
+/// pod.as_mut().write(*b"this is right")?;
 ///
 /// let mut pod = pod.as_ref();
-/// assert_eq!(pod.as_mut().next::<Vec<u8>>()?, b"hello world");
-/// assert_eq!(pod.as_mut().next::<Vec<u8>>()?, b"this is right");
+/// assert_eq!(pod.as_mut().read_sized::<Vec<u8>>()?, b"hello world");
+/// assert_eq!(pod.as_mut().read_sized::<Vec<u8>>()?, b"this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
-impl<'de> Decode<'de> for Vec<u8> {
+impl<'de> SizedReadable<'de> for Vec<u8> {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
@@ -450,12 +450,12 @@ crate::macros::decode_from_borrowed!([u8]);
 /// use pod::{Bitmap, Pod, OwnedBitmap};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(Bitmap::new(b"hello world"))?;
-/// assert_eq!(pod.as_ref().next::<OwnedBitmap>()?.as_bytes(), b"hello world");
+/// pod.as_mut().write_unsized(Bitmap::new(b"hello world"))?;
+/// assert_eq!(pod.as_ref().read_sized::<OwnedBitmap>()?.as_bytes(), b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
-impl<'de> Decode<'de> for OwnedBitmap {
+impl<'de> SizedReadable<'de> for OwnedBitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
@@ -478,11 +478,11 @@ crate::macros::decode_from_borrowed!(Bitmap);
 /// let value = 1u32;
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Pointer::new((&value as *const u32).addr()))?;
-/// assert_eq!(pod.as_ref().next::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
+/// pod.as_mut().write(Pointer::new((&value as *const u32).addr()))?;
+/// assert_eq!(pod.as_ref().read_sized::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for Pointer {
+impl<'de> SizedReadable<'de> for Pointer {
     const TYPE: Type = Type::POINTER;
 
     #[inline]
@@ -506,11 +506,11 @@ crate::macros::decode_from_sized!(Pointer);
 /// use pod::{Pod, Fd};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Fd::new(4))?;
-/// assert_eq!(pod.as_ref().next::<Fd>()?, Fd::new(4));
+/// pod.as_mut().write(Fd::new(4))?;
+/// assert_eq!(pod.as_ref().read_sized::<Fd>()?, Fd::new(4));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> Decode<'de> for Fd {
+impl<'de> SizedReadable<'de> for Fd {
     const TYPE: Type = Type::FD;
 
     #[inline]

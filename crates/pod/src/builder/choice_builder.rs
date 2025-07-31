@@ -71,10 +71,10 @@ where
     /// use pod::{ChoiceType, Builder, Type};
     ///
     /// let mut pod = Builder::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| choice.write((10, 0, 30)))?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| choice.write((10, 0, 30)))?;
     ///
     /// let mut pod = pod.as_ref();
-    /// let mut choice = pod.next_choice()?;
+    /// let mut choice = pod.read_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     /// assert_eq!(choice.read::<(i32, u32, i32)>()?, (10, 0, 30));
     /// # Ok::<_, pod::Error>(())
@@ -94,8 +94,8 @@ where
     /// use pod::{ChoiceType, Builder, Type};
     ///
     /// let mut pod = Builder::array();
-    /// pod.push_choice(ChoiceType::NONE, Type::INT, |choice| {
-    ///     choice.child().push(1i32)?;
+    /// pod.write_choice(ChoiceType::NONE, Type::INT, |choice| {
+    ///     choice.child().write(1i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

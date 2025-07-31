@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{Encode, EncodeUnsized, Error, PADDING, RawId, Reader, Type, Writer};
+use crate::{Error, PADDING, RawId, Reader, SizedWritable, Type, UnsizedWritable, Writer};
 
 use super::Builder;
 
@@ -25,13 +25,13 @@ where
         Ok(())
     }
 
-    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn write_sized<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
-        T: Encode;
+        T: SizedWritable;
 
-    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn write_unsized_into<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + EncodeUnsized;
+        T: ?Sized + UnsizedWritable;
 
     #[inline]
     fn check(self, _: Type, _: usize) -> Result<(), Error> {
@@ -74,9 +74,9 @@ pub struct PaddedPod;
 
 impl BuildPod for PaddedPod {
     #[inline]
-    fn push<T>(self, value: T, mut buf: impl Writer) -> Result<(), Error>
+    fn write_sized<T>(self, value: T, mut buf: impl Writer) -> Result<(), Error>
     where
-        T: Encode,
+        T: SizedWritable,
     {
         let Ok(size) = u32::try_from(T::SIZE) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -89,9 +89,9 @@ impl BuildPod for PaddedPod {
     }
 
     #[inline]
-    fn push_unsized<T>(self, value: &T, mut buf: impl Writer) -> Result<(), Error>
+    fn write_unsized_into<T>(self, value: &T, mut buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + EncodeUnsized,
+        T: ?Sized + UnsizedWritable,
     {
         let Some(size) = value.size() else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -122,18 +122,18 @@ pub struct ChildPod {
 
 impl BuildPod for ChildPod {
     #[inline]
-    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn write_sized<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
-        T: Encode,
+        T: SizedWritable,
     {
         self.check(T::TYPE, T::SIZE)?;
         value.write_content(buf)
     }
 
     #[inline]
-    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn write_unsized_into<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + EncodeUnsized,
+        T: ?Sized + UnsizedWritable,
     {
         let Some(size) = value.size() else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -203,19 +203,19 @@ where
     }
 
     #[inline]
-    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn write_sized<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
-        T: crate::Encode,
+        T: crate::SizedWritable,
     {
-        PaddedPod.push(value, buf)
+        PaddedPod.write_sized(value, buf)
     }
 
     #[inline]
-    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn write_unsized_into<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + crate::EncodeUnsized,
+        T: ?Sized + crate::UnsizedWritable,
     {
-        PaddedPod.push_unsized(value, buf)
+        PaddedPod.write_unsized_into(value, buf)
     }
 }
 
@@ -254,19 +254,19 @@ impl BuildPod for ControlPod {
     }
 
     #[inline]
-    fn push<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
+    fn write_sized<T>(self, value: T, buf: impl Writer) -> Result<(), Error>
     where
-        T: crate::Encode,
+        T: crate::SizedWritable,
     {
-        PaddedPod.push(value, buf)
+        PaddedPod.write_sized(value, buf)
     }
 
     #[inline]
-    fn push_unsized<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
+    fn write_unsized_into<T>(self, value: &T, buf: impl Writer) -> Result<(), Error>
     where
-        T: ?Sized + crate::EncodeUnsized,
+        T: ?Sized + crate::UnsizedWritable,
     {
-        PaddedPod.push_unsized(value, buf)
+        PaddedPod.write_unsized_into(value, buf)
     }
 
     #[inline]

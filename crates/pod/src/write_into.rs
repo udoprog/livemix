@@ -66,10 +66,10 @@ where
 /// use pod::Builder;
 ///
 /// let mut pod = Builder::array();
-/// pod.as_mut().push_struct(|st| st.write(()))?;
+/// pod.as_mut().write_struct(|st| st.write(()))?;
 ///
 /// let mut pod = pod.as_ref();
-/// let mut st = pod.next_struct()?;
+/// let mut st = pod.read_struct()?;
 /// assert!(st.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -90,15 +90,15 @@ macro_rules! encode_into_tuple {
         /// use pod::Builder;
         ///
         /// let mut pod = Builder::array();
-        /// pod.as_mut().push_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
+        /// pod.as_mut().write_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
         ///
         /// let mut pod = pod.as_ref();
-        /// let mut st = pod.next_struct()?;
+        /// let mut st = pod.read_struct()?;
         ///
-        /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
-        /// assert_eq!(st.field()?.next_unsized::<str>()?, "hello world");
-        /// assert_eq!(st.field()?.next::<u32>()?, 1);
-        /// assert_eq!(st.field()?.next::<u32>()?, 2);
+        /// assert_eq!(st.field()?.read_sized::<i32>()?, 10i32);
+        /// assert_eq!(st.field()?.read_unsized::<str>()?, "hello world");
+        /// assert_eq!(st.field()?.read_sized::<u32>()?, 1);
+        /// assert_eq!(st.field()?.read_sized::<u32>()?, 2);
         /// assert!(st.is_empty());
         /// # Ok::<_, pod::Error>(())
         /// ```

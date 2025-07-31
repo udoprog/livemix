@@ -11,10 +11,10 @@ use crate::SplitReader;
 use crate::buf::AllocError;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
 use crate::error::ErrorKind;
-use crate::{ArrayBuf, Encode, Writable};
+use crate::{ArrayBuf, SizedWritable, Writable};
 use crate::{
-    AsSlice, BuildPod, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId, Type,
-    TypedPod, Writer,
+    AsSlice, BuildPod, ChildPod, ChoiceType, Error, PaddedPod, Pod, RawId, Type, TypedPod,
+    UnsizedWritable, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -48,8 +48,8 @@ impl Builder<DynamicBuf> {
     ///
     /// ```
     /// let mut pod = pod::dynamic();
-    /// pod.as_mut().push(10i32)?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// pod.as_mut().write(10i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -65,11 +65,11 @@ impl Builder<DynamicBuf> {
     ///
     /// ```
     /// let mut pod = pod::dynamic();
-    /// pod.as_mut().push(10i32)?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// pod.as_mut().write(10i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// pod.clear();
-    /// pod.as_mut().push(20i32)?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 20i32);
+    /// pod.as_mut().write(20i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn clear(&mut self) {
@@ -86,8 +86,8 @@ impl Builder<ArrayBuf> {
     /// use pod::Builder;
     ///
     /// let mut pod = Builder::array();
-    /// pod.as_mut().push(10i32)?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// pod.as_mut().write(10i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -103,11 +103,11 @@ impl Builder<ArrayBuf> {
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// pod.as_mut().write(10i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// pod.clear();
-    /// pod.as_mut().push(20i32)?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 20i32);
+    /// pod.as_mut().write(20i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn clear(&mut self) {
@@ -168,10 +168,10 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     /// assert_eq!(pod.take().read::<i32>()?, 10);
     ///
-    /// pod.as_mut().push(42i32)?;
+    /// pod.as_mut().write(42i32)?;
     /// assert_eq!(pod.take().read::<i32>()?, 42);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -191,11 +191,11 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.to_owned()?;
     ///
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
@@ -211,10 +211,10 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.to_owned()?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -251,7 +251,7 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let buf = pod.as_buf();
     /// assert_eq!(buf.as_bytes().len(), 16);
@@ -268,7 +268,7 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let buf = pod.into_buf();
     /// assert_eq!(buf.as_bytes().len(), 16);
@@ -291,15 +291,15 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
+    /// pod.as_mut().write_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
     ///
     /// let mut pod = pod.as_ref();
-    /// let mut st = pod.next_struct()?;
+    /// let mut st = pod.read_struct()?;
     ///
-    /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
-    /// assert_eq!(st.field()?.next_unsized::<str>()?, "hello world");
-    /// assert_eq!(st.field()?.next::<u32>()?, 1);
-    /// assert_eq!(st.field()?.next::<u32>()?, 2);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 10i32);
+    /// assert_eq!(st.field()?.read_unsized::<str>()?, "hello world");
+    /// assert_eq!(st.field()?.read_sized::<u32>()?, 1);
+    /// assert_eq!(st.field()?.read_sized::<u32>()?, 2);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -310,21 +310,23 @@ where
         value.write_into(&mut self)
     }
 
-    /// Encode a value from the pod.
+    /// Write a sized value into the pod.
+    ///
+    /// This is a low-level API, consider using [`Builder::write`] instead.
     ///
     /// # Examples
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.push(10i32)?;
+    /// pod.write(10i32)?;
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn push<T>(mut self, value: T) -> Result<(), Error>
+    pub fn write_sized<T>(mut self, value: T) -> Result<(), Error>
     where
-        T: Encode,
+        T: SizedWritable,
     {
         self.kind.header(self.buf.borrow_mut())?;
-        self.kind.push(value, self.buf)
+        self.kind.write_sized(value, self.buf)
     }
 
     /// Encode an unsized value from the pod.
@@ -333,15 +335,15 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.push_unsized(&b"hello world"[..])?;
+    /// pod.write_unsized(&b"hello world"[..])?;
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn push_unsized<T>(mut self, value: &T) -> Result<(), Error>
+    pub fn write_unsized<T>(mut self, value: &T) -> Result<(), Error>
     where
-        T: ?Sized + EncodeUnsized,
+        T: ?Sized + UnsizedWritable,
     {
         self.kind.header(self.buf.borrow_mut())?;
-        self.kind.push_unsized(value, self.buf)
+        self.kind.write_unsized_into(value, self.buf)
     }
 
     /// Encode a `None` value.
@@ -350,11 +352,11 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.push_none()?;
+    /// pod.write_none()?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_none(mut self) -> Result<(), Error> {
+    pub fn write_none(mut self) -> Result<(), Error> {
         self.kind.check(Type::NONE, 0)?;
         self.buf.write(&[0, Type::NONE.into_u32()])?;
         Ok(())
@@ -362,7 +364,7 @@ where
 
     /// Encode an array with the given sized type.
     ///
-    /// To encode an array with unsized types, use [`Pod::push_unsized_array`]
+    /// To encode an array with unsized types, use [`Pod::write_unsized_array`]
     /// where a length in bytes must be specified for every element.
     ///
     /// # Errors
@@ -377,11 +379,11 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// assert!(pod.as_mut().push_array(Type::STRING, |_| Ok(())).is_err());
+    /// assert!(pod.as_mut().write_array(Type::STRING, |_| Ok(())).is_err());
     ///
     /// let mut pod = pod::array();
-    /// let mut array = pod.as_mut().push_array(Type::INT, |array| {
-    ///     assert!(array.child().push(42.42f32).is_err());
+    /// let mut array = pod.as_mut().write_array(Type::INT, |array| {
+    ///     assert!(array.child().write(42.42f32).is_err());
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
@@ -393,16 +395,16 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// let mut array = pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child().push(1i32)?;
-    ///     array.child().push(2i32)?;
-    ///     array.child().push(3i32)?;
+    /// let mut array = pod.as_mut().write_array(Type::INT, |array| {
+    ///     array.child().write(1i32)?;
+    ///     array.child().write(2i32)?;
+    ///     array.child().write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_array(
+    pub fn write_array(
         mut self,
         child_type: Type,
         f: impl FnOnce(&mut ArrayBuilder<B, P>) -> Result<(), Error>,
@@ -437,16 +439,16 @@ where
     ///
     ///
     /// let mut pod = pod::array();
-    /// assert!(pod.push_unsized_array(Type::INT, 5, |_| Ok(())).is_err());
+    /// assert!(pod.write_unsized_array(Type::INT, 5, |_| Ok(())).is_err());
     ///
     /// let mut pod = pod::array();
     ///
-    /// pod.push_unsized_array(Type::STRING, 4, |array| {
+    /// pod.write_unsized_array(Type::STRING, 4, |array| {
     ///     // Note: strings are null-terminated, so the length is 4.
-    ///     array.child().push_unsized("foo")?;
+    ///     array.child().write_unsized("foo")?;
     ///
-    ///     assert!(array.child().push(1i32).is_err());
-    ///     assert!(array.child().push_unsized("barbaz").is_err());
+    ///     assert!(array.child().write(1i32).is_err());
+    ///     assert!(array.child().write_unsized("barbaz").is_err());
     ///     Ok(())
     /// })?;
     ///
@@ -460,23 +462,23 @@ where
     ///
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
+    /// pod.as_mut().write_unsized_array(Type::STRING, 4, |array| {
     ///     // Note: strings are null-terminated, so the length is 4.
-    ///     array.child().push_unsized("foo")?;
-    ///     array.child().push_unsized("bar")?;
-    ///     array.child().push_unsized("baz")?;
+    ///     array.child().write_unsized("foo")?;
+    ///     array.child().write_unsized("bar")?;
+    ///     array.child().write_unsized("baz")?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.as_ref().next_array()?;
-    /// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "foo");
-    /// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "bar");
-    /// assert_eq!(array.next().unwrap().next_unsized::<str>()?, "baz");
+    /// let mut array = pod.as_ref().read_array()?;
+    /// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "foo");
+    /// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "bar");
+    /// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "baz");
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_unsized_array(
+    pub fn write_unsized_array(
         mut self,
         child_type: Type,
         child_size: usize,
@@ -498,16 +500,16 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_struct(
+    pub fn write_struct(
         mut self,
         f: impl FnOnce(&mut StructBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
@@ -526,16 +528,16 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).push(1i32)?;
-    ///     obj.property(2).push(2i32)?;
-    ///     obj.property(3).push(3i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).write(1i32)?;
+    ///     obj.property(2).write(2i32)?;
+    ///     obj.property(3).write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_object(
+    pub fn write_object(
         mut self,
         object_type: impl RawId,
         object_id: impl RawId,
@@ -561,16 +563,16 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_sequence(|seq| {
-    ///     seq.control().push(1i32)?;
-    ///     seq.control().push(2i32)?;
-    ///     seq.control().push(3i32)?;
+    /// pod.as_mut().write_sequence(|seq| {
+    ///     seq.control().write(1i32)?;
+    ///     seq.control().write(2i32)?;
+    ///     seq.control().write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_sequence(
+    pub fn write_sequence(
         mut self,
         f: impl FnOnce(&mut SequenceBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
@@ -589,14 +591,14 @@ where
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(1i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(1i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_choice(
+    pub fn write_choice(
         mut self,
         choice: ChoiceType,
         child_type: Type,
@@ -617,26 +619,26 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_pod(|pod| {
-    ///     pod.as_mut().push_struct(|st| {
-    ///         st.field().push(1i32)?;
-    ///         st.field().push(2i32)?;
-    ///         st.field().push(3i32)?;
+    /// pod.as_mut().write_pod(|pod| {
+    ///     pod.as_mut().write_struct(|st| {
+    ///         st.field().write(1i32)?;
+    ///         st.field().write(2i32)?;
+    ///         st.field().write(3i32)?;
     ///         Ok(())
     ///     })
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.next_pod()?;
-    /// let mut st = pod.as_ref().next_struct()?;
+    /// let pod = pod.as_ref().into_typed()?.read_pod()?;
+    /// let mut st = pod.as_ref().read_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn push_pod(
+    pub fn write_pod(
         mut self,
         f: impl FnOnce(&mut Builder<B>) -> Result<(), Error>,
     ) -> Result<(), Error> {
@@ -692,38 +694,38 @@ where
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_object(10, 20, |obj| {
-///     obj.property(1).flags(0b001).push(1i32)?;
-///     obj.property(2).flags(0b010).push(2i32)?;
-///     obj.property(3).flags(0b100).push(3i32)?;
+/// pod.as_mut().write_object(10, 20, |obj| {
+///     obj.property(1).flags(0b001).write(1i32)?;
+///     obj.property(2).flags(0b010).write(2i32)?;
+///     obj.property(3).flags(0b100).write(3i32)?;
 ///     Ok(())
 /// })?;
 ///
 /// let mut pod2 = pod::array();
 /// pod2.as_mut().write(pod)?;
 ///
-/// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
+/// let mut obj = pod2.as_ref().read_pod()?.read_object()?;
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
 /// assert_eq!(p.flags(), 0b001);
-/// assert_eq!(p.value().next::<i32>()?, 1);
+/// assert_eq!(p.value().read_sized::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
 /// assert_eq!(p.flags(), 0b010);
-/// assert_eq!(p.value().next::<i32>()?, 2);
+/// assert_eq!(p.value().read_sized::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
 /// assert_eq!(p.flags(), 0b100);
-/// assert_eq!(p.value().next::<i32>()?, 3);
+/// assert_eq!(p.value().read_sized::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B, P> EncodeUnsized for Builder<B, P>
+impl<B, P> UnsizedWritable for Builder<B, P>
 where
     B: AsSlice,
     P: BuildPod,

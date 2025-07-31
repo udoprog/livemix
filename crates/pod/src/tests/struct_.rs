@@ -7,9 +7,9 @@ use crate::{Error, Rectangle};
 #[test]
 fn unit() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| st.write(()))?;
+    pod.as_mut().write_struct(|st| st.write(()))?;
 
-    let st = pod.as_ref().next_struct()?;
+    let st = pod.as_ref().read_struct()?;
     assert!(st.is_empty());
     Ok(())
 }
@@ -17,12 +17,12 @@ fn unit() -> Result<(), Error> {
 #[test]
 fn encode_ints() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| st.write((1, 2, 3)))?;
+    pod.as_mut().write_struct(|st| st.write((1, 2, 3)))?;
 
-    let mut st = pod.as_ref().next_struct()?;
-    assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    let mut st = pod.as_ref().read_struct()?;
+    assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     assert!(st.is_empty());
     Ok(())
 }
@@ -30,14 +30,14 @@ fn encode_ints() -> Result<(), Error> {
 #[test]
 fn decode_ints() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| {
-        st.field().push(1i32)?;
-        st.field().push(2i32)?;
-        st.field().push(3i32)?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_sized(1i32)?;
+        st.field().write_sized(2i32)?;
+        st.field().write_sized(3i32)?;
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
     assert_eq!(st.read::<(i32, i32, i32)>()?, (1, 2, 3));
     assert!(st.is_empty());
     Ok(())
@@ -47,32 +47,32 @@ fn decode_ints() -> Result<(), Error> {
 fn complex_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| {
-        st.field().push(1i32)?;
-        st.field().push(2i32)?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_sized(1i32)?;
+        st.field().write_sized(2i32)?;
 
-        st.field().push_struct(|inner| {
-            inner.field().push_unsized(c"hello world")?;
-            inner.field().push(Rectangle::new(800, 600))?;
-            inner.field().push_unsized(c"goodbye world")?;
+        st.field().write_struct(|inner| {
+            inner.field().write_unsized(c"hello world")?;
+            inner.field().write_sized(Rectangle::new(800, 600))?;
+            inner.field().write_unsized(c"goodbye world")?;
             Ok(())
         })
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
     assert!(!st.is_empty());
-    assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    assert_eq!(st.field()?.next::<i32>()?, 2i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
     assert!(!st.is_empty());
 
-    let mut inner = st.field()?.next_struct()?;
+    let mut inner = st.field()?.read_struct()?;
     assert!(!inner.is_empty());
-    assert_eq!(inner.field()?.next_unsized::<CStr>()?, c"hello world");
+    assert_eq!(inner.field()?.read_unsized::<CStr>()?, c"hello world");
     assert_eq!(
-        inner.field()?.next::<Rectangle>()?,
+        inner.field()?.read_sized::<Rectangle>()?,
         Rectangle::new(800, 600)
     );
-    assert_eq!(inner.field()?.next_unsized::<CStr>()?, c"goodbye world");
+    assert_eq!(inner.field()?.read_unsized::<CStr>()?, c"goodbye world");
     assert!(inner.is_empty());
 
     assert!(inner.field().is_err());
@@ -85,18 +85,18 @@ fn complex_decode() -> Result<(), Error> {
 fn basic_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| {
-        st.field().push(1i32)?;
-        st.field().push(2i32)?;
-        st.field().push(3i32)?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_sized(1i32)?;
+        st.field().write_sized(2i32)?;
+        st.field().write_sized(3i32)?;
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
 
-    assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     assert!(st.is_empty());
     Ok(())
 }
@@ -105,17 +105,17 @@ fn basic_decode() -> Result<(), Error> {
 fn string_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| {
-        st.field().push(1i32)?;
-        st.field().push_unsized("foo")?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_sized(1i32)?;
+        st.field().write_unsized("foo")?;
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
 
     assert!(!st.is_empty());
-    assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    assert_eq!(st.field()?.next_unsized::<str>()?, "foo");
+    assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    assert_eq!(st.field()?.read_unsized::<str>()?, "foo");
     assert!(st.is_empty());
     Ok(())
 }
@@ -138,35 +138,35 @@ fn build_struct() -> Result<(), Error> {
 
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| {
-        st.field().push_unsized(factory_name)?;
-        st.field().push_unsized(ty)?;
-        st.field().push(version)?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_unsized(factory_name)?;
+        st.field().write_unsized(ty)?;
+        st.field().write_sized(version)?;
 
-        st.field().push_struct(|props| {
+        st.field().write_struct(|props| {
             for &(key, value) in PROPS {
-                props.field().push_unsized(key)?;
-                props.field().push_unsized(value)?;
+                props.field().write_unsized(key)?;
+                props.field().write_unsized(value)?;
             }
 
             Ok(())
         })?;
 
-        st.field().push(new_id)?;
+        st.field().write_sized(new_id)?;
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
 
-    assert_eq!(st.field()?.next_unsized::<str>()?, factory_name);
-    assert_eq!(st.field()?.next_unsized::<str>()?, ty);
-    assert_eq!(st.field()?.next::<i32>()?, version);
+    assert_eq!(st.field()?.read_unsized::<str>()?, factory_name);
+    assert_eq!(st.field()?.read_unsized::<str>()?, ty);
+    assert_eq!(st.field()?.read_sized::<i32>()?, version);
 
-    let mut inner = st.field()?.next_struct()?;
+    let mut inner = st.field()?.read_struct()?;
 
     for &(k, v) in PROPS {
-        let key = inner.field()?.next_unsized::<str>()?;
-        let value = inner.field()?.next_unsized::<str>()?;
+        let key = inner.field()?.read_unsized::<str>()?;
+        let value = inner.field()?.read_unsized::<str>()?;
         assert_eq!(key, k);
         assert_eq!(value, v);
     }
@@ -175,15 +175,15 @@ fn build_struct() -> Result<(), Error> {
 }
 
 #[test]
-fn encode_unsized() -> Result<(), Error> {
+fn write_unsized_into() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| st.write(("foo", "bar")))?;
+    pod.as_mut().write_struct(|st| st.write(("foo", "bar")))?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
 
-    assert_eq!(st.field()?.next_unsized::<str>()?, "foo");
-    assert_eq!(st.field()?.next_unsized::<str>()?, "bar");
+    assert_eq!(st.field()?.read_unsized::<str>()?, "foo");
+    assert_eq!(st.field()?.read_unsized::<str>()?, "bar");
 
     assert!(st.is_empty());
     Ok(())
@@ -193,13 +193,13 @@ fn encode_unsized() -> Result<(), Error> {
 fn decode_unsized() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| {
-        st.field().push_unsized("foo")?;
-        st.field().push_unsized("bar")?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_unsized("foo")?;
+        st.field().write_unsized("bar")?;
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
     let (key, value) = st.read::<(&str, &str)>()?;
 
     assert_eq!(key, "foo");
@@ -212,14 +212,14 @@ fn decode_unsized() -> Result<(), Error> {
 #[test]
 fn format() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| {
-        st.field().push(1i32)?;
-        st.field().push(2i32)?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_sized(1i32)?;
+        st.field().write_sized(2i32)?;
 
-        st.field().push_struct(|inner| {
-            inner.field().push(*b"hello world")?;
-            inner.field().push(Rectangle::new(800, 600))?;
-            inner.field().push(*b"goodbye world")?;
+        st.field().write_struct(|inner| {
+            inner.field().write_sized(*b"hello world")?;
+            inner.field().write_sized(Rectangle::new(800, 600))?;
+            inner.field().write_sized(*b"goodbye world")?;
             Ok(())
         })
     })?;
@@ -234,13 +234,13 @@ fn format() -> Result<(), Error> {
 #[test]
 fn format_l1_struct() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| {
-        st.field().push(*b"a")?;
-        st.field().push(*b"b")?;
+    pod.as_mut().write_struct(|st| {
+        st.field().write_sized(*b"a")?;
+        st.field().write_sized(*b"b")?;
         Ok(())
     })?;
 
-    let mut st = pod.as_ref().next_struct()?;
+    let mut st = pod.as_ref().read_struct()?;
     assert_eq!(format!("{:?}", st.field()?), "b\"a\"");
     assert_eq!(format!("{:?}", st.field()?), "b\"b\"");
     assert_eq!(format!("{pod:?}"), "Struct { fields: [b\"a\", b\"b\"] }");

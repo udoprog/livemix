@@ -54,10 +54,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).push(1i32)?;
-    ///     obj.property(2).push(2i32)?;
-    ///     obj.property(3).push(3i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).write(1i32)?;
+    ///     obj.property(2).write(2i32)?;
+    ///     obj.property(3).write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())
@@ -69,10 +69,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).flags(0b1001).push(1i32)?;
-    ///     obj.property(2).flags(0b1001).push(2i32)?;
-    ///     obj.property(3).flags(0b1001).push(3i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).flags(0b1001).write(1i32)?;
+    ///     obj.property(2).flags(0b1001).write(2i32)?;
+    ///     obj.property(3).flags(0b1001).write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

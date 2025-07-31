@@ -36,10 +36,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| st.write((1, 2, 3)))?;
+    /// pod.as_mut().write_struct(|st| st.write((1, 2, 3)))?;
     ///
     /// let mut pod = pod.as_ref();
-    /// let mut st = pod.next_struct()?;
+    /// let mut st = pod.read_struct()?;
     /// assert_eq!(st.read::<(i32, i32, i32)>()?, (1, 2, 3));
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -58,10 +58,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

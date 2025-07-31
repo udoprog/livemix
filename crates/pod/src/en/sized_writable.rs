@@ -1,9 +1,9 @@
 use crate::error::ErrorKind;
 use crate::utils::WordBytes;
-use crate::{EncodeUnsized, Error, Fd, Fraction, Id, Pointer, RawId, Rectangle, Type, Writer};
+use crate::{Error, Fd, Fraction, Id, Pointer, RawId, Rectangle, Type, UnsizedWritable, Writer};
 
 /// A trait for types that can be encoded.
-pub trait Encode
+pub trait SizedWritable
 where
     Self: Sized,
 {
@@ -22,11 +22,11 @@ where
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(true)?;
-/// assert_eq!(pod.as_ref().next::<bool>()?, true);
+/// pod.as_mut().write(true)?;
+/// assert_eq!(pod.as_ref().read_sized::<bool>()?, true);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for bool {
+impl SizedWritable for bool {
     const TYPE: Type = Type::BOOL;
     const SIZE: usize = 4;
 
@@ -46,11 +46,11 @@ crate::macros::encode_into_sized!(bool);
 /// use pod::{Pod, Id};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Id(142u32))?;
-/// assert_eq!(pod.as_ref().next::<Id<u32>>()?, Id(142u32));
+/// pod.as_mut().write(Id(142u32))?;
+/// assert_eq!(pod.as_ref().read_sized::<Id<u32>>()?, Id(142u32));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<I> Encode for Id<I>
+impl<I> SizedWritable for Id<I>
 where
     I: RawId,
 {
@@ -71,11 +71,11 @@ crate::macros::encode_into_sized!(impl [I] Id<I> where I: RawId);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<i32>()?, 10);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for i32 {
+impl SizedWritable for i32 {
     const TYPE: Type = Type::INT;
     const SIZE: usize = 4;
 
@@ -93,11 +93,11 @@ crate::macros::encode_into_sized!(i32);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10isize)?;
-/// assert_eq!(pod.as_ref().next::<isize>()?, 10);
+/// pod.as_mut().write(10isize)?;
+/// assert_eq!(pod.as_ref().read_sized::<isize>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for isize {
+impl SizedWritable for isize {
     const TYPE: Type = Type::INT;
     const SIZE: usize = 4;
 
@@ -119,15 +119,15 @@ crate::macros::encode_into_sized!(isize);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10u32)?;
-/// assert_eq!(pod.as_ref().next::<u32>()?, 10);
+/// pod.as_mut().write(10u32)?;
+/// assert_eq!(pod.as_ref().read_sized::<u32>()?, 10);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<u32>()?, 10);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<u32>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for u32 {
+impl SizedWritable for u32 {
     const TYPE: Type = Type::INT;
     const SIZE: usize = 4;
 
@@ -145,15 +145,15 @@ crate::macros::encode_into_sized!(u32);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10usize)?;
-/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
+/// pod.as_mut().write(10usize)?;
+/// assert_eq!(pod.as_ref().read_sized::<usize>()?, 10);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<usize>()?, 10);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<usize>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for usize {
+impl SizedWritable for usize {
     const TYPE: Type = Type::INT;
     const SIZE: usize = 4;
 
@@ -175,11 +175,11 @@ crate::macros::encode_into_sized!(usize);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i64)?;
-/// assert_eq!(pod.as_ref().next::<i64>()?, 10i64);
+/// pod.as_mut().write(10i64)?;
+/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10i64);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for i64 {
+impl SizedWritable for i64 {
     const TYPE: Type = Type::LONG;
     const SIZE: usize = 8;
 
@@ -197,15 +197,15 @@ crate::macros::encode_into_sized!(i64);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10u64)?;
-/// assert_eq!(pod.as_ref().next::<u64>()?, 10);
+/// pod.as_mut().write(10u64)?;
+/// assert_eq!(pod.as_ref().read_sized::<u64>()?, 10);
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i64)?;
-/// assert_eq!(pod.as_ref().next::<u64>()?, 10);
+/// pod.as_mut().write(10i64)?;
+/// assert_eq!(pod.as_ref().read_sized::<u64>()?, 10);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for u64 {
+impl SizedWritable for u64 {
     const TYPE: Type = Type::LONG;
     const SIZE: usize = 8;
 
@@ -222,11 +222,11 @@ crate::macros::encode_into_sized!(u64);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(42.42f32)?;
-/// assert_eq!(pod.as_ref().next::<f32>()?, 42.42f32);
+/// pod.as_mut().write(42.42f32)?;
+/// assert_eq!(pod.as_ref().read_sized::<f32>()?, 42.42f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for f32 {
+impl SizedWritable for f32 {
     const TYPE: Type = Type::FLOAT;
     const SIZE: usize = 4;
 
@@ -244,11 +244,11 @@ crate::macros::encode_into_sized!(f32);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(42.42f64)?;
-/// assert_eq!(pod.as_ref().next::<f64>()?, 42.42f64);
+/// pod.as_mut().write(42.42f64)?;
+/// assert_eq!(pod.as_ref().read_sized::<f64>()?, 42.42f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for f64 {
+impl SizedWritable for f64 {
     const TYPE: Type = Type::DOUBLE;
     const SIZE: usize = 8;
 
@@ -268,11 +268,11 @@ crate::macros::encode_into_sized!(f64);
 /// use pod::{Pod, Rectangle};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Rectangle::new(100, 200))?;
-/// assert_eq!(pod.as_ref().next::<Rectangle>()?, Rectangle::new(100, 200));
+/// pod.as_mut().write(Rectangle::new(100, 200))?;
+/// assert_eq!(pod.as_ref().read_sized::<Rectangle>()?, Rectangle::new(100, 200));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for Rectangle {
+impl SizedWritable for Rectangle {
     const TYPE: Type = Type::RECTANGLE;
     const SIZE: usize = 8;
 
@@ -292,11 +292,11 @@ crate::macros::encode_into_sized!(Rectangle);
 /// use pod::{Pod, Fraction};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Fraction::new(800, 600))?;
-/// assert_eq!(pod.as_ref().next::<Fraction>()?, Fraction::new(800, 600));
+/// pod.as_mut().write(Fraction::new(800, 600))?;
+/// assert_eq!(pod.as_ref().read_sized::<Fraction>()?, Fraction::new(800, 600));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for Fraction {
+impl SizedWritable for Fraction {
     const TYPE: Type = Type::FRACTION;
     const SIZE: usize = 8;
 
@@ -316,11 +316,11 @@ crate::macros::encode_into_sized!(Fraction);
 /// use pod::{Pod, Fraction};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(*b"hello world")?;
-/// assert_eq!(pod.as_ref().next_unsized::<[u8]>()?, b"hello world");
+/// pod.as_mut().write(*b"hello world")?;
+/// assert_eq!(pod.as_ref().read_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<const N: usize> Encode for [u8; N] {
+impl<const N: usize> SizedWritable for [u8; N] {
     const TYPE: Type = Type::BYTES;
     const SIZE: usize = N;
 
@@ -342,11 +342,11 @@ crate::macros::encode_into_sized!(impl [const N: usize] [u8; N]);
 /// let value = 1u32;
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Pointer::new((&value as *const u32).addr()))?;
-/// assert_eq!(pod.as_ref().next::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
+/// pod.as_mut().write(Pointer::new((&value as *const u32).addr()))?;
+/// assert_eq!(pod.as_ref().read_sized::<Pointer>()?, Pointer::new((&value as *const u32).addr()));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for Pointer {
+impl SizedWritable for Pointer {
     const TYPE: Type = Type::POINTER;
     const SIZE: usize = 16;
 
@@ -371,11 +371,11 @@ crate::macros::encode_into_sized!(Pointer);
 /// use pod::{Pod, Fd};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(Fd::new(4))?;
-/// assert_eq!(pod.as_ref().next::<Fd>()?, Fd::new(4));
+/// pod.as_mut().write(Fd::new(4))?;
+/// assert_eq!(pod.as_ref().read_sized::<Fd>()?, Fd::new(4));
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl Encode for Fd {
+impl SizedWritable for Fd {
     const TYPE: Type = Type::FD;
     const SIZE: usize = 8;
 
@@ -396,19 +396,19 @@ crate::macros::encode_into_sized!(Fd);
 /// let value = 42u32;
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push(&value)?;
-/// assert_eq!(pod.as_ref().next::<u32>()?, value);
+/// pod.as_mut().write(&value)?;
+/// assert_eq!(pod.as_ref().read_sized::<u32>()?, value);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<T> Encode for &T
+impl<T> SizedWritable for &T
 where
-    T: ?Sized + Encode,
+    T: ?Sized + SizedWritable,
 {
     const TYPE: Type = T::TYPE;
     const SIZE: usize = T::SIZE;
 
     #[inline]
     fn write_content(&self, writer: impl Writer) -> Result<(), Error> {
-        <T as Encode>::write_content(self, writer)
+        <T as SizedWritable>::write_content(self, writer)
     }
 }

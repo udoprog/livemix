@@ -42,10 +42,10 @@ mod read_from;
 pub use self::read_from::Readable;
 
 mod en;
-pub use self::en::{Encode, EncodeUnsized};
+pub use self::en::{SizedWritable, UnsizedWritable};
 
 mod de;
-pub use self::de::{Array, Choice, Decode, DecodeUnsized, Object, Sequence, Struct};
+pub use self::de::{Array, Choice, Object, Sequence, SizedReadable, Struct, UnsizedReadable};
 
 pub mod buf;
 #[cfg(feature = "alloc")]
@@ -57,8 +57,8 @@ pub use self::buf::{ArrayBuf, Slice};
 mod writer;
 pub use self::writer::Writer;
 
-mod as_reader;
-pub use self::as_reader::AsSlice;
+mod as_slice;
+pub use self::as_slice::AsSlice;
 
 mod split_reader;
 pub use self::split_reader::SplitReader;
@@ -116,8 +116,8 @@ pub use self::pod_sink::PodSink;
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[inline]
@@ -147,8 +147,8 @@ pub fn slice(data: &[u8]) -> Slice<'_> {
 ///
 /// ```
 /// let mut pod = pod::dynamic();
-/// pod.as_mut().push(10i32)?;
-/// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+/// pod.as_mut().write(10i32)?;
+/// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[inline]

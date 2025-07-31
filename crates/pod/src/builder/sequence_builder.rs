@@ -47,10 +47,10 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_sequence(|seq| {
-    ///     seq.control().push(1i32)?;
-    ///     seq.control().push(2i32)?;
-    ///     seq.control().push(3i32)?;
+    /// pod.as_mut().write_sequence(|seq| {
+    ///     seq.control().write(1i32)?;
+    ///     seq.control().write(2i32)?;
+    ///     seq.control().write(3i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

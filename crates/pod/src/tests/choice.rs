@@ -5,14 +5,14 @@ fn choice_read() -> Result<(), crate::Error> {
     let mut pod = crate::array();
 
     pod.as_mut()
-        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-            choice.child().push(10i32)?;
-            choice.child().push(0i32)?;
-            choice.child().push(30i32)?;
+        .write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+            choice.child().write_sized(10i32)?;
+            choice.child().write_sized(0i32)?;
+            choice.child().write_sized(30i32)?;
             Ok(())
         })?;
 
-    let mut choice = pod.as_ref().next_choice()?;
+    let mut choice = pod.as_ref().read_choice()?;
 
     assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     assert_eq!(choice.len(), 3);

@@ -7,7 +7,7 @@ use crate::error::ErrorKind;
 use crate::{Bitmap, Error, Type, Writer};
 
 /// A trait for unsized types that can be encoded.
-pub trait EncodeUnsized {
+pub trait UnsizedWritable {
     /// The type of the encoded value.
     #[doc(hidden)]
     const TYPE: Type;
@@ -26,12 +26,12 @@ pub trait EncodeUnsized {
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(&b"hello world"[..])?;
+/// pod.as_mut().write_unsized(&b"hello world"[..])?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_unsized::<[u8]>()?, b"hello world");
+/// assert_eq!(pod.read_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl EncodeUnsized for [u8] {
+impl UnsizedWritable for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
@@ -54,12 +54,12 @@ crate::macros::encode_into_unsized!([u8]);
 /// ```
 /// use core::ffi::CStr;
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(c"hello world")?;
+/// pod.as_mut().write_unsized(c"hello world")?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_unsized::<CStr>()?, c"hello world");
+/// assert_eq!(pod.read_unsized::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl EncodeUnsized for CStr {
+impl UnsizedWritable for CStr {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -86,7 +86,7 @@ crate::macros::encode_into_unsized!(CStr);
 ///
 /// ```should_panic
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized("hello\0world")?;
+/// pod.as_mut().write_unsized("hello\0world")?;
 /// # Ok::<_, pod::Error>(())
 /// ```
 ///
@@ -94,12 +94,12 @@ crate::macros::encode_into_unsized!(CStr);
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized("hello world")?;
+/// pod.as_mut().write_unsized("hello world")?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_unsized::<str>()?, "hello world");
+/// assert_eq!(pod.read_unsized::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl EncodeUnsized for str {
+impl UnsizedWritable for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -131,16 +131,16 @@ crate::macros::encode_into_unsized!(str);
 /// ```
 /// let mut pod = pod::array();
 ///
-/// pod.as_mut().push_unsized(&String::from("hello world"))?;
-/// pod.as_mut().push_unsized(&String::from("this is right"))?;
+/// pod.as_mut().write_unsized(&String::from("hello world"))?;
+/// pod.as_mut().write_unsized(&String::from("this is right"))?;
 ///
 /// let mut pod = pod.as_ref();
-/// assert_eq!(pod.as_mut().next::<String>()?, "hello world");
-/// assert_eq!(pod.as_mut().next::<String>()?, "this is right");
+/// assert_eq!(pod.as_mut().read_sized::<String>()?, "hello world");
+/// assert_eq!(pod.as_mut().read_sized::<String>()?, "this is right");
 /// # Ok::<_, pod::Error>(())
 /// ```
 #[cfg(feature = "alloc")]
-impl EncodeUnsized for String {
+impl UnsizedWritable for String {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -166,12 +166,12 @@ crate::macros::encode_into_unsized!(String);
 /// use pod::{Bitmap, Pod};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
+/// pod.as_mut().write_unsized(Bitmap::new(b"asdfasdf"))?;
 /// let pod = pod.as_ref();
-/// assert_eq!(pod.next_unsized::<Bitmap>()?, b"asdfasdf");
+/// assert_eq!(pod.read_unsized::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl EncodeUnsized for Bitmap {
+impl UnsizedWritable for Bitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]

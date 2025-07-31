@@ -42,7 +42,7 @@ impl Client {
     pub fn core_hello(&mut self) -> Result<()> {
         let mut pod = pod::array();
         pod.as_mut()
-            .push_struct(|st| st.field().push(consts::VERSION))?;
+            .write_struct(|st| st.field().write_sized(consts::VERSION))?;
 
         self.connection
             .request(consts::CORE_ID, op::CORE_HELLO, pod.as_ref())?;
@@ -53,9 +53,9 @@ impl Client {
     pub fn core_get_registry(&mut self, new_id: u32) -> Result<()> {
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push(consts::REGISTRY_VERSION as i32)?;
-            st.field().push(new_id)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_sized(consts::REGISTRY_VERSION as i32)?;
+            st.field().write_sized(new_id)?;
             Ok(())
         })?;
 
@@ -71,9 +71,9 @@ impl Client {
 
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push(id)?;
-            st.field().push(sync_sequence)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_sized(id)?;
+            st.field().write_sized(sync_sequence)?;
             Ok(())
         })?;
 
@@ -86,9 +86,9 @@ impl Client {
     pub fn core_pong(&mut self, id: u32, seq: u32) -> Result<()> {
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push(id)?;
-            st.field().push(seq)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_sized(id)?;
+            st.field().write_sized(seq)?;
             Ok(())
         })?;
 
@@ -116,18 +116,18 @@ impl Client {
 
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push_unsized(factory_name)?;
-            st.field().push_unsized(ty)?;
-            st.field().push(version)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_unsized(factory_name)?;
+            st.field().write_unsized(ty)?;
+            st.field().write_sized(version)?;
 
-            st.field().push_struct(|props| {
-                props.field().push(PROPS.len() as u32)?;
+            st.field().write_struct(|props| {
+                props.field().write_sized(PROPS.len() as u32)?;
                 props.write(PROPS)?;
                 Ok(())
             })?;
 
-            st.field().push(new_id)?;
+            st.field().write_sized(new_id)?;
             Ok(())
         })?;
 
@@ -140,9 +140,9 @@ impl Client {
     pub fn client_update_properties(&mut self, props: &Properties) -> Result<()> {
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push_struct(|st| {
-                st.field().push(props.len() as u32)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_struct(|st| {
+                st.field().write_sized(props.len() as u32)?;
 
                 for (key, value) in props.iter() {
                     st.write((key, value))?;
@@ -164,9 +164,9 @@ impl Client {
     pub fn client_node_get_node(&mut self, id: u32, version: u32, new_id: u32) -> Result<()> {
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push(version)?;
-            st.field().push(new_id)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_sized(version)?;
+            st.field().write_sized(new_id)?;
             Ok(())
         })?;
 
@@ -213,11 +213,11 @@ impl Client {
 
         let node_flags = flags::Node::IN_DYNAMIC_PORTS | flags::Node::OUT_DYNAMIC_PORTS;
 
-        pod.as_mut().push_struct(|st| {
-            st.field().push(change_mask)?;
+        pod.as_mut().write_struct(|st| {
+            st.field().write_sized(change_mask)?;
 
             st.field()
-                .push(params.values().map(|p| p.len()).sum::<usize>() as u32)?;
+                .write_sized(params.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
             for (_, params) in params {
                 for param in params {
@@ -226,21 +226,21 @@ impl Client {
             }
 
             if change_mask & flags::ClientNodeUpdate::INFO {
-                st.field().push_struct(|st| {
-                    st.field().push(max_input_ports)?;
-                    st.field().push(max_output_ports)?;
-                    st.field().push(node_change_mask)?;
-                    st.field().push(node_flags)?;
+                st.field().write_struct(|st| {
+                    st.field().write_sized(max_input_ports)?;
+                    st.field().write_sized(max_output_ports)?;
+                    st.field().write_sized(node_change_mask)?;
+                    st.field().write_sized(node_flags)?;
 
-                    st.field().push(PROPS.len() as u32)?;
+                    st.field().write_sized(PROPS.len() as u32)?;
                     st.write(PROPS)?;
 
-                    st.field().push(PARAMS.len() as u32)?;
+                    st.field().write_sized(PARAMS.len() as u32)?;
                     st.write(PARAMS)?;
                     Ok(())
                 })?;
             } else {
-                st.field().push_none()?;
+                st.field().write_none()?;
             }
 
             Ok(())
@@ -283,12 +283,12 @@ impl Client {
 
         let port_flags = flags::Port::NONE;
 
-        pod.as_mut().push_struct(|st| {
+        pod.as_mut().write_struct(|st| {
             st.write((direction, port_id, change_mask))?;
 
             // Parameters.
             st.field()
-                .push(params.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
+                .write_sized(params.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
 
             for (_, params) in params {
                 for param in params {
@@ -297,29 +297,29 @@ impl Client {
             }
 
             if change_mask & flags::ClientNodePortUpdate::INFO {
-                st.field().push_struct(|st| {
-                    st.field().push(port_change_mask)?;
-                    st.field().push(port_flags)?;
+                st.field().write_struct(|st| {
+                    st.field().write_sized(port_change_mask)?;
+                    st.field().write_sized(port_flags)?;
 
                     // Rate num / denom
-                    st.field().push(0u32)?;
-                    st.field().push(0u32)?;
+                    st.field().write_sized(0u32)?;
+                    st.field().write_sized(0u32)?;
 
                     // Properties.
-                    st.field().push(2u32)?;
-                    st.field().push_unsized("port.name")?;
-                    st.field().push_unsized(name)?;
+                    st.field().write_sized(2u32)?;
+                    st.field().write_unsized("port.name")?;
+                    st.field().write_unsized(name)?;
 
-                    st.field().push_unsized("format.dsp")?;
-                    st.field().push_unsized("32 bit float mono audio")?;
+                    st.field().write_unsized("format.dsp")?;
+                    st.field().write_unsized("32 bit float mono audio")?;
 
                     // Parameters.
-                    st.field().push(PARAMS.len() as u32)?;
+                    st.field().write_sized(PARAMS.len() as u32)?;
                     st.write(PARAMS)?;
                     Ok(())
                 })?;
             } else {
-                st.field().push_none()?;
+                st.field().write_none()?;
             }
 
             Ok(())
@@ -334,7 +334,7 @@ impl Client {
     pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<()> {
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| st.write(active))?;
+        pod.as_mut().write_struct(|st| st.write(active))?;
 
         self.connection
             .request(id, op::CLIENT_NODE_SET_ACTIVE, pod.as_ref())?;

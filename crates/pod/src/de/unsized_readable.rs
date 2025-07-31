@@ -17,7 +17,7 @@ mod sealed {
 }
 
 /// A trait for unsized types that can be decoded.
-pub trait DecodeUnsized<'de>
+pub trait UnsizedReadable<'de>
 where
     Self: self::sealed::Sealed,
 {
@@ -49,18 +49,18 @@ where
     }
 }
 
-/// [`DecodeUnsized`] implementation for an unsized [`CStr`].
+/// [`UnsizedReadable`] implementation for an unsized [`CStr`].
 ///
 /// # Examples
 ///
 /// ```
 /// use core::ffi::CStr;
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(c"hello world")?;
-/// assert_eq!(pod.as_ref().next_unsized::<CStr>()?, c"hello world");
+/// pod.as_mut().write_unsized(c"hello world")?;
+/// assert_eq!(pod.as_ref().read_unsized::<CStr>()?, c"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> DecodeUnsized<'de> for CStr {
+impl<'de> UnsizedReadable<'de> for CStr {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -106,17 +106,17 @@ impl<'de> DecodeUnsized<'de> for CStr {
     }
 }
 
-/// [`DecodeUnsized`] implementation for an unsized [`str`].
+/// [`UnsizedReadable`] implementation for an unsized [`str`].
 ///
 /// # Examples
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized("hello world")?;
-/// assert_eq!(pod.as_ref().next_unsized::<str>()?, "hello world");
+/// pod.as_mut().write_unsized("hello world")?;
+/// assert_eq!(pod.as_ref().read_unsized::<str>()?, "hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> DecodeUnsized<'de> for str {
+impl<'de> UnsizedReadable<'de> for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
@@ -138,12 +138,12 @@ impl<'de> DecodeUnsized<'de> for str {
 
             #[inline]
             fn visit_borrowed(self, bytes: &'de [u8]) -> Result<Self::Ok, Error> {
-                self.0.visit_borrowed(next_string(bytes)?)
+                self.0.visit_borrowed(read_string(bytes)?)
             }
 
             #[inline]
             fn visit_ref(self, bytes: &[u8]) -> Result<Self::Ok, Error> {
-                self.0.visit_ref(next_string(bytes)?)
+                self.0.visit_ref(read_string(bytes)?)
             }
         }
 
@@ -151,17 +151,17 @@ impl<'de> DecodeUnsized<'de> for str {
     }
 }
 
-/// [`DecodeUnsized`] implementation for an unsized `[u8]`.
+/// [`UnsizedReadable`] implementation for an unsized `[u8]`.
 ///
 /// # Examples
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(&b"hello world"[..])?;
-/// assert_eq!(pod.as_ref().next_unsized::<[u8]>()?, b"hello world");
+/// pod.as_mut().write_unsized(&b"hello world"[..])?;
+/// assert_eq!(pod.as_ref().read_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> DecodeUnsized<'de> for [u8] {
+impl<'de> UnsizedReadable<'de> for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
@@ -177,7 +177,7 @@ impl<'de> DecodeUnsized<'de> for [u8] {
     }
 }
 
-/// [`DecodeUnsized`] implementation for an unsized [`Bitmap`].
+/// [`UnsizedReadable`] implementation for an unsized [`Bitmap`].
 ///
 /// # Examples
 ///
@@ -185,11 +185,11 @@ impl<'de> DecodeUnsized<'de> for [u8] {
 /// use pod::{Bitmap, Pod};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(Bitmap::new(b"asdfasdf"))?;
-/// assert_eq!(pod.as_ref().next_unsized::<Bitmap>()?, b"asdfasdf");
+/// pod.as_mut().write_unsized(Bitmap::new(b"asdfasdf"))?;
+/// assert_eq!(pod.as_ref().read_unsized::<Bitmap>()?, b"asdfasdf");
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<'de> DecodeUnsized<'de> for Bitmap {
+impl<'de> UnsizedReadable<'de> for Bitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
@@ -224,7 +224,7 @@ impl<'de> DecodeUnsized<'de> for Bitmap {
     }
 }
 
-fn next_string(bytes: &[u8]) -> Result<&str, Error> {
+fn read_string(bytes: &[u8]) -> Result<&str, Error> {
     let bytes = match bytes {
         [head @ .., 0] => head,
         _ => return Err(Error::new(ErrorKind::NonTerminatedString)),

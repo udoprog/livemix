@@ -10,17 +10,17 @@ use crate::{AsSlice, PackedPod, TypedPod};
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_sequence(|seq| {
-///     seq.control().offset(1).ty(10).push(1i32)?;
+/// pod.as_mut().write_sequence(|seq| {
+///     seq.control().offset(1).ty(10).write(1i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut seq = pod.as_ref().next_sequence()?;
+/// let mut seq = pod.as_ref().read_sequence()?;
 /// assert!(!seq.is_empty());
 /// let c = seq.control()?;
 /// assert_eq!(c.offset(), 1);
 /// assert_eq!(c.ty(), 10);
-/// assert_eq!(c.value().next::<i32>()?, 1);
+/// assert_eq!(c.value().read_sized::<i32>()?, 1);
 /// # Ok::<_, pod::Error>(())
 /// ```
 pub struct Control<B> {
@@ -43,12 +43,12 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_sequence(|seq| {
-    ///     seq.control().offset(42).push(1i32)?;
+    /// pod.as_mut().write_sequence(|seq| {
+    ///     seq.control().offset(42).write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().next_sequence()?;
+    /// let mut seq = pod.as_ref().read_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 42);
     /// # Ok::<_, pod::Error>(())
@@ -66,12 +66,12 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_sequence(|seq| {
-    ///     seq.control().ty(10).push(1i32)?;
+    /// pod.as_mut().write_sequence(|seq| {
+    ///     seq.control().ty(10).write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().next_sequence()?;
+    /// let mut seq = pod.as_ref().read_sequence()?;
     /// let c = seq.control()?;
     /// assert_eq!(c.ty(), 10);
     /// # Ok::<_, pod::Error>(())
@@ -89,14 +89,14 @@ impl<B> Control<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_sequence(|seq| {
-    ///     seq.control().push(1i32)?;
+    /// pod.as_mut().write_sequence(|seq| {
+    ///     seq.control().write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().next_sequence()?;
+    /// let mut seq = pod.as_ref().read_sequence()?;
     /// let c = seq.control()?;
-    /// assert_eq!(c.value().next::<i32>()?, 1);
+    /// assert_eq!(c.value().read_sized::<i32>()?, 1);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]

@@ -12,10 +12,10 @@ use crate::{BuildPod, Builder, ChildPod, Error, PADDING, Type, Writable, Writer}
 ///
 /// let mut pod = Builder::array();
 ///
-/// pod.as_mut().push_array(Type::INT, |array| {
-///     array.child().push(1i32)?;
-///     array.child().push(2i32)?;
-///     array.child().push(3i32)?;
+/// pod.as_mut().write_array(Type::INT, |array| {
+///     array.child().write(1i32)?;
+///     array.child().write(2i32)?;
+///     array.child().write(3i32)?;
 ///     Ok(())
 /// })?;
 /// # Ok::<_, pod::Error>(())
@@ -28,10 +28,10 @@ use crate::{BuildPod, Builder, ChildPod, Error, PADDING, Type, Writable, Writer}
 ///
 /// let mut pod = Builder::array();
 ///
-/// pod.push_unsized_array(Type::STRING, 4, |array| {
-///     array.child().push_unsized("foo")?;
-///     array.child().push_unsized("baz")?;
-///     array.child().push_unsized("bar")?;
+/// pod.write_unsized_array(Type::STRING, 4, |array| {
+///     array.child().write_unsized("foo")?;
+///     array.child().write_unsized("baz")?;
+///     array.child().write_unsized("bar")?;
 ///     Ok(())
 /// })?;
 /// # Ok::<_, pod::Error>(())
@@ -120,10 +120,10 @@ where
     /// use pod::{ChoiceType, Builder, Type};
     ///
     /// let mut pod = Builder::array();
-    /// pod.as_mut().push_array(Type::INT, |array| array.write((10, 0, 30)))?;
+    /// pod.as_mut().write_array(Type::INT, |array| array.write((10, 0, 30)))?;
     ///
     /// let mut pod = pod.as_ref();
-    /// let mut array = pod.next_array()?;
+    /// let mut array = pod.read_array()?;
     /// assert_eq!(array.child_type(), Type::INT);
     /// assert_eq!(array.read::<(i32, u32, i32)>()?, (10, 0, 30));
     /// # Ok::<_, pod::Error>(())
@@ -143,8 +143,8 @@ where
     /// use pod::{Builder, Type};
     ///
     /// let mut pod = Builder::array();
-    /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child().push(1i32)?;
+    /// pod.as_mut().write_array(Type::INT, |array| {
+    ///     array.child().write(1i32)?;
     ///     Ok(())
     /// })?;
     /// # Ok::<_, pod::Error>(())

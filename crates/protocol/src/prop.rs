@@ -1,6 +1,6 @@
 use core::ffi::CStr;
 
-use pod::{EncodeUnsized, PodSink, Writable};
+use pod::{PodSink, UnsizedWritable, Writable};
 
 /// The key of a property.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -37,7 +37,7 @@ macro_rules! properties {
     };
 }
 
-impl EncodeUnsized for Prop {
+impl UnsizedWritable for Prop {
     const TYPE: pod::Type = CStr::TYPE;
 
     #[inline]

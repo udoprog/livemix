@@ -6,8 +6,8 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, EncodeUnsized, Error, PADDING, PackedPod, Pod, PodStream, Readable, Reader, Slice,
-    Type, TypedPod, Writer,
+    AsSlice, Error, PADDING, PackedPod, Pod, PodStream, Readable, Reader, Slice, Type, TypedPod,
+    UnsizedWritable, Writer,
 };
 
 /// A decoder for a struct.
@@ -38,19 +38,19 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.as_ref().next_struct()?;
+    /// let mut st = pod.as_ref().read_struct()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -65,14 +65,14 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.as_ref().next_struct()?;
+    /// let mut st = pod.as_ref().read_struct()?;
     /// let (a, b, c) = st.read::<(i32, i32, i32)>()?;
     /// assert_eq!(a, 1);
     /// assert_eq!(b, 2);
@@ -94,19 +94,19 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.as_ref().next_struct()?;
+    /// let mut st = pod.as_ref().read_struct()?;
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -133,21 +133,21 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let st = pod.as_ref().next_struct()?.to_owned()?;
+    /// let st = pod.as_ref().read_struct()?.to_owned()?;
     ///
     /// let mut st = st.as_ref();
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -179,20 +179,20 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let st = pod.as_ref().next_struct()?.to_owned()?;
+    /// let st = pod.as_ref().read_struct()?.to_owned()?;
     /// let mut st = st.as_ref();
     ///
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -208,28 +208,28 @@ where
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_struct(|st| {
-///     st.field().push(1i32)?;
-///     st.field().push(2i32)?;
-///     st.field().push(3i32)?;
+/// pod.as_mut().write_struct(|st| {
+///     st.field().write(1i32)?;
+///     st.field().write(2i32)?;
+///     st.field().write(3i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let st = pod.as_ref().next_struct()?;
+/// let st = pod.as_ref().read_struct()?;
 ///
 /// let mut pod2 = pod::array();
 /// pod2.as_mut().write(st)?;
 ///
-/// let mut st = pod2.as_ref().next_struct()?;
+/// let mut st = pod2.as_ref().read_struct()?;
 ///
 /// assert!(!st.is_empty());
-/// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-/// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-/// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+/// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+/// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+/// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
 /// assert!(st.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> EncodeUnsized for Struct<B>
+impl<B> UnsizedWritable for Struct<B>
 where
     B: AsSlice,
 {
@@ -251,7 +251,7 @@ crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsSlice);
 impl<'de> Readable<'de> for Struct<Slice<'de>> {
     #[inline]
     fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
-        Ok(pod.next()?.next_struct()?.into_slice())
+        Ok(pod.next()?.read_struct()?.into_slice())
     }
 }
 

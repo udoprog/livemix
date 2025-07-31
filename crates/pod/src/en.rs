@@ -1,5 +1,5 @@
-mod encode_unsized;
-pub use self::encode_unsized::EncodeUnsized;
+mod unsized_writable;
+pub use self::unsized_writable::UnsizedWritable;
 
-pub(crate) mod encode;
-pub use self::encode::Encode;
+pub(crate) mod sized_writable;
+pub use self::sized_writable::SizedWritable;

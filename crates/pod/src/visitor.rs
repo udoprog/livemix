@@ -12,7 +12,7 @@ use super::error::ErrorKind;
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_unsized(&b"hello world"[..])?;
+/// pod.as_mut().write_unsized(&b"hello world"[..])?;
 ///
 /// let pod = pod.as_ref();
 /// assert_eq!(pod.visit_unsized::<[u8], _>(<[u8]>::to_owned)?, b"hello world");

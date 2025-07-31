@@ -143,7 +143,7 @@ impl fmt::Display for Error {
             ErrorKind::InvalidArrayLength => write!(f, "Invalid array length"),
             ErrorKind::UnsizedTypeInArray { ty } => write!(
                 f,
-                "Unsized type {ty:?} in array, use push_unsized_array instead"
+                "Unsized type {ty:?} in array, use write_unsized_array instead"
             ),
             ErrorKind::Expected { expected, actual } => {
                 write!(f, "Expected {expected:?}, but found {actual:?}")

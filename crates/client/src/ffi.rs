@@ -294,7 +294,7 @@ pub struct IoClock {
     pub rate_diff: f64,
     /// Estimated next wakeup time in nanoseconds. This time is a logical start
     /// time of the next cycle, and is not necessarily in the future.
-    pub next_nsec: u64,
+    pub read_nsec: u64,
     /// Target rate of next cycle.
     pub target_rate: Fraction,
     /// Target duration of next cycle.

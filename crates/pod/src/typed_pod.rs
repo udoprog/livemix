@@ -11,8 +11,8 @@ use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Bitmap, Decode, DecodeUnsized, EncodeUnsized, Error, Fd, Fraction, Id, PackedPod,
-    PaddedPod, Pod, Pointer, ReadPod, Reader, Rectangle, Slice, Type, Visitor, Writer,
+    AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, Pointer, ReadPod, Reader,
+    Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -55,7 +55,7 @@ impl<B, P> TypedPod<B, P> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     /// assert_eq!(pod.ty(), Type::INT);
@@ -75,7 +75,7 @@ impl<B, P> TypedPod<B, P> {
     /// use pod::{Pod, TypedPod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     /// assert_eq!(pod.ty(), Type::INT);
@@ -101,10 +101,10 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -141,10 +141,10 @@ where
     /// pod.as_mut().write((1, 2, "hello world", 4));
     ///
     /// let mut pod = pod.as_ref();
-    /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 1);
-    /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 2);
+    /// assert_eq!(pod.as_mut().into_typed()?.read_sized::<i32>()?, 1);
+    /// assert_eq!(pod.as_mut().into_typed()?.read_sized::<i32>()?, 2);
     /// assert_eq!(pod.as_mut().into_typed()?.skip()?, 12);
-    /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 4);
+    /// assert_eq!(pod.as_mut().into_typed()?.read_sized::<i32>()?, 4);
     /// assert!(pod.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -163,16 +163,16 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next<T>(mut self) -> Result<T, Error>
+    pub fn read_sized<T>(mut self) -> Result<T, Error>
     where
-        T: Decode<'de>,
+        T: SizedReadable<'de>,
     {
         if T::TYPE != self.ty {
             return Err(Error::new(ErrorKind::Expected {
@@ -194,7 +194,7 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_unsized(&b"hello world"[..])?;
+    /// pod.as_mut().write_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     /// assert_eq!(pod.visit_unsized(<[u8]>::to_owned)?, b"hello world");
@@ -203,7 +203,7 @@ where
     #[inline]
     pub fn visit_unsized<T, V>(mut self, visitor: V) -> Result<V::Ok, Error>
     where
-        T: ?Sized + DecodeUnsized<'de>,
+        T: ?Sized + UnsizedReadable<'de>,
         V: Visitor<'de, T>,
     {
         if T::TYPE != self.ty {
@@ -226,16 +226,16 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_unsized(&b"hello world"[..])?;
+    /// pod.as_mut().write_unsized(&b"hello world"[..])?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert_eq!(pod.next_unsized::<[u8]>()?, b"hello world");
+    /// assert_eq!(pod.read_unsized::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_unsized<T>(mut self) -> Result<&'de T, Error>
+    pub fn read_unsized<T>(mut self) -> Result<&'de T, Error>
     where
-        T: ?Sized + DecodeUnsized<'de>,
+        T: ?Sized + UnsizedReadable<'de>,
     {
         if T::TYPE != self.ty {
             return Err(Error::new(ErrorKind::Expected {
@@ -260,25 +260,25 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_none()?;
+    /// pod.as_mut().write_none()?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// assert!(pod.next_option()?.is_none());
+    /// assert!(pod.read_option()?.is_none());
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(true)?;
+    /// pod.as_mut().write(true)?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
     ///
-    /// let Some(mut pod) = pod.next_option()? else {
+    /// let Some(mut pod) = pod.read_option()? else {
     ///     panic!("expected some value");
     /// };
     ///
-    /// assert!(pod.as_ref().next::<bool>()?);
+    /// assert!(pod.as_ref().read_sized::<bool>()?);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_option(self) -> Result<Option<TypedPod<B, P>>, Error> {
+    pub fn read_option(self) -> Result<Option<TypedPod<B, P>>, Error> {
         match self.ty {
             Type::NONE => Ok(None),
             _ => Ok(Some(TypedPod::with_kind(
@@ -296,29 +296,29 @@ where
     ///
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child().push(1i32)?;
-    ///     array.child().push(2i32)?;
-    ///     array.child().push(3i32)?;
+    /// pod.as_mut().write_array(Type::INT, |array| {
+    ///     array.child().write(1i32)?;
+    ///     array.child().write(2i32)?;
+    ///     array.child().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
     /// let pod = pod.as_ref().into_typed()?;
-    /// let mut array = pod.next_array()?;
+    /// let mut array = pod.read_array()?;
     ///
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
     ///
-    /// assert_eq!(array.next().unwrap().next::<i32>()?, 1i32);
-    /// assert_eq!(array.next().unwrap().next::<i32>()?, 2i32);
-    /// assert_eq!(array.next().unwrap().next::<i32>()?, 3i32);
+    /// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
+    /// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
+    /// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_array(self) -> Result<Array<Slice<'de>>, Error> {
+    pub fn read_array(self) -> Result<Array<Slice<'de>>, Error> {
         match self.ty {
             Type::ARRAY => Array::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -336,23 +336,23 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| {
-    ///     st.field().push(1i32)?;
-    ///     st.field().push(2i32)?;
-    ///     st.field().push(3i32)?;
+    /// pod.as_mut().write_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.as_ref().into_typed()?.next_struct()?;
+    /// let mut st = pod.as_ref().into_typed()?.read_struct()?;
     /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_struct(self) -> Result<Struct<Slice<'de>>, Error> {
+    pub fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
         match self.ty {
             Type::STRUCT => Ok(Struct::new(self.split_buffer()?)),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -370,36 +370,36 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).flags(0b001).push(1i32)?;
-    ///     obj.property(2).flags(0b010).push(2i32)?;
-    ///     obj.property(3).flags(0b100).push(3i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).flags(0b001).write(1i32)?;
+    ///     obj.property(2).flags(0b010).write(2i32)?;
+    ///     obj.property(3).flags(0b100).write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.as_ref().next_object()?;
+    /// let mut obj = pod.as_ref().read_object()?;
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// assert_eq!(p.flags(), 0b001);
-    /// assert_eq!(p.value().next::<i32>()?, 1);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 2);
     /// assert_eq!(p.flags(), 0b010);
-    /// assert_eq!(p.value().next::<i32>()?, 2);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 3);
     /// assert_eq!(p.flags(), 0b100);
-    /// assert_eq!(p.value().next::<i32>()?, 3);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 3);
     ///
     /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_object(self) -> Result<Object<Slice<'de>>, Error> {
+    pub fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
         match self.ty {
             Type::OBJECT => Object::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -417,36 +417,36 @@ where
     /// use pod::{Pod, TypedPod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_sequence(|seq| {
-    ///     seq.control().offset(1).ty(10).push(1i32)?;
-    ///     seq.control().offset(2).ty(20).push(2i32)?;
-    ///     seq.control().offset(3).ty(30).push(3i32)?;
+    /// pod.as_mut().write_sequence(|seq| {
+    ///     seq.control().offset(1).ty(10).write(1i32)?;
+    ///     seq.control().offset(2).ty(20).write(2i32)?;
+    ///     seq.control().offset(3).ty(30).write(3i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().into_typed()?.next_sequence()?;
+    /// let mut seq = pod.as_ref().into_typed()?.read_sequence()?;
     /// assert!(!seq.is_empty());
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 1);
     /// assert_eq!(c.ty(), 10);
-    /// assert_eq!(c.value().next::<i32>()?, 1);
+    /// assert_eq!(c.value().read_sized::<i32>()?, 1);
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 2);
     /// assert_eq!(c.ty(), 20);
-    /// assert_eq!(c.value().next::<i32>()?, 2);
+    /// assert_eq!(c.value().read_sized::<i32>()?, 2);
     ///
     /// let c = seq.control()?;
     /// assert_eq!(c.offset(), 3);
     /// assert_eq!(c.ty(), 30);
-    /// assert_eq!(c.value().next::<i32>()?, 3);
+    /// assert_eq!(c.value().read_sized::<i32>()?, 3);
     ///
     /// assert!(seq.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_sequence(self) -> Result<Sequence<Slice<'de>>, Error> {
+    pub fn read_sequence(self) -> Result<Sequence<Slice<'de>>, Error> {
         match self.ty {
             Type::SEQUENCE => Sequence::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -464,23 +464,23 @@ where
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.as_ref().next_choice()?;
+    /// let mut choice = pod.as_ref().read_choice()?;
     /// assert!(!choice.is_empty());
-    /// assert_eq!(choice.next().unwrap().next::<i32>()?, 10);
-    /// assert_eq!(choice.next().unwrap().next::<i32>()?, 0);
-    /// assert_eq!(choice.next().unwrap().next::<i32>()?, 30);
+    /// assert_eq!(choice.next().unwrap().read_sized::<i32>()?, 10);
+    /// assert_eq!(choice.next().unwrap().read_sized::<i32>()?, 0);
+    /// assert_eq!(choice.next().unwrap().read_sized::<i32>()?, 30);
     /// assert!(choice.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_choice(self) -> Result<Choice<Slice<'de>>, Error> {
+    pub fn read_choice(self) -> Result<Choice<Slice<'de>>, Error> {
         match self.ty {
             Type::CHOICE => Choice::from_reader(self.split_buffer()?),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -498,26 +498,18 @@ where
     /// use pod::{Pod, TypedPod};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_pod(|pod| {
-    ///     pod.as_mut().push_struct(|st| {
-    ///         st.field().push(1i32)?;
-    ///         st.field().push(2i32)?;
-    ///         st.field().push(3i32)?;
-    ///         Ok(())
-    ///     })
+    /// pod.as_mut().write_pod(|pod| {
+    ///     pod.as_mut().write_struct(|st| st.write((1, 2, 3)))
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.next_pod()?;
-    /// let mut st = pod.next_struct()?;
-    /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// let pod = pod.as_ref().into_typed()?.read_pod()?;
+    /// let mut st = pod.read_struct()?;
+    /// assert_eq!(st.read::<(i32, i32, i32)>()?, (1, 2, 3));
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<Slice<'de>, PackedPod>, Error> {
+    pub fn read_pod(self) -> Result<Pod<Slice<'de>, PackedPod>, Error> {
         match self.ty {
             Type::POD => Ok(Pod::packed(self.split_buffer()?)),
             _ => Err(Error::new(ErrorKind::Expected {
@@ -553,7 +545,7 @@ where
     ///
     /// let mut pod = pod.as_ref().into_typed()?;
     /// assert!(!pod.is_empty());
-    /// assert_eq!(pod.as_mut().next::<i32>()?, 1);
+    /// assert_eq!(pod.as_mut().read_sized::<i32>()?, 1);
     /// assert!(pod.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -573,11 +565,11 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push(10i32)?;
+    /// pod.as_mut().write(10i32)?;
     ///
     /// let pod = pod.as_ref().into_typed()?.to_owned()?;
     ///
-    /// assert_eq!(pod.as_ref().next::<i32>()?, 10i32);
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
@@ -638,38 +630,38 @@ where
 /// use pod::{Pod, Type};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_object(10, 20, |obj| {
-///     obj.property(1).flags(0b001).push(1i32)?;
-///     obj.property(2).flags(0b010).push(2i32)?;
-///     obj.property(3).flags(0b100).push(3i32)?;
+/// pod.as_mut().write_object(10, 20, |obj| {
+///     obj.property(1).flags(0b001).write(1i32)?;
+///     obj.property(2).flags(0b010).write(2i32)?;
+///     obj.property(3).flags(0b100).write(3i32)?;
 ///     Ok(())
 /// })?;
 ///
 /// let mut pod2 = pod::array();
 /// pod2.as_mut().write(pod.as_ref().into_typed()?)?;
 ///
-/// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
+/// let mut obj = pod2.as_ref().read_pod()?.read_object()?;
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 1);
 /// assert_eq!(p.flags(), 0b001);
-/// assert_eq!(p.value().next::<i32>()?, 1);
+/// assert_eq!(p.value().read_sized::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 2);
 /// assert_eq!(p.flags(), 0b010);
-/// assert_eq!(p.value().next::<i32>()?, 2);
+/// assert_eq!(p.value().read_sized::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
 /// assert_eq!(p.key(), 3);
 /// assert_eq!(p.flags(), 0b100);
-/// assert_eq!(p.value().next::<i32>()?, 3);
+/// assert_eq!(p.value().read_sized::<i32>()?, 3);
 ///
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B, P> EncodeUnsized for TypedPod<B, P>
+impl<B, P> UnsizedWritable for TypedPod<B, P>
 where
     B: AsSlice,
     P: ReadPod,
@@ -714,7 +706,7 @@ where
 
         macro_rules! decode {
             ($ty:ty, $pat:pat => $expr:expr) => {
-                match self.as_ref().next::<$ty>() {
+                match self.as_ref().read_sized::<$ty>() {
                     Ok($pat) => $expr,
                     Err(e) => e.fmt(f),
                 }
@@ -772,14 +764,14 @@ where
             Type::BITMAP => {
                 visit_unsized!(Bitmap, value => value.fmt(f))
             }
-            Type::ARRAY => tri!(self.as_ref().next_array()).fmt(f),
-            Type::STRUCT => tri!(self.as_ref().next_struct()).fmt(f),
-            Type::OBJECT => tri!(self.as_ref().next_object()).fmt(f),
-            Type::SEQUENCE => tri!(self.as_ref().next_sequence()).fmt(f),
+            Type::ARRAY => tri!(self.as_ref().read_array()).fmt(f),
+            Type::STRUCT => tri!(self.as_ref().read_struct()).fmt(f),
+            Type::OBJECT => tri!(self.as_ref().read_object()).fmt(f),
+            Type::SEQUENCE => tri!(self.as_ref().read_sequence()).fmt(f),
             Type::POINTER => decode!(Pointer, value => value.fmt(f)),
             Type::FD => decode!(Fd, value => value.fmt(f)),
-            Type::CHOICE => tri!(self.as_ref().next_choice()).fmt(f),
-            Type::POD => tri!(tri!(self.as_ref().next_pod()).into_typed()).fmt(f),
+            Type::CHOICE => tri!(self.as_ref().read_choice()).fmt(f),
+            Type::POD => tri!(tri!(self.as_ref().read_pod()).into_typed()).fmt(f),
             ty => write!(f, "{{{ty:?}}}"),
         }
     }

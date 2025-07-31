@@ -1,8 +1,8 @@
-mod decode_unsized;
-pub use self::decode_unsized::DecodeUnsized;
+mod unsized_readable;
+pub use self::unsized_readable::UnsizedReadable;
 
-pub(crate) mod decode;
-pub use self::decode::Decode;
+pub(crate) mod sized_readable;
+pub use self::sized_readable::SizedReadable;
 
 mod array;
 pub use self::array::Array;

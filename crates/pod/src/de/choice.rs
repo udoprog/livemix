@@ -9,8 +9,8 @@ use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
 use crate::{
-    AsSlice, ChoiceType, EncodeUnsized, Error, PackedPod, Readable, Reader, Slice, Type, TypedPod,
-    Writer,
+    AsSlice, ChoiceType, Error, PackedPod, Readable, Reader, Slice, Type, TypedPod,
+    UnsizedWritable, Writer,
 };
 
 /// A decoder for a choice.
@@ -21,14 +21,14 @@ use crate::{
 /// use pod::{ChoiceType, Pod, Type};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-///     choice.child().push(10i32)?;
-///     choice.child().push(0i32)?;
-///     choice.child().push(30i32)?;
+/// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+///     choice.child().write(10i32)?;
+///     choice.child().write(0i32)?;
+///     choice.child().write(30i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut choice = pod.as_ref().next_choice()?;
+/// let mut choice = pod.as_ref().read_choice()?;
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
 ///
 /// let mut count = 0;
@@ -60,14 +60,14 @@ impl<B> Choice<B> {
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.as_ref().next_choice()?;
+    /// let mut choice = pod.as_ref().read_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
@@ -94,14 +94,14 @@ impl<B> Choice<B> {
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.as_ref().next_choice()?;
+    /// let choice = pod.as_ref().read_choice()?;
     /// assert_eq!(choice.child_type(), Type::INT);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -118,14 +118,14 @@ impl<B> Choice<B> {
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.as_ref().next_choice()?;
+    /// let choice = pod.as_ref().read_choice()?;
     /// assert_eq!(choice.child_size(), 4);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -194,12 +194,12 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_array(Type::INT, |array| {
-    ///     array.child().push(1i32)?;
+    /// pod.as_mut().write_array(Type::INT, |array| {
+    ///     array.child().write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut array = pod.as_ref().next_array()?;
+    /// let mut array = pod.as_ref().read_array()?;
     /// assert_eq!(array.len(), 1);
     /// assert!(!array.is_empty());
     /// # Ok::<_, pod::Error>(())
@@ -217,9 +217,9 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_array(Type::INT, |_| Ok(()))?;
+    /// pod.as_mut().write_array(Type::INT, |_| Ok(()))?;
     ///
-    /// let mut array = pod.as_ref().next_array()?;
+    /// let mut array = pod.as_ref().read_array()?;
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -237,14 +237,14 @@ where
     ///
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.as_ref().next_choice()?;
+    /// let mut choice = pod.as_ref().read_choice()?;
     ///
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     /// assert_eq!(choice.len(), 3);
@@ -271,14 +271,14 @@ where
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut choice = pod.as_ref().next_choice()?;
+    /// let mut choice = pod.as_ref().read_choice()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut count = 0;
@@ -312,14 +312,14 @@ where
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.as_ref().next_choice()?.to_owned()?;
+    /// let choice = pod.as_ref().read_choice()?.to_owned()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
@@ -363,14 +363,14 @@ where
     /// use pod::{ChoiceType, Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-    ///     choice.child().push(10i32)?;
-    ///     choice.child().push(0i32)?;
-    ///     choice.child().push(30i32)?;
+    /// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().write(10i32)?;
+    ///     choice.child().write(0i32)?;
+    ///     choice.child().write(30i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let choice = pod.as_ref().next_choice()?.to_owned()?;
+    /// let choice = pod.as_ref().read_choice()?.to_owned()?;
     /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     ///
     /// let mut choice = choice.as_ref();
@@ -421,19 +421,19 @@ where
 /// use pod::{ChoiceType, Pod, Type};
 ///
 /// let mut pod = pod::array();
-/// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-///     choice.child().push(10i32)?;
-///     choice.child().push(0i32)?;
-///     choice.child().push(30i32)?;
+/// pod.as_mut().write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+///     choice.child().write(10i32)?;
+///     choice.child().write(0i32)?;
+///     choice.child().write(30i32)?;
 ///     Ok(())
 /// })?;
 ///
-/// let mut choice = pod.as_ref().next_choice()?;
+/// let mut choice = pod.as_ref().read_choice()?;
 ///
 /// let mut pod2 = pod::array();
 /// pod2.as_mut().write(choice)?;
 ///
-/// let mut choice = pod2.as_ref().next_choice()?;
+/// let mut choice = pod2.as_ref().read_choice()?;
 ///
 /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
 /// assert_eq!(choice.len(), 3);
@@ -442,22 +442,22 @@ where
 /// assert_eq!(choice.len(), 2);
 /// assert_eq!(c.ty(), Type::INT);
 /// assert_eq!(c.size(), 4);
-/// assert_eq!(c.next::<i32>()?, 10);
+/// assert_eq!(c.read_sized::<i32>()?, 10);
 ///
 /// let c = choice.next().unwrap();
 /// assert_eq!(choice.len(), 1);
 /// assert_eq!(c.ty(), Type::INT);
 /// assert_eq!(c.size(), 4);
-/// assert_eq!(c.next::<i32>()?, 0);
+/// assert_eq!(c.read_sized::<i32>()?, 0);
 ///
 /// let c = choice.next().unwrap();
 /// assert_eq!(choice.len(), 0);
 /// assert_eq!(c.ty(), Type::INT);
 /// assert_eq!(c.size(), 4);
-/// assert_eq!(c.next::<i32>()?, 30);
+/// assert_eq!(c.read_sized::<i32>()?, 30);
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> EncodeUnsized for Choice<B>
+impl<B> UnsizedWritable for Choice<B>
 where
     B: AsSlice,
 {

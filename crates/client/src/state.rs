@@ -105,33 +105,37 @@ impl ClientNodeState {
         let mut pod = pod::array();
 
         pod.as_mut()
-            .push_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+            .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE)
+                    .write_sized(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .push(MediaSubType::RAW)?;
-                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
-                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
-                obj.property(Format::AUDIO_RATE).push(44100u32)?;
+                    .write_sized(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT)
+                    .write_sized(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
+                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
                 Ok(())
             })?;
 
         params.insert(
             Param::ENUM_FORMAT,
-            vec![pod.take().next_object()?.to_owned()?],
+            vec![pod.take().read_object()?.to_owned()?],
         );
 
         pod.as_mut()
-            .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+            .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE)
+                    .write_sized(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .push(MediaSubType::RAW)?;
-                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
-                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
-                obj.property(Format::AUDIO_RATE).push(44100u32)?;
+                    .write_sized(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT)
+                    .write_sized(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
+                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
                 Ok(())
             })?;
 
-        params.insert(Param::FORMAT, vec![pod.take().next_object()?.to_owned()?]);
+        params.insert(Param::FORMAT, vec![pod.take().read_object()?.to_owned()?]);
 
         Ok(Self {
             id,
@@ -713,23 +717,23 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_info_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<u32>()?;
-        let cookie = st.field()?.next::<i32>()?;
-        let user_name = st.field()?.next_unsized::<str>()?.to_owned();
-        let host_name = st.field()?.next_unsized::<str>()?.to_owned();
-        let version = st.field()?.next_unsized::<str>()?.to_owned();
-        let name = st.field()?.next_unsized::<str>()?.to_owned();
-        let change_mask = st.field()?.next::<u64>()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<u32>()?;
+        let cookie = st.field()?.read_sized::<i32>()?;
+        let user_name = st.field()?.read_unsized::<str>()?.to_owned();
+        let host_name = st.field()?.read_unsized::<str>()?.to_owned();
+        let version = st.field()?.read_unsized::<str>()?.to_owned();
+        let name = st.field()?.read_unsized::<str>()?.to_owned();
+        let change_mask = st.field()?.read_sized::<u64>()?;
 
-        let mut props = st.field()?.next_struct()?;
+        let mut props = st.field()?.read_struct()?;
 
         if change_mask & 0x1 != 0 {
-            let n_items = props.field()?.next::<i32>()?;
+            let n_items = props.field()?.read_sized::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.next_unsized::<str>()?.to_owned();
-                let value = props.field()?.next_unsized::<str>()?.to_owned();
+                let key = props.field()?.read_unsized::<str>()?.to_owned();
+                let value = props.field()?.read_unsized::<str>()?.to_owned();
                 self.core.properties.insert(key, value);
             }
         }
@@ -746,7 +750,7 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_done_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let (id, seq) = pod.next_struct()?.read::<(u32, u32)>()?;
+        let (id, seq) = pod.read_struct()?.read::<(u32, u32)>()?;
 
         match id {
             GET_REGISTRY_SYNC => {
@@ -766,9 +770,9 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_ping_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next()?;
-        let seq = st.field()?.next()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized()?;
+        let seq = st.field()?.read_sized()?;
 
         tracing::debug!("Core ping {id} with seq {seq}");
         self.ops.push_back(Op::Pong { id, seq });
@@ -777,11 +781,11 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_error_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<i32>()?;
-        let seq = st.field()?.next::<i32>()?;
-        let res = st.field()?.next::<i32>()?;
-        let error = st.field()?.next_unsized::<str>()?.to_owned();
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<i32>()?;
+        let seq = st.field()?.read_sized::<i32>()?;
+        let res = st.field()?.read_sized::<i32>()?;
+        let error = st.field()?.read_unsized::<str>()?.to_owned();
 
         tracing::error!(id, seq, res, error);
         Ok(())
@@ -789,9 +793,9 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_bound_id_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let local_id = st.field()?.next::<u32>()?;
-        let global_id = st.field()?.next::<u32>()?;
+        let mut st = pod.read_struct()?;
+        let local_id = st.field()?.read_sized::<u32>()?;
+        let global_id = st.field()?.read_sized::<u32>()?;
         self.globals.insert(local_id, global_id);
 
         tracing::debug!(local_id, global_id);
@@ -801,7 +805,7 @@ impl State {
     #[tracing::instrument(skip_all)]
     fn core_add_mem_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let (id, ty, fd, flags) = pod
-            .next_struct()?
+            .read_struct()?
             .read::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
 
         let fd = self.take_fd(fd)?;
@@ -817,8 +821,8 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_destroy(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<u32>()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<u32>()?;
 
         tracing::debug!(id);
         Ok(())
@@ -826,18 +830,18 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn client_info(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<u32>()?;
-        let change_mask = st.field()?.next::<u64>()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<u32>()?;
+        let change_mask = st.field()?.read_sized::<u64>()?;
 
-        let mut props = st.field()?.next_struct()?;
+        let mut props = st.field()?.read_struct()?;
 
         if change_mask & 0x1 != 0 {
-            let n_items = props.field()?.next::<i32>()?;
+            let n_items = props.field()?.read_sized::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.next_unsized::<CStr>()?;
-                let value = props.field()?.next_unsized::<CStr>()?;
+                let key = props.field()?.read_unsized::<CStr>()?;
+                let value = props.field()?.read_unsized::<CStr>()?;
 
                 self.client
                     .server_properties
@@ -851,10 +855,10 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn client_error(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<i32>()?;
-        let res = st.field()?.next::<i32>()?;
-        let error = st.field()?.next_unsized::<str>()?.to_owned();
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<i32>()?;
+        let res = st.field()?.read_sized::<i32>()?;
+        let error = st.field()?.read_unsized::<str>()?.to_owned();
         tracing::error!(id, res, error, "Client errored");
         Ok(())
     }
@@ -908,8 +912,8 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn registry_global_remove(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<u32>()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<u32>()?;
 
         let Some(registry_index) = self.id_to_registry.remove(&id) else {
             tracing::warn!(id, "Tried to remove unknown registry");
@@ -946,12 +950,12 @@ impl State {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_transport(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
-        let read_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
-        let write_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
-        let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<isize>()?;
-        let size = st.field()?.next::<usize>()?;
+        let mut st = pod.read_struct()?;
+        let read_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
+        let write_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
+        let mem_id = st.field()?.read_sized::<i32>()?;
+        let offset = st.field()?.read_sized::<isize>()?;
+        let size = st.field()?.read_sized::<usize>()?;
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
@@ -998,13 +1002,13 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<Param>()?;
-        let _flags = st.field()?.next::<i32>()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<Param>()?;
+        let _flags = st.field()?.read_sized::<i32>()?;
 
-        if let Some(obj) = st.field()?.next_option()? {
+        if let Some(obj) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            node.set_param(id, obj.next_object()?.to_owned()?);
+            node.set_param(id, obj.read_object()?.to_owned()?);
         } else {
             tracing::trace!(?id, "remove");
             node.remove_param(id);
@@ -1020,11 +1024,11 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.next_struct()?;
-        let id = st.field()?.next::<id::IoType>()?;
-        let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<isize>()?;
-        let size = st.field()?.next::<usize>()?;
+        let mut st = pod.read_struct()?;
+        let id = st.field()?.read_sized::<id::IoType>()?;
+        let mem_id = st.field()?.read_sized::<i32>()?;
+        let offset = st.field()?.read_sized::<isize>()?;
+        let size = st.field()?.read_sized::<usize>()?;
 
         match id {
             id::IoType::CONTROL => {
@@ -1087,8 +1091,8 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.as_ref().next_struct()?;
-        let obj = st.field()?.next_object()?;
+        let mut st = pod.as_ref().read_struct()?;
+        let obj = st.field()?.read_object()?;
 
         let object_type = id::CommandType::from_id(obj.object_type());
         let object_id = id::NodeCommand::from_id(obj.object_id());
@@ -1112,17 +1116,17 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.next_struct()?;
-        let direction = consts::Direction::from_raw(st.field()?.next::<u32>()?);
-        let port_id = st.field()?.next::<u32>()?;
-        let id = st.field()?.next::<Param>()?;
-        let flags = st.field()?.next::<u32>()?;
+        let mut st = pod.read_struct()?;
+        let direction = consts::Direction::from_raw(st.field()?.read_sized::<u32>()?);
+        let port_id = st.field()?.read_sized::<u32>()?;
+        let id = st.field()?.read_sized::<Param>()?;
+        let flags = st.field()?.read_sized::<u32>()?;
 
         let port = node.ports.get_mut(direction, port_id)?;
 
-        if let Some(param) = st.field()?.next_option()? {
+        if let Some(param) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            port.set_param(id, param.next_object()?.to_owned()?, flags)?;
+            port.set_param(id, param.read_object()?.to_owned()?, flags)?;
         } else {
             tracing::trace!(?id, "remove");
             port.remove_param(id)?;
@@ -1138,7 +1142,7 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.next_struct()?;
+        let mut st = pod.read_struct()?;
 
         let (direction, port_id, mix_id, flags, n_buffers) =
             st.read::<(consts::Direction, u32, u32, u32, u32)>()?;
@@ -1234,14 +1238,14 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let mut st = pod.next_struct()?;
-        let direction = consts::Direction::from_raw(st.field()?.next::<u32>()?);
-        let port_id = st.field()?.next::<u32>()?;
-        let _mix_id = st.field()?.next::<u32>()?;
-        let id = st.field()?.next::<id::IoType>()?;
-        let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<isize>()?;
-        let size = st.field()?.next::<usize>()?;
+        let mut st = pod.read_struct()?;
+        let direction = consts::Direction::from_raw(st.field()?.read_sized::<u32>()?);
+        let port_id = st.field()?.read_sized::<u32>()?;
+        let _mix_id = st.field()?.read_sized::<u32>()?;
+        let id = st.field()?.read_sized::<id::IoType>()?;
+        let mem_id = st.field()?.read_sized::<i32>()?;
+        let offset = st.field()?.read_sized::<isize>()?;
+        let size = st.field()?.read_sized::<usize>()?;
         let port = node.ports.get_mut(direction, port_id)?;
 
         let span = tracing::info_span!("client_node_port_set_io", ?direction, port_id, ?id,);
@@ -1304,13 +1308,13 @@ impl State {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_activation(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.next_struct()?;
+        let mut st = pod.read_struct()?;
 
-        let peer_id = st.field()?.next::<u32>()?;
-        let fd = self.take_fd(st.field()?.next::<Fd>()?)?;
-        let mem_id = st.field()?.next::<i32>()?;
-        let offset = st.field()?.next::<i32>()? as isize;
-        let size = st.field()?.next::<u32>()? as usize;
+        let peer_id = st.field()?.read_sized::<u32>()?;
+        let fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
+        let mem_id = st.field()?.read_sized::<i32>()?;
+        let offset = st.field()?.read_sized::<i32>()? as isize;
+        let size = st.field()?.read_sized::<u32>()? as usize;
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
@@ -1341,7 +1345,7 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        let st = pod.next_struct()?;
+        let st = pod.read_struct()?;
         tracing::info!(?st);
         Ok(())
     }

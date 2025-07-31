@@ -23,12 +23,12 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).push(1i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.as_ref().next_object()?;
+    /// let mut obj = pod.as_ref().read_object()?;
     /// let p = obj.property()?;
     /// assert_eq!(p.key(), 1);
     /// # Ok::<_, pod::Error>(())
@@ -46,12 +46,12 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).flags(0b001).push(1i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).flags(0b001).write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.as_ref().next_object()?;
+    /// let mut obj = pod.as_ref().read_object()?;
     /// let p = obj.property()?;
     /// assert_eq!(p.flags(), 0b001);
     /// # Ok::<_, pod::Error>(())
@@ -69,14 +69,14 @@ impl<B> Property<B> {
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_object(10, 20, |obj| {
-    ///     obj.property(1).push(1i32)?;
+    /// pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).write(1i32)?;
     ///     Ok(())
     /// })?;
     ///
-    /// let mut obj = pod.as_ref().next_object()?;
+    /// let mut obj = pod.as_ref().read_object()?;
     /// let p = obj.property()?;
-    /// assert_eq!(p.value().next::<i32>()?, 1);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]

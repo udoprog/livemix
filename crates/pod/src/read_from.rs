@@ -20,7 +20,7 @@ where
 /// use pod::Builder;
 ///
 /// let mut pod = Builder::array();
-/// pod.as_mut().push(42u32)?;
+/// pod.as_mut().write(42u32)?;
 /// assert_eq!(pod.as_ref().read::<Option<u32>>()?, Some(42));
 /// # Ok::<_, pod::Error>(())
 /// ```
@@ -30,7 +30,7 @@ where
 {
     #[inline]
     fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
-        match pod.next()?.next_option()? {
+        match pod.next()?.read_option()? {
             Some(mut pod) => Ok(Some(T::read_from(&mut pod)?)),
             None => Ok(None),
         }
@@ -69,10 +69,10 @@ where
 ///
 /// ```
 /// let mut pod = pod::array();
-/// pod.as_mut().push_struct(|st| st.write(()))?;
+/// pod.as_mut().write_struct(|st| st.write(()))?;
 ///
 /// let mut pod = pod.as_ref();
-/// let () = pod.next_struct()?.read::<()>()?;
+/// let () = pod.read_struct()?.read::<()>()?;
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> Readable<'de> for () {
@@ -90,15 +90,15 @@ macro_rules! encode_into_tuple {
         ///
         /// ```
         /// let mut pod = pod::array();
-        /// pod.as_mut().push_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
+        /// pod.as_mut().write_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
         ///
         /// let mut pod = pod.as_ref();
-        /// let mut st = pod.next_struct()?;
+        /// let mut st = pod.read_struct()?;
         ///
-        /// assert_eq!(st.field()?.next::<i32>()?, 10i32);
-        /// assert_eq!(st.field()?.next_unsized::<str>()?, "hello world");
-        /// assert_eq!(st.field()?.next::<u32>()?, 1);
-        /// assert_eq!(st.field()?.next::<u32>()?, 2);
+        /// assert_eq!(st.field()?.read_sized::<i32>()?, 10i32);
+        /// assert_eq!(st.field()?.read_unsized::<str>()?, "hello world");
+        /// assert_eq!(st.field()?.read_sized::<u32>()?, 1);
+        /// assert_eq!(st.field()?.read_sized::<u32>()?, 2);
         /// assert!(st.is_empty());
         /// # Ok::<_, pod::Error>(())
         /// ```

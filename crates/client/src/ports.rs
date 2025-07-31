@@ -151,112 +151,118 @@ impl Ports {
         let mut pod = pod::array();
 
         pod.as_mut()
-            .push_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+            .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE)
+                    .write_sized(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .push(MediaSubType::RAW)?;
-                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
-                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
-                obj.property(Format::AUDIO_RATE).push(44100u32)?;
+                    .write_sized(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT)
+                    .write_sized(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
+                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
                 Ok(())
             })?;
 
         port.params.insert(
             Param::ENUM_FORMAT,
-            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
+            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
         );
 
         pod.as_mut()
-            .push_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).push(MediaType::AUDIO)?;
+            .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE)
+                    .write_sized(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .push(MediaSubType::RAW)?;
-                obj.property(Format::AUDIO_FORMAT).push(AudioFormat::S16)?;
-                obj.property(Format::AUDIO_CHANNELS).push(1u32)?;
-                obj.property(Format::AUDIO_RATE).push(44100u32)?;
+                    .write_sized(MediaSubType::RAW)?;
+                obj.property(Format::AUDIO_FORMAT)
+                    .write_sized(AudioFormat::S16)?;
+                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
+                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
                 Ok(())
             })?;
 
         port.params.insert(
             Param::FORMAT,
-            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
+            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
         );
 
         pod.as_mut()
-            .push_object(ObjectType::PARAM_META, Param::META, |obj| {
-                obj.property(ParamMeta::TYPE).push(id::Meta::HEADER)?;
+            .write_object(ObjectType::PARAM_META, Param::META, |obj| {
+                obj.property(ParamMeta::TYPE)
+                    .write_sized(id::Meta::HEADER)?;
                 obj.property(ParamMeta::SIZE)
-                    .push(mem::size_of::<ffi::MetaHeader>())?;
+                    .write_sized(mem::size_of::<ffi::MetaHeader>())?;
                 Ok(())
             })?;
 
         port.params.insert(
             Param::META,
-            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
+            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
         );
 
         {
             let mut params = Vec::new();
 
             pod.as_mut()
-                .push_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-                    obj.property(ParamIo::ID).push(id::IoType::CLOCK)?;
+                .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+                    obj.property(ParamIo::ID).write_sized(id::IoType::CLOCK)?;
                     obj.property(ParamIo::SIZE)
-                        .push(mem::size_of::<ffi::IoClock>())?;
+                        .write_sized(mem::size_of::<ffi::IoClock>())?;
                     Ok(())
                 })?;
 
-            params.push(PortParam::new(pod.take().next_object()?.to_owned()?, 0));
+            params.push(PortParam::new(pod.take().read_object()?.to_owned()?, 0));
 
             pod.as_mut()
-                .push_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-                    obj.property(ParamIo::ID).push(id::IoType::POSITION)?;
+                .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+                    obj.property(ParamIo::ID)
+                        .write_sized(id::IoType::POSITION)?;
                     obj.property(ParamIo::SIZE)
-                        .push(mem::size_of::<ffi::IoPosition>())?;
+                        .write_sized(mem::size_of::<ffi::IoPosition>())?;
                     Ok(())
                 })?;
 
-            params.push(PortParam::new(pod.take().next_object()?.to_owned()?, 0));
+            params.push(PortParam::new(pod.take().read_object()?.to_owned()?, 0));
 
             port.params.insert(Param::IO, params);
         }
 
         pod.as_mut()
-            .push_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
-                obj.property(ParamBuffers::BUFFERS).push_choice(
+            .write_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
+                obj.property(ParamBuffers::BUFFERS).write_choice(
                     ChoiceType::RANGE,
                     Type::INT,
                     |choice| {
-                        choice.child().push(1u32)?;
-                        choice.child().push(1u32)?;
-                        choice.child().push(32u32)?;
+                        choice.child().write_sized(1u32)?;
+                        choice.child().write_sized(1u32)?;
+                        choice.child().write_sized(32u32)?;
                         Ok(())
                     },
                 )?;
 
-                obj.property(ParamBuffers::BLOCKS).push(1i32)?;
+                obj.property(ParamBuffers::BLOCKS).write_sized(1i32)?;
 
-                obj.property(ParamBuffers::SIZE).push_choice(
+                obj.property(ParamBuffers::SIZE).write_choice(
                     ChoiceType::RANGE,
                     Type::INT,
                     |choice| {
                         choice
                             .child()
-                            .push(BUFFER_SAMPLES * mem::size_of::<f32>() as u32)?;
-                        choice.child().push(32)?;
-                        choice.child().push(i32::MAX)?;
+                            .write_sized(BUFFER_SAMPLES * mem::size_of::<f32>() as u32)?;
+                        choice.child().write_sized(32)?;
+                        choice.child().write_sized(i32::MAX)?;
                         Ok(())
                     },
                 )?;
 
                 obj.property(ParamBuffers::STRIDE)
-                    .push(mem::size_of::<f32>())?;
+                    .write_sized(mem::size_of::<f32>())?;
                 Ok(())
             })?;
 
         port.params.insert(
             Param::BUFFERS,
-            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
+            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
         );
 
         ports.push(port);

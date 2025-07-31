@@ -22,19 +22,19 @@ pub(crate) fn read(value: [u32; 2]) -> u64 {
 #[test]
 fn sandbox() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_unsized(Bitmap::new(b"hello world"))?;
+    pod.as_mut().write_unsized(Bitmap::new(b"hello world"))?;
 
     assert_eq!(
-        pod.as_ref().next::<OwnedBitmap>()?.as_bytes(),
+        pod.as_ref().read_sized::<OwnedBitmap>()?.as_bytes(),
         b"hello world"
     );
     Ok(())
 }
 
 #[inline]
-fn push_none() -> Result<Pod<impl AsSlice>, Error> {
+fn write_none() -> Result<Pod<impl AsSlice>, Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_none()?;
+    pod.as_mut().write_none()?;
     Ok(pod.into_pod())
 }
 
@@ -71,10 +71,10 @@ fn test_push_decode_u64() -> Result<(), Error> {
 #[test]
 fn test_write_overflow() -> Result<(), Error> {
     let mut pod = Builder::new(ArrayBuf::<8>::new());
-    assert!(pod.as_mut().push_none().is_ok());
+    assert!(pod.as_mut().write_none().is_ok());
 
     assert_eq!(
-        pod.as_mut().push_none().unwrap_err().kind(),
+        pod.as_mut().write_none().unwrap_err().kind(),
         ErrorKind::CapacityError(CapacityError)
     );
     Ok(())
@@ -118,12 +118,12 @@ fn test_array_underflow() -> Result<(), Error> {
 
 #[test]
 fn test_none() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
-    assert!(pod.as_ref().next_option()?.is_none());
+    assert!(pod.as_ref().read_option()?.is_none());
 
     assert_eq!(
-        pod.as_ref().next::<bool>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -132,10 +132,10 @@ fn test_none() -> Result<(), Error> {
 
 #[test]
 fn test_bool() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<bool>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<bool>().unwrap_err().kind(),
         expected(Type::BOOL, Type::NONE)
     );
 
@@ -144,10 +144,10 @@ fn test_bool() -> Result<(), Error> {
 
 #[test]
 fn test_int() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<i32>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<i32>().unwrap_err().kind(),
         expected(Type::INT, Type::NONE)
     );
 
@@ -156,10 +156,10 @@ fn test_int() -> Result<(), Error> {
 
 #[test]
 fn test_long() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<i64>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<i64>().unwrap_err().kind(),
         expected(Type::LONG, Type::NONE)
     );
 
@@ -168,10 +168,10 @@ fn test_long() -> Result<(), Error> {
 
 #[test]
 fn test_float() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<f32>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<f32>().unwrap_err().kind(),
         expected(Type::FLOAT, Type::NONE)
     );
 
@@ -180,10 +180,10 @@ fn test_float() -> Result<(), Error> {
 
 #[test]
 fn test_double() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<f64>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<f64>().unwrap_err().kind(),
         expected(Type::DOUBLE, Type::NONE)
     );
 
@@ -192,10 +192,10 @@ fn test_double() -> Result<(), Error> {
 
 #[test]
 fn test_string() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next_unsized::<CStr>().unwrap_err().kind(),
+        pod.as_ref().read_unsized::<CStr>().unwrap_err().kind(),
         expected(Type::STRING, Type::NONE)
     );
 
@@ -204,10 +204,10 @@ fn test_string() -> Result<(), Error> {
 
 #[test]
 fn test_bytes() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next_unsized::<[u8]>().unwrap_err().kind(),
+        pod.as_ref().read_unsized::<[u8]>().unwrap_err().kind(),
         expected(Type::BYTES, Type::NONE)
     );
 
@@ -216,10 +216,10 @@ fn test_bytes() -> Result<(), Error> {
 
 #[test]
 fn test_rectangle() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<Rectangle>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<Rectangle>().unwrap_err().kind(),
         expected(Type::RECTANGLE, Type::NONE)
     );
 
@@ -228,10 +228,10 @@ fn test_rectangle() -> Result<(), Error> {
 
 #[test]
 fn test_fraction() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<Fraction>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<Fraction>().unwrap_err().kind(),
         expected(Type::FRACTION, Type::NONE)
     );
 
@@ -240,17 +240,17 @@ fn test_fraction() -> Result<(), Error> {
 
 #[test]
 fn test_bitmap() -> Result<(), Error> {
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next_unsized::<Bitmap>().unwrap_err().kind(),
+        pod.as_ref().read_unsized::<Bitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
-    let pod = push_none()?;
+    let pod = write_none()?;
 
     assert_eq!(
-        pod.as_ref().next::<OwnedBitmap>().unwrap_err().kind(),
+        pod.as_ref().read_sized::<OwnedBitmap>().unwrap_err().kind(),
         expected(Type::BITMAP, Type::NONE)
     );
 
@@ -261,21 +261,21 @@ fn test_bitmap() -> Result<(), Error> {
 fn test_array() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
-        array.child().push_unsized("foo")?;
-        array.child().push_unsized("bar")?;
-        array.child().push_unsized("baz")?;
+    pod.as_mut().write_unsized_array(Type::STRING, 4, |array| {
+        array.child().write_unsized("foo")?;
+        array.child().write_unsized("bar")?;
+        array.child().write_unsized("baz")?;
         Ok(())
     })?;
 
-    let mut array = pod.as_ref().next_array()?;
+    let mut array = pod.as_ref().read_array()?;
 
     assert_eq!(array.len(), 3);
-    assert_eq!(array.next().unwrap().next_unsized::<CStr>()?, c"foo");
+    assert_eq!(array.next().unwrap().read_unsized::<CStr>()?, c"foo");
     assert_eq!(array.len(), 2);
-    assert_eq!(array.next().unwrap().next_unsized::<CStr>()?, c"bar");
+    assert_eq!(array.next().unwrap().read_unsized::<CStr>()?, c"bar");
     assert_eq!(array.len(), 1);
-    assert_eq!(array.next().unwrap().next_unsized::<CStr>()?, c"baz");
+    assert_eq!(array.next().unwrap().read_unsized::<CStr>()?, c"baz");
 
     assert!(array.is_empty());
     assert_eq!(array.len(), 0);
@@ -286,19 +286,19 @@ fn test_array() -> Result<(), Error> {
 fn array_padded_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_array(Type::INT, |array| {
-        array.child().push(1i32)?;
-        array.child().push(2i32)?;
-        array.child().push(3i32)?;
+    pod.as_mut().write_array(Type::INT, |array| {
+        array.child().write_sized(1i32)?;
+        array.child().write_sized(2i32)?;
+        array.child().write_sized(3i32)?;
         Ok(())
     })?;
 
-    let mut array = pod.as_ref().next_array()?;
+    let mut array = pod.as_ref().read_array()?;
 
     assert!(!array.is_empty());
-    assert_eq!(array.next().unwrap().next::<i32>()?, 1i32);
-    assert_eq!(array.next().unwrap().next::<i32>()?, 2i32);
-    assert_eq!(array.next().unwrap().next::<i32>()?, 3i32);
+    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
+    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
+    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
     assert!(array.is_empty());
     Ok(())
 }
@@ -307,22 +307,22 @@ fn array_padded_decode() -> Result<(), Error> {
 fn array_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_array(Type::LONG, |array| {
-        array.child().push(1i64)?;
-        array.child().push(2i64)?;
-        array.child().push(3i64)?;
+    pod.as_mut().write_array(Type::LONG, |array| {
+        array.child().write_sized(1i64)?;
+        array.child().write_sized(2i64)?;
+        array.child().write_sized(3i64)?;
         Ok(())
     })?;
 
-    let mut array = pod.as_ref().next_array()?;
+    let mut array = pod.as_ref().read_array()?;
 
     assert!(!array.is_empty());
     assert_eq!(array.len(), 3);
-    assert_eq!(array.next().unwrap().next::<i64>()?, 1i64);
+    assert_eq!(array.next().unwrap().read_sized::<i64>()?, 1i64);
     assert_eq!(array.len(), 2);
-    assert_eq!(array.next().unwrap().next::<i64>()?, 2i64);
+    assert_eq!(array.next().unwrap().read_sized::<i64>()?, 2i64);
     assert_eq!(array.len(), 1);
-    assert_eq!(array.next().unwrap().next::<i64>()?, 3i64);
+    assert_eq!(array.next().unwrap().read_sized::<i64>()?, 3i64);
     assert!(array.is_empty());
     assert!(array.next().is_none());
     Ok(())
@@ -332,20 +332,20 @@ fn array_decode() -> Result<(), Error> {
 fn choice_decode() -> Result<(), Error> {
     let mut pod = crate::array();
     pod.as_mut()
-        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-            choice.child().push(10i32)?;
-            choice.child().push(0i32)?;
-            choice.child().push(30i32)?;
+        .write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+            choice.child().write_sized(10i32)?;
+            choice.child().write_sized(0i32)?;
+            choice.child().write_sized(30i32)?;
             Ok(())
         })?;
 
-    let mut choice = pod.as_ref().next_choice()?;
+    let mut choice = pod.as_ref().read_choice()?;
 
     assert_eq!(choice.choice_type(), ChoiceType::RANGE);
     assert_eq!(choice.child_type(), Type::INT);
-    assert_eq!(choice.next().unwrap().next::<i32>()?, 10i32);
-    assert_eq!(choice.next().unwrap().next::<i32>()?, 0i32);
-    assert_eq!(choice.next().unwrap().next::<i32>()?, 30i32);
+    assert_eq!(choice.next().unwrap().read_sized::<i32>()?, 10i32);
+    assert_eq!(choice.next().unwrap().read_sized::<i32>()?, 0i32);
+    assert_eq!(choice.next().unwrap().read_sized::<i32>()?, 30i32);
     Ok(())
 }
 
@@ -353,14 +353,14 @@ fn choice_decode() -> Result<(), Error> {
 fn object_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_object(10, 20, |obj| {
-        obj.property(1).flags(0b001).push(1i32)?;
-        obj.property(2).flags(0b010).push(2i32)?;
-        obj.property(3).flags(0b100).push(3i32)?;
+    pod.as_mut().write_object(10, 20, |obj| {
+        obj.property(1).flags(0b001).write_sized(1i32)?;
+        obj.property(2).flags(0b010).write_sized(2i32)?;
+        obj.property(3).flags(0b100).write_sized(3i32)?;
         Ok(())
     })?;
 
-    let obj = pod.as_ref().next_object()?.to_owned()?;
+    let obj = pod.as_ref().read_object()?.to_owned()?;
 
     let mut obj = obj.as_ref();
     assert!(!obj.is_empty());
@@ -368,17 +368,17 @@ fn object_decode() -> Result<(), Error> {
     let p = obj.property()?;
     assert_eq!(p.key(), 1);
     assert_eq!(p.flags(), 0b001);
-    assert_eq!(p.value().next::<i32>()?, 1);
+    assert_eq!(p.value().read_sized::<i32>()?, 1);
 
     let p = obj.property()?;
     assert_eq!(p.key(), 2);
     assert_eq!(p.flags(), 0b010);
-    assert_eq!(p.value().next::<i32>()?, 2);
+    assert_eq!(p.value().read_sized::<i32>()?, 2);
 
     let p = obj.property()?;
     assert_eq!(p.key(), 3);
     assert_eq!(p.flags(), 0b100);
-    assert_eq!(p.value().next::<i32>()?, 3);
+    assert_eq!(p.value().read_sized::<i32>()?, 3);
 
     assert!(obj.is_empty());
     Ok(())
@@ -388,22 +388,22 @@ fn object_decode() -> Result<(), Error> {
 fn array_string_decode() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_unsized_array(Type::STRING, 4, |array| {
-        array.child().push_unsized("foo")?;
-        array.child().push_unsized("bar")?;
-        array.child().push_unsized("baz")?;
+    pod.as_mut().write_unsized_array(Type::STRING, 4, |array| {
+        array.child().write_unsized("foo")?;
+        array.child().write_unsized("bar")?;
+        array.child().write_unsized("baz")?;
         Ok(())
     })?;
 
     assert_eq!(pod.as_buf().len(), 32);
 
-    let mut array = pod.as_ref().next_array()?;
+    let mut array = pod.as_ref().read_array()?;
     assert_eq!(array.len(), 3);
-    assert_eq!(array.next().unwrap().next_unsized::<str>()?, "foo");
+    assert_eq!(array.next().unwrap().read_unsized::<str>()?, "foo");
     assert_eq!(array.len(), 2);
-    assert_eq!(array.next().unwrap().next_unsized::<str>()?, "bar");
+    assert_eq!(array.next().unwrap().read_unsized::<str>()?, "bar");
     assert_eq!(array.len(), 1);
-    assert_eq!(array.next().unwrap().next_unsized::<str>()?, "baz");
+    assert_eq!(array.next().unwrap().read_unsized::<str>()?, "baz");
     assert_eq!(array.len(), 0);
     assert!(array.is_empty());
     assert!(array.next().is_none());
@@ -413,26 +413,26 @@ fn array_string_decode() -> Result<(), Error> {
 #[test]
 fn string_decode() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_unsized("foo")?;
-    assert_eq!(pod.as_ref().next_unsized::<str>()?, "foo");
+    pod.as_mut().write_unsized("foo")?;
+    assert_eq!(pod.as_ref().read_unsized::<str>()?, "foo");
     Ok(())
 }
 
 #[test]
 fn sequence_decode() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_sequence(|seq| {
-        seq.control().push(1i32)?;
-        seq.control().push(2i32)?;
-        seq.control().push(3i32)?;
+    pod.as_mut().write_sequence(|seq| {
+        seq.control().write_sized(1i32)?;
+        seq.control().write_sized(2i32)?;
+        seq.control().write_sized(3i32)?;
         Ok(())
     })?;
 
-    let mut seq = pod.as_ref().next_sequence()?;
+    let mut seq = pod.as_ref().read_sequence()?;
     assert!(!seq.is_empty());
-    assert_eq!(seq.control()?.value().next::<i32>()?, 1i32);
-    assert_eq!(seq.control()?.value().next::<i32>()?, 2i32);
-    assert_eq!(seq.control()?.value().next::<i32>()?, 3i32);
+    assert_eq!(seq.control()?.value().read_sized::<i32>()?, 1i32);
+    assert_eq!(seq.control()?.value().read_sized::<i32>()?, 2i32);
+    assert_eq!(seq.control()?.value().read_sized::<i32>()?, 3i32);
     assert!(seq.is_empty());
     Ok(())
 }
@@ -441,14 +441,14 @@ fn sequence_decode() -> Result<(), Error> {
 fn test_format_object() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_object(10, 20, |obj| {
-        obj.property(1).flags(0b100).push(1i32)?;
-        obj.property(2).flags(0b010).push(2i32)?;
+    pod.as_mut().write_object(10, 20, |obj| {
+        obj.property(1).flags(0b100).write_sized(1i32)?;
+        obj.property(2).flags(0b010).write_sized(2i32)?;
 
-        obj.property(3).flags(0b001).push_struct(|st| {
-            st.field().push(*b"hello world")?;
-            st.field().push(Rectangle::new(800, 600))?;
-            st.field().push(*b"goodbye world")?;
+        obj.property(3).flags(0b001).write_struct(|st| {
+            st.field().write_sized(*b"hello world")?;
+            st.field().write_sized(Rectangle::new(800, 600))?;
+            st.field().write_sized(*b"goodbye world")?;
             Ok(())
         })
     })?;
@@ -482,10 +482,10 @@ fn test_format_object() -> Result<(), Error> {
 fn test_format_array() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_array(Type::INT, |array| {
-        array.child().push(1i32)?;
-        array.child().push(2i32)?;
-        array.child().push(3i32)?;
+    pod.as_mut().write_array(Type::INT, |array| {
+        array.child().write_sized(1i32)?;
+        array.child().write_sized(2i32)?;
+        array.child().write_sized(3i32)?;
         Ok(())
     })?;
 
@@ -500,10 +500,10 @@ fn test_format_array() -> Result<(), Error> {
 fn test_format_buggy() -> Result<(), Error> {
     let mut pod = crate::array();
     pod.as_mut()
-        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-            choice.child().push(10i32)?;
-            choice.child().push(30i32)?;
-            choice.child().push(0i32)?;
+        .write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+            choice.child().write_sized(10i32)?;
+            choice.child().write_sized(30i32)?;
+            choice.child().write_sized(0i32)?;
             Ok(())
         })?;
 
@@ -543,10 +543,10 @@ fn test_realloc() -> Result<(), Error> {
 fn choice_format() -> Result<(), Error> {
     let mut pod = crate::array();
     pod.as_mut()
-        .push_choice(ChoiceType::RANGE, Type::INT, |choice| {
-            choice.child().push(10i32)?;
-            choice.child().push(0i32)?;
-            choice.child().push(30i32)?;
+        .write_choice(ChoiceType::RANGE, Type::INT, |choice| {
+            choice.child().write_sized(10i32)?;
+            choice.child().write_sized(0i32)?;
+            choice.child().write_sized(30i32)?;
             Ok(())
         })?;
 
@@ -561,26 +561,26 @@ fn choice_format() -> Result<(), Error> {
 fn decode_bytes_array() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_array(Type::INT, |array| {
-        array.child().push(1i32)?;
-        array.child().push(2i32)?;
-        array.child().push(3i32)?;
+    pod.as_mut().write_array(Type::INT, |array| {
+        array.child().write_sized(1i32)?;
+        array.child().write_sized(2i32)?;
+        array.child().write_sized(3i32)?;
         Ok(())
     })?;
 
-    let array = pod.as_ref().next_array()?;
+    let array = pod.as_ref().read_array()?;
 
     let mut pod2 = crate::array();
     pod2.as_mut().write(array)?;
 
-    let mut array = pod2.as_ref().next_array()?;
+    let mut array = pod2.as_ref().read_array()?;
 
     assert!(!array.is_empty());
     assert_eq!(array.len(), 3);
 
-    assert_eq!(array.next().unwrap().next::<i32>()?, 1i32);
-    assert_eq!(array.next().unwrap().next::<i32>()?, 2i32);
-    assert_eq!(array.next().unwrap().next::<i32>()?, 3i32);
+    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
+    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
+    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
 
     assert!(array.is_empty());
     assert_eq!(array.len(), 0);
