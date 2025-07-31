@@ -1,3 +1,4 @@
+mod choice;
 mod struct_;
 
 use core::ffi::CStr;
@@ -570,7 +571,7 @@ fn decode_bytes_array() -> Result<(), Error> {
     let array = pod.as_ref().next_array()?;
 
     let mut pod2 = crate::array();
-    pod2.as_mut().encode(array)?;
+    pod2.as_mut().write(array)?;
 
     let mut array = pod2.as_ref().next_array()?;
 

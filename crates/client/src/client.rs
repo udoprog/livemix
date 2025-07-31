@@ -125,7 +125,7 @@ impl Client {
 
             st.field().push_struct(|props| {
                 props.field().push(PROPS.len() as u32)?;
-                props.encode(PROPS)?;
+                props.write(PROPS)?;
                 Ok(())
             })?;
 
@@ -147,7 +147,7 @@ impl Client {
                 st.field().push(props.len() as u32)?;
 
                 for (key, value) in props.iter() {
-                    st.encode((key, value))?;
+                    st.write((key, value))?;
                 }
 
                 Ok(())
@@ -223,7 +223,7 @@ impl Client {
 
             for (_, params) in params {
                 for param in params {
-                    st.field().encode(param.as_ref())?;
+                    st.field().write(param.as_ref())?;
                 }
             }
 
@@ -235,10 +235,10 @@ impl Client {
                     st.field().push(node_flags)?;
 
                     st.field().push(PROPS.len() as u32)?;
-                    st.encode(PROPS)?;
+                    st.write(PROPS)?;
 
                     st.field().push(PARAMS.len() as u32)?;
-                    st.encode(PARAMS)?;
+                    st.write(PARAMS)?;
                     Ok(())
                 })?;
             } else {
@@ -286,7 +286,7 @@ impl Client {
         let port_flags = flags::Port::NONE;
 
         pod.as_mut().push_struct(|st| {
-            st.encode((direction, port_id, change_mask))?;
+            st.write((direction, port_id, change_mask))?;
 
             // Parameters.
             st.field()
@@ -294,7 +294,7 @@ impl Client {
 
             for (_, params) in params {
                 for param in params {
-                    st.field().encode(param.value.as_ref())?;
+                    st.field().write(param.value.as_ref())?;
                 }
             }
 
@@ -317,7 +317,7 @@ impl Client {
 
                     // Parameters.
                     st.field().push(PARAMS.len() as u32)?;
-                    st.encode(PARAMS)?;
+                    st.write(PARAMS)?;
                     Ok(())
                 })?;
             } else {
@@ -336,7 +336,7 @@ impl Client {
     pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<()> {
         let mut pod = pod::array();
 
-        pod.as_mut().push_struct(|st| st.encode(active))?;
+        pod.as_mut().push_struct(|st| st.write(active))?;
 
         self.connection
             .request(id, op::CLIENT_NODE_SET_ACTIVE, pod.as_ref())?;

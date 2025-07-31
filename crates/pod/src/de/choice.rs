@@ -3,6 +3,8 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::Pod;
+use crate::Readable;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
@@ -226,6 +228,41 @@ where
         self.remaining == 0
     }
 
+    /// Decode from the struct using the [`Readable`] trait.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{ChoiceType, Pod, Type};
+    ///
+    /// let mut pod = pod::array();
+    ///
+    /// pod.as_mut().push_choice(ChoiceType::RANGE, Type::INT, |choice| {
+    ///     choice.child().push(10i32)?;
+    ///     choice.child().push(0i32)?;
+    ///     choice.child().push(30i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let mut choice = pod.as_ref().next_choice()?;
+    ///
+    /// assert_eq!(choice.choice_type(), ChoiceType::RANGE);
+    /// assert_eq!(choice.len(), 3);
+    /// let (a, b, c) = choice.read::<(i32, i32, i32)>()?;
+    ///
+    /// assert_eq!(a, 10);
+    /// assert_eq!(b, 0);
+    /// assert_eq!(c, 30);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn read<T>(&mut self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        T::read_from(Pod::packed(self.buf.borrow_mut()))
+    }
+
     /// Get the next element in the array.
     ///
     /// # Examples
@@ -261,8 +298,8 @@ where
             return None;
         }
 
-        let tail = self.buf.split(self.child_size)?;
-        let pod = TypedPod::packed(tail, self.child_size, self.child_type);
+        let head = self.buf.split(self.child_size)?;
+        let pod = TypedPod::packed(head, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }
@@ -380,7 +417,7 @@ where
 /// let mut choice = pod.as_ref().next_choice()?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(choice)?;
+/// pod2.as_mut().write(choice)?;
 ///
 /// let mut choice = pod2.as_ref().next_choice()?;
 ///

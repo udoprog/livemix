@@ -3,65 +3,65 @@ use crate::{BuildPod, Builder, Error, Writer};
 /// Helper trait to more easily encode values into a [`Builder`].
 ///
 /// This is used through the [`Builder::encode`] and similar methods.
-pub trait EncodeInto {
+pub trait Writable {
     #[doc(hidden)]
-    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error>;
+    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error>;
 }
 
-impl<T> EncodeInto for &T
+impl<T> Writable for &T
 where
-    T: ?Sized + EncodeInto,
+    T: ?Sized + Writable,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
-        (*self).encode_into(pod)
+    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+        (*self).write_into(pod)
     }
 }
 
-/// Implementation of [`EncodeInto`] for an array.
+/// Implementation of [`Writable`] for an array.
 ///
 /// # Examples
 ///
 /// ```
 /// use pod::Builder;
 /// ```
-impl<T, const N: usize> EncodeInto for [T; N]
+impl<T, const N: usize> Writable for [T; N]
 where
-    T: EncodeInto,
+    T: Writable,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
         let mut pod = pod.into_envelope()?;
 
         for item in self {
-            item.encode_into(pod.as_mut())?;
+            item.write_into(pod.as_mut())?;
         }
 
         Ok(())
     }
 }
 
-/// Implementation of [`EncodeInto`] for the empty tuple, which will be encoded
+/// Implementation of [`Writable`] for the empty tuple, which will be encoded
 /// as an array.
 ///
 /// # Examples
-impl<T> EncodeInto for &[T]
+impl<T> Writable for &[T]
 where
-    T: EncodeInto,
+    T: Writable,
 {
     #[inline]
-    fn encode_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+    fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
         let mut pod = pod.into_envelope()?;
 
         for item in self.iter() {
-            item.encode_into(pod.as_mut())?;
+            item.write_into(pod.as_mut())?;
         }
 
         Ok(())
     }
 }
 
-/// Implementation of [`EncodeInto`] for the empty tuple, which will be encoded
+/// Implementation of [`Writable`] for the empty tuple, which will be encoded
 /// as an empty struct.
 ///
 /// # Examples
@@ -70,23 +70,23 @@ where
 /// use pod::Builder;
 ///
 /// let mut pod = Builder::array();
-/// pod.as_mut().push_struct(|st| st.encode(()))?;
+/// pod.as_mut().push_struct(|st| st.write(()))?;
 ///
 /// let mut pod = pod.as_ref();
 /// let mut st = pod.next_struct()?;
 /// assert!(st.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl EncodeInto for () {
+impl Writable for () {
     #[inline]
-    fn encode_into(&self, _: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+    fn write_into(&self, _: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
         Ok(())
     }
 }
 
 macro_rules! encode_into_tuple {
     ($count:expr $(, $ident:ident, $var:ident)*) => {
-        /// Implementation of [`EncodeInto`] for tuples, which will be encoded as a struct.
+        /// Implementation of [`Writable`] for tuples, which will be encoded as a struct.
         ///
         /// # Examples
         ///
@@ -94,7 +94,7 @@ macro_rules! encode_into_tuple {
         /// use pod::Builder;
         ///
         /// let mut pod = Builder::array();
-        /// pod.as_mut().push_struct(|st| st.encode((10i32, "hello world", [1u32, 2u32])))?;
+        /// pod.as_mut().push_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
         ///
         /// let mut pod = pod.as_ref();
         /// let mut st = pod.next_struct()?;
@@ -106,15 +106,15 @@ macro_rules! encode_into_tuple {
         /// assert!(st.is_empty());
         /// # Ok::<_, pod::Error>(())
         /// ```
-        impl<$($ident,)*> EncodeInto for ($($ident,)*)
+        impl<$($ident,)*> Writable for ($($ident,)*)
         where
-            $($ident: EncodeInto,)*
+            $($ident: Writable,)*
         {
             #[inline]
-            fn encode_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
+            fn write_into(&self, pod: Builder<impl Writer, impl BuildPod>) -> Result<(), Error> {
                 let ($(ref $var,)*) = *self;
                 let mut pod = pod.into_envelope()?;
-                $($var.encode_into(pod.as_mut())?;)*
+                $($var.write_into(pod.as_mut())?;)*
                 Ok(())
             }
         }

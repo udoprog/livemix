@@ -4,8 +4,8 @@ use core::fmt;
 use crate::buf::AllocError;
 use crate::de::{Array, Choice, Object, Sequence, Struct};
 use crate::{
-    ArrayBuf, AsReader, Decode, DecodeFrom, DecodeUnsized, EncodeUnsized, Error, PackedPod,
-    ReadPod, Reader, Type, TypedPod, Visitor, Writer,
+    ArrayBuf, AsReader, Decode, DecodeUnsized, EncodeUnsized, Error, PackedPod, ReadPod, Readable,
+    Reader, Type, TypedPod, Visitor, Writer,
 };
 #[cfg(feature = "alloc")]
 use crate::{DynamicBuf, PaddedPod};
@@ -215,7 +215,7 @@ where
     /// ```
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().encode((1, 2, "hello world", 4));
+    /// pod.as_mut().write((1, 2, "hello world", 4));
     ///
     /// let mut pod = pod.as_ref();
     /// assert_eq!(pod.as_mut().next::<i32>()?, 1);
@@ -236,7 +236,7 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().encode((10i32, "hello world", [1u32, 2u32]))?;
+    /// pod.as_mut().write((10i32, "hello world", [1u32, 2u32]))?;
     ///
     /// let (a, s, [c, d]) = pod.as_ref().decode::<(i32, String, [u32; 2])>()?;
     ///
@@ -246,11 +246,11 @@ where
     /// assert_eq!(d, 2u32);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn decode<T>(self) -> Result<T, Error>
+    pub fn read<T>(self) -> Result<T, Error>
     where
-        T: DecodeFrom<'de>,
+        T: Readable<'de>,
     {
-        T::decode_from(self)
+        T::read_from(self)
     }
 
     /// Encode a value from the pod.
@@ -668,7 +668,7 @@ where
     /// use pod::{Pod, Type};
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().encode(1);
+    /// pod.as_mut().write(1);
     ///
     /// let mut pod = pod.as_ref();
     /// assert!(!pod.is_empty());
@@ -741,7 +741,7 @@ where
 /// })?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(pod)?;
+/// pod2.as_mut().write(pod)?;
 ///
 /// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());

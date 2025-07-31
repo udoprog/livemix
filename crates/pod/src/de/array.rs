@@ -301,7 +301,7 @@ where
 ///
 /// let array = pod.as_ref().next_array()?;
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(array)?;
+/// pod2.as_mut().write(array)?;
 ///
 /// let mut array = pod2.as_ref().next_array()?;
 ///

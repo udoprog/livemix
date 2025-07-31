@@ -7,7 +7,7 @@ use crate::{Error, Rectangle};
 #[test]
 fn unit() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| st.encode(()))?;
+    pod.as_mut().push_struct(|st| st.write(()))?;
 
     let st = pod.as_ref().next_struct()?;
     assert!(st.is_empty());
@@ -17,7 +17,7 @@ fn unit() -> Result<(), Error> {
 #[test]
 fn encode_ints() -> Result<(), Error> {
     let mut pod = crate::array();
-    pod.as_mut().push_struct(|st| st.encode((1, 2, 3)))?;
+    pod.as_mut().push_struct(|st| st.write((1, 2, 3)))?;
 
     let mut st = pod.as_ref().next_struct()?;
     assert_eq!(st.field()?.next::<i32>()?, 1i32);
@@ -38,7 +38,7 @@ fn decode_ints() -> Result<(), Error> {
     })?;
 
     let mut st = pod.as_ref().next_struct()?;
-    assert_eq!(st.decode::<(i32, i32, i32)>()?, (1, 2, 3));
+    assert_eq!(st.read::<(i32, i32, i32)>()?, (1, 2, 3));
     assert!(st.is_empty());
     Ok(())
 }
@@ -178,7 +178,7 @@ fn build_struct() -> Result<(), Error> {
 fn encode_unsized() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    pod.as_mut().push_struct(|st| st.encode(("foo", "bar")))?;
+    pod.as_mut().push_struct(|st| st.write(("foo", "bar")))?;
 
     let mut st = pod.as_ref().next_struct()?;
 
@@ -200,7 +200,7 @@ fn decode_unsized() -> Result<(), Error> {
     })?;
 
     let mut st = pod.as_ref().next_struct()?;
-    let (key, value) = st.decode::<(&str, &str)>()?;
+    let (key, value) = st.read::<(&str, &str)>()?;
 
     assert_eq!(key, "foo");
     assert_eq!(value, "bar");

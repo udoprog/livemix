@@ -1,4 +1,4 @@
-use crate::{BuildPod, Builder, EncodeInto, Error, Type, Writer};
+use crate::{BuildPod, Builder, Error, Type, Writable, Writer};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -28,7 +28,7 @@ where
         })
     }
 
-    /// Apply the given [`EncodeInto`] implementation to the contents of this
+    /// Apply the given [`Writable`] implementation to the contents of this
     /// struct.
     ///
     /// # Examples
@@ -37,17 +37,17 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| st.encode((1, 2, 3)))?;
+    /// pod.as_mut().push_struct(|st| st.write((1, 2, 3)))?;
     ///
     /// let mut pod = pod.as_ref();
     /// let mut st = pod.next_struct()?;
-    /// assert_eq!(st.decode::<(i32, i32, i32)>()?, (1, 2, 3));
+    /// assert_eq!(st.read::<(i32, i32, i32)>()?, (1, 2, 3));
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn encode(&mut self, value: impl EncodeInto) -> Result<(), Error> {
-        value.encode_into(Builder::new(self.writer.borrow_mut()))
+    pub fn write(&mut self, value: impl Writable) -> Result<(), Error> {
+        value.write_into(Builder::new(self.writer.borrow_mut()))
     }
 
     /// Add a field into the struct.

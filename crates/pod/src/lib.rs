@@ -35,11 +35,11 @@ pub mod utils;
 mod id;
 pub use self::id::{Id, RawId};
 
-mod encode_into;
-pub use self::encode_into::EncodeInto;
+mod write_into;
+pub use self::write_into::Writable;
 
-mod decode_from;
-pub use self::decode_from::DecodeFrom;
+mod read_from;
+pub use self::read_from::Readable;
 
 mod en;
 pub use self::en::{Encode, EncodeUnsized};

@@ -246,7 +246,7 @@ where
 /// let seq = pod.as_ref().next_sequence()?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(seq)?;
+/// pod2.as_mut().write(seq)?;
 ///
 /// let seq = pod2.as_ref().next_sequence()?;
 ///

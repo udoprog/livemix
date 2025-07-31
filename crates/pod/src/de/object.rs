@@ -270,7 +270,7 @@ where
 /// let obj = pod.as_ref().next_object()?.to_owned()?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(obj)?;
+/// pod2.as_mut().write(obj)?;
 ///
 /// let obj = pod2.as_ref().next_object()?;
 ///

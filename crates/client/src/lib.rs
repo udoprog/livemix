@@ -1,4 +1,6 @@
 #![no_std]
+// TODO: REMOVE THIS ONCE THE CRATE IS READY
+#![allow(unused)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;

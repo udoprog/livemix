@@ -9,7 +9,7 @@ use crate::SplitReader;
 use crate::buf::AllocError;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
 use crate::error::ErrorKind;
-use crate::{ArrayBuf, Encode, EncodeInto};
+use crate::{ArrayBuf, Encode, Writable};
 use crate::{
     AsReader, BuildPod, ChildPod, ChoiceType, EncodeUnsized, Error, PaddedPod, Pod, RawId, Reader,
     Type, TypedPod, Writer,
@@ -167,10 +167,10 @@ where
     /// ```
     /// let mut pod = pod::array();
     /// pod.as_mut().push(10i32)?;
-    /// assert_eq!(pod.take().decode::<i32>()?, 10);
+    /// assert_eq!(pod.take().read::<i32>()?, 10);
     ///
     /// pod.as_mut().push(42i32)?;
-    /// assert_eq!(pod.take().decode::<i32>()?, 42);
+    /// assert_eq!(pod.take().read::<i32>()?, 42);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -289,7 +289,7 @@ where
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().push_struct(|st| st.encode((10i32, "hello world", [1u32, 2u32])))?;
+    /// pod.as_mut().push_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
     ///
     /// let mut pod = pod.as_ref();
     /// let mut st = pod.next_struct()?;
@@ -301,11 +301,11 @@ where
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn encode<T>(self, value: T) -> Result<(), Error>
+    pub fn write<T>(self, value: T) -> Result<(), Error>
     where
-        T: EncodeInto,
+        T: Writable,
     {
-        value.encode_into(self)
+        value.write_into(self)
     }
 
     /// Encode a value from the pod.
@@ -686,7 +686,7 @@ where
 /// })?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(pod)?;
+/// pod2.as_mut().write(pod)?;
 ///
 /// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());

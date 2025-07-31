@@ -746,7 +746,7 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_done_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
-        let (id, seq) = pod.next_struct()?.decode::<(u32, u32)>()?;
+        let (id, seq) = pod.next_struct()?.read::<(u32, u32)>()?;
 
         match id {
             GET_REGISTRY_SYNC => {
@@ -802,7 +802,7 @@ impl State {
     fn core_add_mem_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let (id, ty, fd, flags) = pod
             .next_struct()?
-            .decode::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
+            .read::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
 
         let fd = self.take_fd(fd)?;
 
@@ -862,10 +862,9 @@ impl State {
     #[tracing::instrument(skip_all)]
     fn registry_global(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let (id, permissions, ty, version, mut props) =
-            pod.decode::<Struct<_>>()?
-                .decode::<(_, _, _, _, Struct<_>)>()?;
+            pod.read::<Struct<_>>()?.read::<(_, _, _, _, Struct<_>)>()?;
 
-        let n_items = props.decode::<u32>()?;
+        let n_items = props.read::<u32>()?;
 
         let index = self.registries.vacant_key();
         let mut registry = RegistryState::default();
@@ -876,7 +875,7 @@ impl State {
         registry.version = version;
 
         for _ in 0..n_items {
-            let (key, value) = props.decode::<(&str, &str)>()?;
+            let (key, value) = props.read::<(&str, &str)>()?;
             registry.properties.insert(key.to_owned(), value.to_owned());
         }
 
@@ -1142,12 +1141,12 @@ impl State {
         let mut st = pod.next_struct()?;
 
         let (direction, port_id, mix_id, flags, n_buffers) =
-            st.decode::<(consts::Direction, u32, u32, u32, u32)>()?;
+            st.read::<(consts::Direction, u32, u32, u32, u32)>()?;
 
         let mut buffers = Vec::new();
 
         for _ in 0..n_buffers {
-            let (mem_id, offset, size, n_metas) = st.decode::<(u32, i32, u32, u32)>()?;
+            let (mem_id, offset, size, n_metas) = st.read::<(u32, i32, u32, u32)>()?;
             let region = self
                 .memory
                 .map(mem_id, offset as isize, size as usize)
@@ -1156,17 +1155,17 @@ impl State {
             let mut metas = Vec::new();
 
             for _ in 0..n_metas {
-                let (ty, size) = st.decode::<(id::Meta, u32)>()?;
+                let (ty, size) = st.read::<(id::Meta, u32)>()?;
                 metas.push(buffer::Meta { ty, size });
             }
 
             let mut datas = Vec::new();
 
-            let n_datas = st.decode::<u32>()?;
+            let n_datas = st.read::<u32>()?;
 
             for _ in 0..n_datas {
                 let (ty, data, flags, offset, max_size) =
-                    st.decode::<(id::DataType, u32, flags::DataFlag, i32, u32)>()?;
+                    st.read::<(id::DataType, u32, flags::DataFlag, i32, u32)>()?;
 
                 let Ok(max_size) = usize::try_from(max_size) else {
                     bail!("Invalid max size {max_size} for data type {ty:?}");

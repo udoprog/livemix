@@ -37,6 +37,7 @@ impl PortParam {
 #[derive(Debug)]
 pub struct Port {
     id: u32,
+    dir: consts::Direction,
     modified: bool,
     pub name: String,
     buffers: Option<Buffers>,
@@ -130,13 +131,14 @@ impl Ports {
     }
 
     /// Insert a new port in the specified direction.
-    pub(crate) fn insert(&mut self, direction: consts::Direction) -> Result<&mut Port> {
-        let ports = self.get_direction_mut(direction)?;
+    pub(crate) fn insert(&mut self, dir: consts::Direction) -> Result<&mut Port> {
+        let ports = self.get_direction_mut(dir)?;
 
         let id = ports.len() as u32;
 
         let mut port = Port {
             id,
+            dir,
             modified: true,
             name: String::new(),
             buffers: None,
@@ -219,16 +221,6 @@ impl Ports {
             port.params.insert(Param::IO, params);
         }
 
-        /*
-                       param = spa_pod_builder_add_object(&b,
-                       SPA_TYPE_OBJECT_ParamBuffers, id,
-                       SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(1, 1, 32),
-                       SPA_PARAM_BUFFERS_blocks,  SPA_POD_Int(1),
-                       SPA_PARAM_BUFFERS_size,    SPA_POD_CHOICE_RANGE_Int(
-                                                       BUFFER_SAMPLES * sizeof(float), 32, INT32_MAX),
-                       SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(sizeof(float)));
-        */
-
         pod.as_mut()
             .push_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
                 obj.property(ParamBuffers::BUFFERS).push_choice(
@@ -301,19 +293,21 @@ impl Ports {
         Ok(port)
     }
 
-    fn get_direction(&self, direction: consts::Direction) -> Result<&Vec<Port>> {
-        match direction {
+    #[inline]
+    fn get_direction(&self, dir: consts::Direction) -> Result<&Vec<Port>> {
+        match dir {
             consts::Direction::INPUT => Ok(&self.input_ports),
             consts::Direction::OUTPUT => Ok(&self.output_ports),
-            directin => panic!("Unknown port direction: {directin:?}"),
+            dir => panic!("Unknown port direction: {dir:?}"),
         }
     }
 
-    fn get_direction_mut(&mut self, direction: consts::Direction) -> Result<&mut Vec<Port>> {
-        match direction {
+    #[inline]
+    fn get_direction_mut(&mut self, dir: consts::Direction) -> Result<&mut Vec<Port>> {
+        match dir {
             consts::Direction::INPUT => Ok(&mut self.input_ports),
             consts::Direction::OUTPUT => Ok(&mut self.output_ports),
-            directin => panic!("Unknown port direction: {directin:?}"),
+            dir => panic!("Unknown port direction: {dir:?}"),
         }
     }
 }

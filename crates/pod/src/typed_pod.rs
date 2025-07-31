@@ -139,7 +139,7 @@ where
     /// ```
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().encode((1, 2, "hello world", 4));
+    /// pod.as_mut().write((1, 2, "hello world", 4));
     ///
     /// let mut pod = pod.as_ref();
     /// assert_eq!(pod.as_mut().into_typed()?.next::<i32>()?, 1);
@@ -550,7 +550,7 @@ where
     /// use pod::{Pod, Type};
     /// let mut pod = pod::array();
     ///
-    /// pod.as_mut().encode(1);
+    /// pod.as_mut().write(1);
     ///
     /// let mut pod = pod.as_ref().into_typed()?;
     /// assert!(!pod.is_empty());
@@ -631,7 +631,7 @@ where
 /// })?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(pod.as_ref().into_typed()?)?;
+/// pod2.as_mut().write(pod.as_ref().into_typed()?)?;
 ///
 /// let mut obj = pod2.as_ref().next_pod()?.next_object()?;
 /// assert!(!obj.is_empty());

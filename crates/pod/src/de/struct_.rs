@@ -6,7 +6,7 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsReader, DecodeFrom, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPod, Reader, SliceBuf,
+    AsReader, EncodeUnsized, Error, PADDING, PackedPod, Pod, ReadPod, Readable, Reader, SliceBuf,
     Type, TypedPod, Writer,
 };
 
@@ -59,7 +59,7 @@ where
         self.buf.is_empty()
     }
 
-    /// Decode from the struct using the [`DecodeFrom`] trait.
+    /// Decode from the struct using the [`Readable`] trait.
     ///
     /// # Examples
     ///
@@ -73,20 +73,19 @@ where
     /// })?;
     ///
     /// let mut st = pod.as_ref().next_struct()?;
-    ///
-    /// assert!(!st.is_empty());
-    /// assert_eq!(st.field()?.next::<i32>()?, 1i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 2i32);
-    /// assert_eq!(st.field()?.next::<i32>()?, 3i32);
+    /// let (a, b, c) = st.read::<(i32, i32, i32)>()?;
+    /// assert_eq!(a, 1);
+    /// assert_eq!(b, 2);
+    /// assert_eq!(c, 3);
     /// assert!(st.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn decode<T>(&mut self) -> Result<T, Error>
+    pub fn read<T>(&mut self) -> Result<T, Error>
     where
-        T: DecodeFrom<'de>,
+        T: Readable<'de>,
     {
-        T::decode_from(Pod::new(self.buf.borrow_mut()))
+        T::read_from(Pod::new(self.buf.borrow_mut()))
     }
 
     /// Decode the next field in the struct.
@@ -219,7 +218,7 @@ where
 /// let st = pod.as_ref().next_struct()?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().encode(st)?;
+/// pod2.as_mut().write(st)?;
 ///
 /// let mut st = pod2.as_ref().next_struct()?;
 ///
@@ -249,9 +248,9 @@ where
 
 crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsReader);
 
-impl<'de> DecodeFrom<'de> for Struct<SliceBuf<'de>> {
+impl<'de> Readable<'de> for Struct<SliceBuf<'de>> {
     #[inline]
-    fn decode_from(pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
+    fn read_from(pod: Pod<impl Reader<'de>, impl ReadPod>) -> Result<Self, Error> {
         Ok(pod.next_struct()?.into_slice())
     }
 }
