@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use anyhow::Result;
+use pod::AsReader;
 use pod::Object;
 use protocol::Connection;
 use protocol::consts;
@@ -184,7 +184,7 @@ impl Client {
         id: u32,
         max_input_ports: u32,
         max_output_ports: u32,
-        params: &BTreeMap<id::Param, Vec<Object<Box<[u64]>>>>,
+        params: &BTreeMap<id::Param, Vec<Object<impl AsReader>>>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
             (id::Param::ENUM_FORMAT, flags::Param::READWRITE),

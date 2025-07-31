@@ -140,6 +140,8 @@ where
         self.writer
             .write_at(self.header, &[size, Type::ARRAY.into_u32()])?;
 
+        // Arrays are packed, so once we've finished writing all the items we
+        // need to ensure it is correctly padded.
         self.writer.pad(PADDING)?;
         Ok(())
     }

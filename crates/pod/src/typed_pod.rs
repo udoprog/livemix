@@ -194,7 +194,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn visit_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
+    pub fn visit_unsized<T, V>(mut self, visitor: V) -> Result<V::Ok, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
         V: Visitor<'de, T>,
@@ -206,7 +206,9 @@ where
             }));
         }
 
-        T::read_content(self.buf, self.size, visitor)
+        let value = T::read_content(self.buf.borrow_mut(), self.size, visitor)?;
+        self.kind.unpad(self.buf)?;
+        Ok(value)
     }
 
     /// Read the next unsized value into the pod.
@@ -224,7 +226,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_unsized<T>(self) -> Result<&'de T, Error>
+    pub fn next_unsized<T>(mut self) -> Result<&'de T, Error>
     where
         T: ?Sized + DecodeUnsized<'de>,
     {
@@ -235,7 +237,9 @@ where
             }));
         }
 
-        T::read_borrowed(self.buf, self.size)
+        let value = T::read_borrowed(self.buf.borrow_mut(), self.size)?;
+        self.kind.unpad(self.buf)?;
+        Ok(value)
     }
 
     /// Read the next optional value.
@@ -307,9 +311,17 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_array(self) -> Result<Array<B>, Error> {
+    pub fn next_array(mut self) -> Result<Array<B::Split>, Error> {
         match self.ty {
-            Type::ARRAY => Array::from_reader(self.buf, self.size),
+            Type::ARRAY => {
+                let Some(buf) = self.buf.split(self.size) else {
+                    return Err(Error::new(ErrorKind::BufferUnderflow));
+                };
+
+                let array = Array::from_reader(buf, self.size)?;
+                self.kind.unpad(self.buf)?;
+                Ok(array)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::ARRAY,
                 actual: self.ty,
@@ -348,6 +360,7 @@ where
                     return Err(Error::new(ErrorKind::BufferUnderflow));
                 };
 
+                self.kind.unpad(self.buf)?;
                 Ok(Struct::new(buf))
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -401,6 +414,7 @@ where
                     return Err(Error::new(ErrorKind::BufferUnderflow));
                 };
 
+                self.kind.unpad(self.buf)?;
                 Object::from_reader(buf)
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -454,6 +468,7 @@ where
                     return Err(Error::new(ErrorKind::BufferUnderflow));
                 };
 
+                self.kind.unpad(self.buf)?;
                 Sequence::from_reader(buf)
             }
             _ => Err(Error::new(ErrorKind::Expected {
@@ -487,9 +502,16 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_choice(self) -> Result<Choice<B>, Error> {
+    pub fn next_choice(mut self) -> Result<Choice<B::Split>, Error> {
         match self.ty {
-            Type::CHOICE => Choice::from_reader(self.buf, self.size),
+            Type::CHOICE => {
+                let Some(buf) = self.buf.split(self.size) else {
+                    return Err(Error::new(ErrorKind::BufferUnderflow));
+                };
+
+                self.kind.unpad(self.buf)?;
+                Choice::from_reader(buf, self.size)
+            }
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::CHOICE,
                 actual: self.ty,
@@ -524,14 +546,23 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<B, P>, Error> {
+    pub fn next_pod(self) -> Result<Pod<B::Split, PackedPod>, Error> {
         match self.ty {
-            Type::POD => Ok(Pod::with_kind(self.buf, self.kind)),
+            Type::POD => Ok(Pod::packed(self.split_buffer()?)),
             _ => Err(Error::new(ErrorKind::Expected {
                 expected: Type::POD,
                 actual: self.ty,
             })),
         }
+    }
+
+    fn split_buffer(mut self) -> Result<B::Split, Error> {
+        let Some(buf) = self.buf.split(self.size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        self.kind.unpad(self.buf)?;
+        Ok(buf)
     }
 }
 

@@ -2,13 +2,12 @@ use core::mem;
 
 use std::collections::BTreeMap;
 
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
-use pod::{ChoiceType, Object, Type};
+use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::{
     consts,
     id::{
@@ -24,13 +23,13 @@ const BUFFER_SAMPLES: u32 = 128;
 
 #[derive(Debug)]
 pub struct PortParam {
-    pub value: Object<Box<[u64]>>,
+    pub value: Object<DynamicBuf>,
     pub flags: u32,
 }
 
 impl PortParam {
     #[inline]
-    fn new(value: Object<Box<[u64]>>, flags: u32) -> Self {
+    fn new(value: Object<DynamicBuf>, flags: u32) -> Self {
         Self { flags, value }
     }
 }
@@ -65,7 +64,7 @@ impl Port {
     pub(crate) fn set_param(
         &mut self,
         id: Param,
-        value: Object<Box<[u64]>>,
+        value: Object<DynamicBuf>,
         flags: u32,
     ) -> Result<()> {
         self.params.insert(id, vec![PortParam::new(value, flags)]);
@@ -162,7 +161,7 @@ impl Ports {
 
         port.params.insert(
             Param::ENUM_FORMAT,
-            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
+            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
         );
 
         pod.as_mut()
@@ -178,7 +177,7 @@ impl Ports {
 
         port.params.insert(
             Param::FORMAT,
-            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
+            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
         );
 
         pod.as_mut()
@@ -191,7 +190,7 @@ impl Ports {
 
         port.params.insert(
             Param::META,
-            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
+            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
         );
 
         {
@@ -205,7 +204,7 @@ impl Ports {
                     Ok(())
                 })?;
 
-            params.push(PortParam::new(pod.take().next_object()?.to_owned(), 0));
+            params.push(PortParam::new(pod.take().next_object()?.to_owned()?, 0));
 
             pod.as_mut()
                 .push_object(ObjectType::PARAM_IO, Param::IO, |obj| {
@@ -215,7 +214,7 @@ impl Ports {
                     Ok(())
                 })?;
 
-            params.push(PortParam::new(pod.take().next_object()?.to_owned(), 0));
+            params.push(PortParam::new(pod.take().next_object()?.to_owned()?, 0));
 
             port.params.insert(Param::IO, params);
         }
@@ -265,7 +264,7 @@ impl Ports {
 
         port.params.insert(
             Param::BUFFERS,
-            vec![PortParam::new(pod.take().next_object()?.to_owned(), 0)],
+            vec![PortParam::new(pod.take().next_object()?.to_owned()?, 0)],
         );
 
         ports.push(port);

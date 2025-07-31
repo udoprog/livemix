@@ -163,8 +163,8 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut reader: B, size: usize) -> Result<Self, Error> {
-        let [choice_type, flags, child_size, child_type] = reader.read::<[u32; 4]>()?;
+    pub(crate) fn from_reader(mut buf: B, size: usize) -> Result<Self, Error> {
+        let [choice_type, flags, child_size, child_type] = buf.read::<[u32; 4]>()?;
 
         let Ok(child_size) = usize::try_from(child_size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
@@ -175,7 +175,7 @@ where
         let remaining = array_remaining(size, child_size, mem::size_of::<[u32; 4]>())?;
 
         Ok(Self {
-            buf: reader,
+            buf,
             choice_type,
             flags,
             child_size,

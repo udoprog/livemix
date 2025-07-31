@@ -397,7 +397,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_array(self) -> Result<Array<B>, Error> {
+    pub fn next_array(self) -> Result<Array<B::Split>, Error> {
         self.into_typed()?.next_array()
     }
 
@@ -587,7 +587,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_choice(self) -> Result<Choice<B>, Error> {
+    pub fn next_choice(self) -> Result<Choice<B::Split>, Error> {
         self.into_typed()?.next_choice()
     }
 
@@ -618,7 +618,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next_pod(self) -> Result<Pod<B, P>, Error> {
+    pub fn next_pod(self) -> Result<Pod<B::Split, PackedPod>, Error> {
         self.into_typed()?.next_pod()
     }
 

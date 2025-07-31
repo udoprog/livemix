@@ -183,27 +183,15 @@ impl RecvBuf {
     /// }
     ///
     /// assert_eq!(buf.len(), 8);
-    /// assert_eq!(buf.as_slice(), &[0x123456789abcdef0]);
+    /// assert_eq!(buf.as_slice(), &expected[..]);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[u64] {
-        let read = self.read.next_multiple_of(mem::size_of::<u64>());
-
-        if read >= self.write {
-            return &[];
-        }
-
-        let ptr = self
-            .data
-            .as_ptr()
-            .wrapping_add(read)
-            .cast_const()
-            .cast::<u64>();
-        let len = (self.write - read).wrapping_div(mem::size_of::<u64>());
+    pub fn as_slice(&self) -> &[u8] {
+        let ptr = self.data.as_ptr().wrapping_add(self.read).cast_const();
 
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
-        unsafe { slice::from_raw_parts(ptr, len) }
+        unsafe { slice::from_raw_parts(ptr, self.len()) }
     }
 
     /// Get an initialized slice of bytes available for writing.
@@ -221,7 +209,7 @@ impl RecvBuf {
     /// ```
     /// use protocol::buf::RecvBuf;
     ///
-    /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
+    /// let expected = [1, 2, 3, 4, 5, 6, 7, 8];
     ///
     /// let mut buf = RecvBuf::new();
     /// assert!(buf.as_bytes_mut()?.len() > 0);
@@ -232,7 +220,7 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(3);
     /// }
     ///
-    /// assert_eq!(buf.as_slice(), &[]);
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
     ///
     /// buf.as_bytes_mut()?[..5].copy_from_slice(&[4, 5, 6, 7, 8]);
     ///
@@ -240,7 +228,7 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(5);
     /// }
     ///
-    /// assert_eq!(buf.as_slice(), &[expected]);
+    /// assert_eq!(buf.as_slice(), &expected[..]);
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
@@ -294,7 +282,7 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(7);
     /// }
     ///
-    /// assert!(buf.read_words(8).is_none());
+    /// assert!(buf.read_bytes(8).is_none());
     ///
     /// buf.as_bytes_mut()?[..1].copy_from_slice(&[8]);
     ///
@@ -302,26 +290,24 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(1);
     /// }
     ///
-    /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
+    /// let expected = [1, 2, 3, 4, 5, 6, 7, 8];
     ///
-    /// assert_eq!(buf.as_slice(), &[expected]);
+    /// assert_eq!(buf.as_slice(), &expected[..]);
     ///
-    /// assert!(buf.read_words(16).is_none());
-    /// assert_eq!(buf.read_words(8), Some(&[expected][..]));
+    /// assert!(buf.read_bytes(16).is_none());
+    /// assert_eq!(buf.read_bytes(8), Some(&expected[..]));
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]
-    pub fn read_words(&mut self, size: usize) -> Option<&[u64]> {
-        if self.read % mem::align_of::<u64>() != 0 || size > self.len() {
+    pub fn read_bytes(&mut self, len: usize) -> Option<&[u8]> {
+        if len > self.len() {
             return None;
         }
 
         // SAFETY: Necessary invariants have been checked above.
         unsafe {
-            let ptr = self.data.as_ptr().add(self.read).cast();
-            let len = size.wrapping_div(mem::size_of::<u64>());
-            let value = slice::from_raw_parts(ptr, len);
-            self.advance_read(size);
+            let value = slice::from_raw_parts(self.data.as_ptr().wrapping_add(self.read), len);
+            self.advance_read(len);
             Some(value)
         }
     }
@@ -350,10 +336,10 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(7);
     /// }
     ///
-    /// assert_eq!(buf.as_slice(), &[]);
-    /// assert!(buf.read_words(8).is_none());
+    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4, 5, 6, 7]);
+    /// assert!(buf.read_bytes(8).is_none());
     ///
-    /// let expected = u64::from_ne_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
+    /// let expected = [1, 2, 3, 4, 5, 6, 7, 8];
     ///
     /// buf.as_bytes_mut()?[..1].copy_from_slice(&[8]);
     ///
@@ -361,8 +347,8 @@ impl RecvBuf {
     ///     buf.advance_written_bytes(1);
     /// }
     ///
-    /// assert_eq!(buf.as_slice(), &[expected]);
-    /// assert_eq!(buf.read_words(8), Some(&[expected][..]));
+    /// assert_eq!(buf.as_slice(), &expected[..]);
+    /// assert_eq!(buf.read_bytes(8), Some(&expected[..]));
     /// # Ok::<_, protocol::buf::AllocError>(())
     /// ```
     #[inline]

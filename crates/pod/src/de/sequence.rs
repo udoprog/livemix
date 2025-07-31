@@ -146,8 +146,6 @@ where
         let [control_offset, control_type] = self.buf.read::<[u32; 2]>()?;
         let (size, ty) = self.buf.header()?;
 
-        std::dbg!(control_offset, control_type, size, ty);
-
         let Some(head) = self.buf.split(size) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };

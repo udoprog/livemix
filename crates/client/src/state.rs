@@ -4,13 +4,12 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
 use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
-use pod::{Fd, Object, Pod, Struct};
+use pod::{DynamicBuf, Fd, Object, Pod, SliceBuf, Struct};
 use protocol::Connection;
 use protocol::buf::RecvBuf;
 use protocol::consts::ActivationStatus;
@@ -82,7 +81,7 @@ struct ClientNodeState {
     node_activations: Slab<Activation>,
     /// Map of peer ids to their activation indices.
     peer_to_activation: BTreeMap<u32, usize>,
-    params: BTreeMap<Param, Vec<Object<Box<[u64]>>>>,
+    params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
     ports: Ports,
     io_clock: Option<Region<ffi::IoClock>>,
     io_control: Option<Region<()>>,
@@ -113,7 +112,7 @@ impl ClientNodeState {
 
         params.insert(
             Param::ENUM_FORMAT,
-            vec![pod.take().next_object()?.to_owned()],
+            vec![pod.take().next_object()?.to_owned()?],
         );
 
         pod.as_mut()
@@ -127,7 +126,7 @@ impl ClientNodeState {
                 Ok(())
             })?;
 
-        params.insert(Param::FORMAT, vec![pod.take().next_object()?.to_owned()]);
+        params.insert(Param::FORMAT, vec![pod.take().next_object()?.to_owned()?]);
 
         Ok(Self {
             id,
@@ -149,7 +148,7 @@ impl ClientNodeState {
 
     /// Set a parameter for the node.
     #[inline]
-    fn set_param(&mut self, param: Param, value: Object<Box<[u64]>>) {
+    fn set_param(&mut self, param: Param, value: Object<DynamicBuf>) {
         self.params.insert(param, vec![value]);
         self.modified = true;
     }
@@ -463,8 +462,10 @@ impl State {
     pub fn tick(&mut self) -> Result<()> {
         for (_, node) in &mut self.client_nodes {
             if let Some(a) = &node.activation {
-                std::dbg!(crate::ptr::volatile!(a, status).read());
-                // std::dbg!(unsafe { a.read() });
+                tracing::info!(
+                    "Activation status: {:?}",
+                    crate::ptr::volatile!(a, status).read()
+                );
             }
         }
 
@@ -584,7 +585,7 @@ impl State {
         Ok(())
     }
 
-    fn core(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         match self.header.op() {
             op::CORE_INFO_EVENT => {
                 self.core_info_event(pod).context("Core::Info")?;
@@ -615,7 +616,7 @@ impl State {
         Ok(())
     }
 
-    fn client(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn client(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         match self.header.op() {
             op::CLIENT_INFO_EVENT => {
                 self.client_info(pod).context("Client::Info")?;
@@ -631,7 +632,7 @@ impl State {
         Ok(())
     }
 
-    fn dynamic(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn dynamic(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(kind) = self.local_id_to_kind.get(&self.header.id()) else {
             tracing::warn!(?self.header, "Unknown receiver");
             return Ok(());
@@ -697,14 +698,14 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_info_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_info_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
         let cookie = st.field()?.next::<i32>()?;
-        let user_name = st.field()?.next_unsized::<str, _>(str::to_owned)?;
-        let host_name = st.field()?.next_unsized::<str, _>(str::to_owned)?;
-        let version = st.field()?.next_unsized::<str, _>(str::to_owned)?;
-        let name = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let user_name = st.field()?.next_unsized::<str>()?.to_owned();
+        let host_name = st.field()?.next_unsized::<str>()?.to_owned();
+        let version = st.field()?.next_unsized::<str>()?.to_owned();
+        let name = st.field()?.next_unsized::<str>()?.to_owned();
         let change_mask = st.field()?.next::<u64>()?;
 
         let mut props = st.field()?.next_struct()?;
@@ -713,8 +714,8 @@ impl State {
             let n_items = props.field()?.next::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.next_unsized::<str, _>(str::to_owned)?;
-                let value = props.field()?.next_unsized::<str, _>(str::to_owned)?;
+                let key = props.field()?.next_unsized::<str>()?.to_owned();
+                let value = props.field()?.next_unsized::<str>()?.to_owned();
                 self.core.properties.insert(key, value);
             }
         }
@@ -730,7 +731,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_done_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_done_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let (id, seq) = pod.next_struct()?.decode::<(u32, u32)>()?;
 
         match id {
@@ -750,7 +751,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_ping_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_ping_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next()?;
         let seq = st.field()?.next()?;
@@ -761,19 +762,19 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_error_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_error_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<i32>()?;
         let seq = st.field()?.next::<i32>()?;
         let res = st.field()?.next::<i32>()?;
-        let error = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let error = st.field()?.next_unsized::<str>()?.to_owned();
 
         tracing::error!(id, seq, res, error);
         Ok(())
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_bound_id_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_bound_id_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let local_id = st.field()?.next::<u32>()?;
         let global_id = st.field()?.next::<u32>()?;
@@ -784,7 +785,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_add_mem_event(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_add_mem_event(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let (id, ty, fd, flags) = pod
             .next_struct()?
             .decode::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
@@ -801,7 +802,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_destroy(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn core_destroy(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
 
@@ -810,7 +811,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn client_info(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_info(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
         let change_mask = st.field()?.next::<u64>()?;
@@ -821,8 +822,8 @@ impl State {
             let n_items = props.field()?.next::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.next_unsized::<str, _>(str::to_owned)?;
-                let value = props.field()?.next_unsized::<str, _>(str::to_owned)?;
+                let key = props.field()?.next_unsized::<str>()?.to_owned();
+                let value = props.field()?.next_unsized::<str>()?.to_owned();
                 self.client.properties.insert(key, value);
             }
         }
@@ -832,17 +833,17 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn client_error(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_error(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<i32>()?;
         let res = st.field()?.next::<i32>()?;
-        let error = st.field()?.next_unsized::<str, _>(str::to_owned)?;
+        let error = st.field()?.next_unsized::<str>()?.to_owned();
         tracing::error!(id, res, error, "Client errored");
         Ok(())
     }
 
     #[tracing::instrument(skip_all)]
-    fn registry_global(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn registry_global(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let (id, permissions, ty, version, mut props) =
             pod.decode::<Struct<_>>()?
                 .decode::<(_, _, _, _, Struct<_>)>()?;
@@ -890,7 +891,7 @@ impl State {
     }
 
     #[tracing::instrument(skip_all)]
-    fn registry_global_remove(&mut self, pod: Pod<&[u64]>) -> Result<()> {
+    fn registry_global_remove(&mut self, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let id = st.field()?.next::<u32>()?;
 
@@ -928,7 +929,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_transport(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_transport(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
         let read_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
         let write_fd = self.take_fd(st.field()?.next::<Fd>()?)?;
@@ -976,7 +977,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_param(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_set_param(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -987,7 +988,7 @@ impl State {
 
         if let Some(obj) = st.field()?.next_option()? {
             tracing::trace!(?id, "set");
-            node.set_param(id, obj.next_object()?.to_owned());
+            node.set_param(id, obj.next_object()?.to_owned()?);
         } else {
             tracing::trace!(?id, "remove");
             node.remove_param(id);
@@ -998,7 +999,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_set_io(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1065,7 +1066,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_command(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_command(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(..) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1090,7 +1091,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_port_set_param(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_port_set_param(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1105,7 +1106,7 @@ impl State {
 
         if let Some(param) = st.field()?.next_option()? {
             tracing::trace!(?id, "set");
-            port.set_param(id, param.next_object()?.to_owned(), flags)?;
+            port.set_param(id, param.next_object()?.to_owned()?, flags)?;
         } else {
             tracing::trace!(?id, "remove");
             port.remove_param(id)?;
@@ -1116,7 +1117,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_use_buffers(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_use_buffers(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1212,7 +1213,7 @@ impl State {
         Ok(())
     }
 
-    fn client_node_port_set_io(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_port_set_io(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1286,7 +1287,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_activation(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_set_activation(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let mut st = pod.next_struct()?;
 
         let peer_id = st.field()?.next::<u32>()?;
@@ -1319,7 +1320,7 @@ impl State {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_mix_info(&mut self, index: usize, pod: Pod<&[u64]>) -> Result<()> {
+    fn client_node_set_mix_info(&mut self, index: usize, pod: Pod<SliceBuf<'_>>) -> Result<()> {
         let Some(..) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
@@ -1331,24 +1332,12 @@ impl State {
 }
 
 /// Read a frame from the current buffer.
-fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<&'buf [u64]>>> {
+fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<SliceBuf<'buf>>>> {
     let size = header.size() as usize;
 
-    if size % mem::size_of::<u64>() != 0 {
-        bail!(
-            "Header size must be aligned to a word size of {} bytes",
-            mem::size_of::<u64>()
-        );
-    }
-
-    debug_assert!(
-        size % mem::size_of::<u64>() == 0,
-        "Size of frame is not aligned"
-    );
-
-    let Some(words) = buf.read_words(size) else {
+    let Some(bytes) = buf.read_bytes(size) else {
         return Ok(None);
     };
 
-    Ok(Some(Pod::new(words)))
+    Ok(Some(Pod::new(SliceBuf::new(bytes))))
 }

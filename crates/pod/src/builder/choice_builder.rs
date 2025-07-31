@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::error::ErrorKind;
-use crate::{BuildPodKind, Builder, ChildPod, ChoiceType, Error, Type, Writer};
+use crate::{BuildPodKind, Builder, ChildPod, ChoiceType, Error, PADDING, Type, Writer};
 
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, P>
@@ -91,6 +91,8 @@ where
         self.writer
             .write_at(self.header, &[size, Type::CHOICE.into_u32()])?;
 
+        // Since choices are packed like arrays, we need to pad them out.
+        self.writer.pad(PADDING)?;
         Ok(())
     }
 }
