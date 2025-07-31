@@ -14,7 +14,7 @@ pub trait EncodeUnsized {
 
     /// The size in bytes of the unsized value.
     #[doc(hidden)]
-    fn size(&self) -> usize;
+    fn size(&self) -> Option<usize>;
 
     #[doc(hidden)]
     fn write_content(&self, writer: impl Writer) -> Result<(), Error>;
@@ -35,8 +35,8 @@ impl EncodeUnsized for [u8] {
     const TYPE: Type = Type::BYTES;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.len()
+    fn size(&self) -> Option<usize> {
+        Some(self.len())
     }
 
     #[inline]
@@ -63,8 +63,8 @@ impl EncodeUnsized for CStr {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.to_bytes_with_nul().len()
+    fn size(&self) -> Option<usize> {
+        Some(self.to_bytes_with_nul().len())
     }
 
     #[inline]
@@ -103,10 +103,10 @@ impl EncodeUnsized for str {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> usize {
+    fn size(&self) -> Option<usize> {
         // A string cannot be longer than `isize::MAX`, so we can always add 1
         // to it to get a correct usize.
-        str::len(self).wrapping_add(1)
+        Some(str::len(self).wrapping_add(1))
     }
 
     #[inline]
@@ -144,10 +144,10 @@ impl EncodeUnsized for String {
     const TYPE: Type = Type::STRING;
 
     #[inline]
-    fn size(&self) -> usize {
+    fn size(&self) -> Option<usize> {
         // A string cannot be longer than `isize::MAX`, so we can always add 1
         // to it to get a correct usize.
-        str::len(self).wrapping_add(1)
+        Some(str::len(self).wrapping_add(1))
     }
 
     #[inline]
@@ -175,8 +175,8 @@ impl EncodeUnsized for Bitmap {
     const TYPE: Type = Type::BITMAP;
 
     #[inline]
-    fn size(&self) -> usize {
-        Bitmap::as_bytes(self).len()
+    fn size(&self) -> Option<usize> {
+        Some(Bitmap::as_bytes(self).len())
     }
 
     #[inline]

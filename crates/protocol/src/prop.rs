@@ -41,7 +41,7 @@ impl EncodeUnsized for Prop {
     const TYPE: pod::Type = CStr::TYPE;
 
     #[inline]
-    fn size(&self) -> usize {
+    fn size(&self) -> Option<usize> {
         CStr::size(&self.0)
     }
 

@@ -323,10 +323,9 @@ where
     const TYPE: Type = Type::ARRAY;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.child_size
-            .wrapping_mul(self.remaining)
-            .wrapping_add(mem::size_of::<[u32; 2]>())
+    fn size(&self) -> Option<usize> {
+        let len = self.child_size.checked_mul(self.remaining)?;
+        len.checked_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]

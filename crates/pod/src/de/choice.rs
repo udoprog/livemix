@@ -413,10 +413,9 @@ where
     const TYPE: Type = Type::CHOICE;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.remaining
-            .wrapping_mul(self.child_size)
-            .wrapping_add(mem::size_of::<[u32; 4]>())
+    fn size(&self) -> Option<usize> {
+        let len = self.remaining.checked_mul(self.child_size)?;
+        len.checked_add(mem::size_of::<[u32; 4]>())
     }
 
     #[inline]

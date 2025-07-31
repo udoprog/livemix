@@ -18,7 +18,7 @@ mod sealed {
 
 pub trait BuildPod
 where
-    Self: self::sealed::Sealed,
+    Self: Sized + self::sealed::Sealed,
 {
     #[inline]
     fn header(&self, _: impl Writer) -> Result<(), Error> {
@@ -34,12 +34,12 @@ where
         T: ?Sized + EncodeUnsized;
 
     #[inline]
-    fn check(&self, _: Type, _: usize) -> Result<(), Error> {
+    fn check(self, _: Type, _: usize) -> Result<(), Error> {
         Ok(())
     }
 
     #[inline]
-    fn check_size<W>(&self, ty: Type, writer: &W, header: W::Pos) -> Result<u32, Error>
+    fn check_size<W>(self, ty: Type, writer: &W, header: W::Pos) -> Result<u32, Error>
     where
         W: ?Sized + Writer,
     {
@@ -93,7 +93,11 @@ impl BuildPod for PaddedPod {
     where
         T: ?Sized + EncodeUnsized,
     {
-        let Ok(size) = u32::try_from(value.size()) else {
+        let Some(size) = value.size() else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        let Ok(size) = u32::try_from(size) else {
             return Err(Error::new(ErrorKind::SizeOverflow));
         };
 
@@ -104,7 +108,7 @@ impl BuildPod for PaddedPod {
     }
 
     #[inline]
-    fn check(&self, _: Type, _: usize) -> Result<(), Error> {
+    fn check(self, _: Type, _: usize) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -131,12 +135,16 @@ impl BuildPod for ChildPod {
     where
         T: ?Sized + EncodeUnsized,
     {
-        self.check(T::TYPE, value.size())?;
+        let Some(size) = value.size() else {
+            return Err(Error::new(ErrorKind::SizeOverflow));
+        };
+
+        self.check(T::TYPE, size)?;
         value.write_content(buf)
     }
 
     #[inline]
-    fn check(&self, ty: Type, size: usize) -> Result<(), Error> {
+    fn check(self, ty: Type, size: usize) -> Result<(), Error> {
         if self.ty != ty {
             return Err(Error::new(ErrorKind::Expected {
                 expected: self.ty,
@@ -262,7 +270,7 @@ impl BuildPod for ControlPod {
     }
 
     #[inline]
-    fn check(&self, _: Type, _: usize) -> Result<(), Error> {
+    fn check(self, _: Type, _: usize) -> Result<(), Error> {
         Ok(())
     }
 }

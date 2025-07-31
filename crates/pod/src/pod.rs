@@ -763,13 +763,13 @@ where
     const TYPE: Type = Type::POD;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.buf.as_reader().len()
+    fn size(&self) -> Option<usize> {
+        Some(self.buf.as_reader().len())
     }
 
     #[inline]
     fn write_content(&self, mut writer: impl Writer) -> Result<(), Error> {
-        writer.write(self.buf.as_reader().as_slice().as_slice())
+        writer.write(self.buf.as_reader().as_bytes())
     }
 }
 

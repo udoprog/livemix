@@ -237,8 +237,8 @@ where
     const TYPE: Type = Type::STRUCT;
 
     #[inline]
-    fn size(&self) -> usize {
-        self.buf.as_reader().len()
+    fn size(&self) -> Option<usize> {
+        Some(self.buf.as_reader().len())
     }
 
     #[inline]

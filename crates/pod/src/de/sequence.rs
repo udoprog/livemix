@@ -265,9 +265,9 @@ where
     const TYPE: Type = Type::SEQUENCE;
 
     #[inline]
-    fn size(&self) -> usize {
+    fn size(&self) -> Option<usize> {
         let len = self.buf.as_reader().len();
-        len.wrapping_add(mem::size_of::<[u32; 2]>())
+        len.checked_add(mem::size_of::<[u32; 2]>())
     }
 
     #[inline]
