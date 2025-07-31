@@ -36,7 +36,7 @@ impl<'de> SliceBuf<'de> {
     ///
     /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
     /// assert_eq!(slice.len(), 4);
-    /// assert_eq!(slice.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
     /// ```
     pub fn new(slice: &[u8]) -> Self {
         // SAFETY: The pointer is guaranteed to be valid since it was created
@@ -61,7 +61,7 @@ impl<'de> SliceBuf<'de> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn to_owned(&self) -> Result<DynamicBuf, AllocError> {
-        DynamicBuf::from_slice(self.as_slice())
+        DynamicBuf::from_slice(self.as_bytes())
     }
 
     /// Base pointer of the slice.
@@ -81,7 +81,7 @@ impl<'de> SliceBuf<'de> {
     /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
     /// assert!(!slice.is_empty());
     /// assert_eq!(slice.len(), 4);
-    /// assert_eq!(slice.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
     /// ```
     pub fn len(&self) -> usize {
         self.len
@@ -97,12 +97,12 @@ impl<'de> SliceBuf<'de> {
     /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
     /// assert!(!slice.is_empty());
     /// assert_eq!(slice.len(), 4);
-    /// assert_eq!(slice.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
     ///
     /// let slice = SliceBuf::new(&[]);
     /// assert!(slice.is_empty());
     /// assert_eq!(slice.len(), 0);
-    /// assert_eq!(slice.as_slice(), &[]);
+    /// assert_eq!(slice.as_bytes(), &[]);
     /// ```
     pub fn is_empty(&self) -> bool {
         self.len == 0
@@ -118,9 +118,9 @@ impl<'de> SliceBuf<'de> {
     /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
     /// assert!(!slice.is_empty());
     /// assert_eq!(slice.len(), 4);
-    /// assert_eq!(slice.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(slice.as_bytes(), &[1, 2, 3, 4]);
     /// ```
-    pub fn as_slice(&self) -> &'de [u8] {
+    pub fn as_bytes(&self) -> &'de [u8] {
         // SAFETY: The slice is guaranteed to be valid through construction.
         unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
@@ -134,8 +134,8 @@ impl<'de> SliceBuf<'de> {
     ///
     /// let slice = SliceBuf::new(&[1, 2, 3, 4]);
     /// let (a, b) = slice.split_at_checked(2).unwrap();
-    /// assert_eq!(a.as_slice(), &[1, 2]);
-    /// assert_eq!(b.as_slice(), &[3, 4]);
+    /// assert_eq!(a.as_bytes(), &[1, 2]);
+    /// assert_eq!(b.as_bytes(), &[3, 4]);
     /// ```
     pub fn split_at_checked(&self, at: usize) -> Option<(SliceBuf<'de>, SliceBuf<'de>)> {
         if at > self.len() {
@@ -305,14 +305,14 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
         };
 
         // SAFETY: The head is guaranteed to be valid since it was split from the original slice.
-        let ok = visitor.visit_borrowed(head.as_slice())?;
+        let ok = visitor.visit_borrowed(head.as_bytes())?;
         *self = tail;
         Ok(ok)
     }
 
     #[inline]
     fn as_bytes(&self) -> &[u8] {
-        self.as_slice()
+        self.as_bytes()
     }
 
     #[inline]
@@ -323,11 +323,6 @@ impl<'de> Reader<'de> for SliceBuf<'de> {
     #[inline]
     fn is_empty(&self) -> bool {
         (*self).is_empty()
-    }
-
-    #[inline]
-    fn as_slice(&self) -> SliceBuf<'de> {
-        *self
     }
 }
 
@@ -352,7 +347,7 @@ impl SplitReader for SliceBuf<'_> {
 impl fmt::Debug for SliceBuf<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.as_slice()).finish()
+        f.debug_list().entries(self.as_bytes()).finish()
     }
 }
 

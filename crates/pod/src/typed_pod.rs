@@ -552,7 +552,7 @@ where
     #[cfg(feature = "alloc")]
     pub fn to_owned(&self) -> Result<TypedPod<DynamicBuf, P>, AllocError> {
         Ok(TypedPod {
-            buf: self.buf.as_reader().as_slice().to_owned()?,
+            buf: DynamicBuf::from_slice(self.buf.as_reader().as_bytes())?,
             size: self.size,
             ty: self.ty,
             kind: self.kind,

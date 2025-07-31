@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use crate::error::ErrorKind;
 use crate::utils::UninitAlign;
-use crate::{AsReader, Error, SliceBuf, Type, Visitor};
+use crate::{AsReader, Error, Type, Visitor};
 
 mod sealed {
     use crate::{ArrayBuf, Reader, SliceBuf};
@@ -67,7 +67,7 @@ where
     /// assert_eq!(buf.len(), 0);
     /// buf.write(&[42u64])?;
     /// let expected = 42u64.to_ne_bytes();
-    /// assert_eq!(buf.as_slice(), &expected[..]);
+    /// assert_eq!(buf.as_bytes(), &expected[..]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     fn as_bytes(&self) -> &[u8];
@@ -80,7 +80,7 @@ where
     /// use pod::{ArrayBuf, SliceBuf, Reader};
     ///
     /// let array = ArrayBuf::<128>::from_slice(&[1u64, 2, 3])?;
-    /// let mut buf = SliceBuf::new(array.as_slice());
+    /// let mut buf = SliceBuf::new(array.as_bytes());
     ///
     /// assert_eq!(buf.len(), 24);
     /// assert_eq!(buf.read::<[u64; 1]>(), Ok([1]));
@@ -104,29 +104,12 @@ where
     ///
     /// let mut buf = ArrayBuf::<128>::new();
     ///
-    /// assert!(is_empty(buf.as_slice()));
+    /// assert!(is_empty(buf.as_bytes()));
     /// buf.extend_from_words(&[42u64])?;
-    /// assert!(!is_empty(buf.as_slice()));
+    /// assert!(!is_empty(buf.as_bytes()));
     /// # Ok::<_, pod::Error>(())
     /// ```
     fn is_empty(&self) -> bool;
-
-    /// Returns the slice of remaining data to be read.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{ArrayBuf, Writer};
-    ///
-    /// let expected = u64::to_ne_bytes(42);
-    ///
-    /// let mut buf = ArrayBuf::default();
-    /// assert_eq!(buf.as_slice().len(), 0);
-    /// buf.write(&[42u64])?;
-    /// assert_eq!(buf.as_slice(), &expected[..]);
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    fn as_slice(&self) -> SliceBuf<'de>;
 
     /// Unpad the current reader by advancing the position to align with the
     /// specified `align`.
@@ -140,7 +123,7 @@ where
     /// assert_eq!(buf.read::<[u8; 3]>(), Ok([1, 2, 3]));
     ///
     /// buf.unpad(4)?;
-    /// assert_eq!(buf.as_slice(), &[4]);
+    /// assert_eq!(buf.as_bytes(), &[4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     fn unpad(&mut self, align: usize) -> Result<(), Error>;
@@ -251,11 +234,6 @@ where
     #[inline]
     fn is_empty(&self) -> bool {
         (**self).is_empty()
-    }
-
-    #[inline]
-    fn as_slice(&self) -> SliceBuf<'de> {
-        (**self).as_slice()
     }
 
     #[inline]

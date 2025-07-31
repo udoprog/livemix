@@ -127,10 +127,10 @@ impl DynamicBuf {
     /// let mut buf = DynamicBuf::new();
     ///
     /// buf.extend_from_words(&[1u8, 2])?;
-    /// assert_eq!(buf.as_slice(), &[1, 2]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2]);
     ///
     /// buf.clear();
-    /// assert_eq!(buf.as_slice(), &[]);
+    /// assert_eq!(buf.as_bytes(), &[]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -146,14 +146,14 @@ impl DynamicBuf {
     /// use pod::DynamicBuf;
     ///
     /// let mut buf = DynamicBuf::new();
-    /// assert_eq!(buf.as_slice().len(), 0);
+    /// assert_eq!(buf.len(), 0);
     ///
     /// buf.extend_from_words(&[1u8, 2, 3, 4])?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr(), self.len) }
     }
@@ -166,17 +166,17 @@ impl DynamicBuf {
     /// use pod::DynamicBuf;
     ///
     /// let mut buf = DynamicBuf::new();
-    /// assert_eq!(buf.as_slice().len(), 0);
+    /// assert_eq!(buf.as_bytes().len(), 0);
     ///
     /// buf.extend_from_words(&[1u8, 2, 3, 4])?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
     ///
-    /// buf.as_slice_mut()[2] = 5;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 5, 4]);
+    /// buf.as_bytes_mut()[2] = 5;
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 5, 4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_slice_mut(&mut self) -> &mut [u8] {
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts_mut(self.data.as_ptr(), self.len) }
     }
@@ -193,7 +193,7 @@ impl DynamicBuf {
     ///
     /// buf.extend_from_words(&[1u8, 2, 3, 4]);
     /// assert_eq!(buf.len(), 4);
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -309,7 +309,7 @@ impl AsReader for DynamicBuf {
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self.as_slice())
+        SliceBuf::new(self.as_bytes())
     }
 }
 
@@ -429,7 +429,7 @@ impl Writer for DynamicBuf {
     ///
     /// let mut buf = DynamicBuf::new();
     /// buf.write_bytes(&[1, 2, 3], 3)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 0, 0, 0]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -462,9 +462,9 @@ impl Writer for DynamicBuf {
     ///
     /// let mut buf = DynamicBuf::default();
     /// buf.write_bytes(&[1, 2, 3], 3)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 0, 0, 0]);
     /// buf.pad(8)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 0, 0, 0, 0, 0]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -500,6 +500,6 @@ impl Default for DynamicBuf {
 impl fmt::Debug for DynamicBuf {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.as_slice()).finish()
+        f.debug_list().entries(self.as_bytes()).finish()
     }
 }

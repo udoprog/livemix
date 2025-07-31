@@ -25,8 +25,8 @@ const DEFAULT_SIZE: usize = 1024;
 /// let mut buf = ArrayBuf::<128>::from_slice(&[1u8, 2, 3, 4])?;
 /// assert_eq!(buf.len(), 4);
 /// buf.extend_from_words(&[42u64])?;
-/// assert_eq!(&buf.as_slice()[..4], &[1, 2, 3, 4]);
-/// assert_eq!(&buf.as_slice()[4..], &expected);
+/// assert_eq!(&buf.as_bytes()[..4], &[1, 2, 3, 4]);
+/// assert_eq!(&buf.as_bytes()[4..], &expected);
 /// assert_eq!(buf.len(), 12);
 /// # Ok::<_, pod::buf::CapacityError>(())
 /// ```
@@ -66,7 +66,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// let mut buf = ArrayBuf::default();
     ///
     /// buf.extend_from_words(&[1u8, 2, 3, 4])?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 4]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 4]);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub fn extend_from_words<T>(&mut self, words: &[T]) -> Result<(), CapacityError>
@@ -124,7 +124,7 @@ impl<const N: usize> ArrayBuf<N> {
     /// let buf = ArrayBuf::<128>::from_slice(&[1u32, 2, 3])?;
     /// assert_eq!(buf.len(), 12);
     /// assert_eq!(buf.capacity(), 128);
-    /// assert_eq!(buf.as_slice(), &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     pub fn from_slice<T>(words: &[T]) -> Result<Self, CapacityError>
@@ -202,13 +202,13 @@ impl<const N: usize> ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::<24>::from_slice(&[1u8, 2, 3])?;
     /// assert_eq!(buf.len(), 3);
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3]);
     /// buf.clear();
-    /// assert!(buf.as_slice().is_empty());
+    /// assert!(buf.as_bytes().is_empty());
     ///
     /// let mut buf = ArrayBuf::<16>::from_slice(&[0x10u8, 0x20])?;
     /// assert_eq!(buf.len(), 2);
-    /// assert_eq!(buf.as_slice(), &[0x10, 0x20]);
+    /// assert_eq!(buf.as_bytes(), &[0x10, 0x20]);
     /// buf.clear();
     /// assert!(buf.is_empty());
     /// # Ok::<_, pod::buf::CapacityError>(())
@@ -228,12 +228,12 @@ impl<const N: usize> ArrayBuf<N> {
     /// let expected = u64::to_ne_bytes(42);
     ///
     /// let mut buf = ArrayBuf::<128>::from_slice(&[42u64])?;
-    /// assert_eq!(buf.as_slice().len(), 8);
-    /// assert_eq!(buf.as_slice(), &expected);
+    /// assert_eq!(buf.as_bytes().len(), 8);
+    /// assert_eq!(buf.as_bytes(), &expected);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
     #[inline]
-    pub fn as_slice(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         // SAFETY: The buffer is guaranteed to be initialized up to `pos`.
         unsafe { slice::from_raw_parts(self.data.as_ptr().cast(), self.len) }
     }
@@ -248,14 +248,14 @@ impl<const N: usize> ArrayBuf<N> {
     /// let expected = u64::to_ne_bytes(42);
     ///
     /// let mut buf = ArrayBuf::<128>::from_slice(&[42u64])?;
-    /// assert_eq!(buf.as_slice().len(), 8);
-    /// assert_eq!(buf.as_slice(), &expected);
+    /// assert_eq!(buf.as_bytes().len(), 8);
+    /// assert_eq!(buf.as_bytes(), &expected);
     ///
-    /// buf.as_slice_mut()[0] = u8::MAX;
-    /// assert_eq!(buf.as_slice()[0], u8::MAX);
+    /// buf.as_bytes_mut()[0] = u8::MAX;
+    /// assert_eq!(buf.as_bytes()[0], u8::MAX);
     /// # Ok::<_, pod::buf::CapacityError>(())
     /// ```
-    pub fn as_slice_mut(&mut self) -> &mut [u8] {
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         // SAFETY: The buffer is guaranteed to be initialized from the
         // `self.read..self.write` range.
         unsafe { slice::from_raw_parts_mut(self.data.as_mut_ptr().cast(), self.len) }
@@ -276,7 +276,7 @@ impl<const N: usize> ArrayBuf<N> {
 impl<const N: usize> fmt::Debug for ArrayBuf<N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_slice().fmt(f)
+        self.as_bytes().fmt(f)
     }
 }
 
@@ -297,7 +297,7 @@ impl<const N: usize> fmt::Debug for ArrayBuf<N> {
 impl<const A: usize, const B: usize> PartialEq<ArrayBuf<B>> for ArrayBuf<A> {
     #[inline]
     fn eq(&self, other: &ArrayBuf<B>) -> bool {
-        self.as_slice() == other.as_slice()
+        self.as_bytes() == other.as_bytes()
     }
 }
 
@@ -319,7 +319,7 @@ impl<const A: usize, const B: usize> PartialEq<ArrayBuf<B>> for ArrayBuf<A> {
 impl<const N: usize> PartialEq<[u8]> for ArrayBuf<N> {
     #[inline]
     fn eq(&self, other: &[u8]) -> bool {
-        self.as_slice() == other
+        self.as_bytes() == other
     }
 }
 
@@ -341,7 +341,7 @@ impl<const N: usize> PartialEq<[u8]> for ArrayBuf<N> {
 impl<const N: usize> PartialEq<[u8; N]> for ArrayBuf<N> {
     #[inline]
     fn eq(&self, other: &[u8; N]) -> bool {
-        self.as_slice() == &other[..]
+        self.as_bytes() == &other[..]
     }
 }
 
@@ -363,7 +363,7 @@ impl<const N: usize> PartialEq<[u8; N]> for ArrayBuf<N> {
 impl<const N: usize> PartialEq<&[u8; N]> for ArrayBuf<N> {
     #[inline]
     fn eq(&self, other: &&[u8; N]) -> bool {
-        self.as_slice() == &other[..]
+        self.as_bytes() == &other[..]
     }
 }
 
@@ -385,7 +385,7 @@ impl<const N: usize> PartialEq<&[u8; N]> for ArrayBuf<N> {
 impl<const N: usize> PartialEq<&[u8]> for ArrayBuf<N> {
     #[inline]
     fn eq(&self, other: &&[u8]) -> bool {
-        self.as_slice() == *other
+        self.as_bytes() == *other
     }
 }
 
@@ -500,7 +500,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::default();
     /// buf.write_bytes(&[1, 2, 3], 3)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 0, 0, 0]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -531,9 +531,9 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     ///
     /// let mut buf = ArrayBuf::default();
     /// buf.write_bytes(&[1, 2, 3], 3)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 0, 0, 0]);
     /// buf.pad(8)?;
-    /// assert_eq!(buf.as_slice(), &[1, 2, 3, 0, 0, 0, 0, 0]);
+    /// assert_eq!(buf.as_bytes(), &[1, 2, 3, 0, 0, 0, 0, 0]);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -566,7 +566,7 @@ impl<const N: usize> AsReader for ArrayBuf<N> {
 
     #[inline]
     fn as_reader(&self) -> Self::AsReader<'_> {
-        SliceBuf::new(self.as_slice())
+        SliceBuf::new(self.as_bytes())
     }
 }
 

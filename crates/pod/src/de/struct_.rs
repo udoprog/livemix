@@ -163,7 +163,7 @@ where
     #[inline]
     fn into_slice(self) -> Struct<SliceBuf<'de>> {
         Struct {
-            buf: self.buf.as_slice(),
+            buf: SliceBuf::new(self.buf.as_bytes()),
         }
     }
 }

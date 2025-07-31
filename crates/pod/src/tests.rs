@@ -47,7 +47,7 @@ fn test_push_decode_u64() -> Result<(), Error> {
     let mut buf = ArrayBuf::<128>::new();
     buf.write(&[0x1234567890abcdefu64])?;
 
-    let mut buf = SliceBuf::new(buf.as_slice());
+    let mut buf = SliceBuf::new(buf.as_bytes());
 
     let Ok([a, b]) = buf.peek::<[u32; 2]>() else {
         panic!();
@@ -507,12 +507,12 @@ fn test_format_buggy() -> Result<(), Error> {
 
     let mut array = pod.into_buf();
 
-    array.as_slice_mut()[20] = u8::MAX; // Corrupt the pod.
+    array.as_bytes_mut()[20] = u8::MAX; // Corrupt the pod.
 
-    let pod = Pod::new(array.as_slice());
+    let pod = Pod::new(array.as_bytes());
     assert_eq!(
         format!("{pod:?}"),
-        "Choice { type: Range, child_type: Unknown(255), entries: [{Unknown(255)}, {Unknown(255)}, {Unknown(255)}] }"
+        "Choice { type: Range, child_type: Unknown(255), child_size: 4, entries: [{Unknown(255)}, {Unknown(255)}, {Unknown(255)}] }"
     );
     Ok(())
 }
@@ -550,7 +550,7 @@ fn choice_format() -> Result<(), Error> {
 
     assert_eq!(
         format!("{pod:?}"),
-        "Choice { type: Range, child_type: Int, entries: [10, 0, 30] }"
+        "Choice { type: Range, child_type: Int, child_size: 4, entries: [10, 0, 30] }"
     );
     Ok(())
 }

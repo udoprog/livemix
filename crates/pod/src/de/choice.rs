@@ -466,6 +466,7 @@ where
         let mut f = f.debug_struct("Choice");
         f.field("type", &self.choice_type());
         f.field("child_type", &self.child_type());
+        f.field("child_size", &self.child_size());
         f.field("entries", &Entries(self));
         f.finish()
     }

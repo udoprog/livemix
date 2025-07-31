@@ -198,7 +198,9 @@ where
     /// ```
     #[cfg(feature = "alloc")]
     pub fn to_owned(&self) -> Result<Pod<DynamicBuf>, AllocError> {
-        Ok(Pod::new(self.buf.as_reader().as_slice().to_owned()?))
+        Ok(Pod::new(DynamicBuf::from_slice(
+            self.buf.as_reader().as_bytes(),
+        )?))
     }
 
     /// Coerce an owned pod into a borrowed pod which can be used for reading.
@@ -250,7 +252,7 @@ where
     /// pod.as_mut().push(10i32)?;
     ///
     /// let buf = pod.as_buf();
-    /// assert_eq!(buf.as_slice().len(), 16);
+    /// assert_eq!(buf.as_bytes().len(), 16);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
@@ -267,7 +269,7 @@ where
     /// pod.as_mut().push(10i32)?;
     ///
     /// let buf = pod.into_buf();
-    /// assert_eq!(buf.as_slice().len(), 16);
+    /// assert_eq!(buf.as_bytes().len(), 16);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
