@@ -145,6 +145,7 @@ where
     #[inline]
     pub fn skip(mut self) -> Result<(), Error> {
         self.buf.skip(self.size)?;
+        self.kind.unpad(self.buf)?;
         Ok(())
     }
 

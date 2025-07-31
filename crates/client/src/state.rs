@@ -1,6 +1,8 @@
+use core::ffi::CStr;
 use core::mem;
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::ffi::CString;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 
 use alloc::borrow::ToOwned;
@@ -10,16 +12,18 @@ use alloc::vec::Vec;
 
 use anyhow::{Context, Result, bail};
 use pod::{DynamicBuf, Fd, Object, Pod, SliceBuf, Struct};
-use protocol::Connection;
+use protocol::EventFd;
+use protocol::Prop;
 use protocol::buf::RecvBuf;
+use protocol::consts;
 use protocol::consts::ActivationStatus;
-use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
+use protocol::flags;
+use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::poll::{Interest, Token};
 use protocol::types::Header;
-use protocol::{EventFd, id};
-use protocol::{consts, flags};
+use protocol::{Connection, Properties, prop};
 use slab::Slab;
 use tracing::Level;
 
@@ -55,7 +59,8 @@ struct CoreState {
 #[derive(Default, Debug)]
 struct ClientState {
     id: u32,
-    properties: BTreeMap<String, String>,
+    properties: Properties,
+    server_properties: BTreeMap<CString, CString>,
 }
 
 #[derive(Default, Debug)]
@@ -252,10 +257,19 @@ impl State {
         ids.set(consts::CORE_ID);
         ids.set(consts::CLIENT_ID);
 
+        let mut client = ClientState::default();
+
+        client
+            .properties
+            .insert(prop::APPLICATION_NAME, String::from("livemix"));
+        client
+            .properties
+            .insert(prop::NODE_NAME, String::from("livemix_node"));
+
         Self {
             c: Client::new(connection),
             core: CoreState::default(),
-            client: ClientState::default(),
+            client,
             registries: Slab::new(),
             id_to_registry: BTreeMap::new(),
             factories: BTreeMap::new(),
@@ -318,7 +332,7 @@ impl State {
                 match op {
                     Op::CoreHello => {
                         self.c.core_hello()?;
-                        self.c.client_update_properties()?;
+                        self.c.client_update_properties(&self.client.properties)?;
                     }
                     Op::GetRegistry => {
                         tracing::info!("Getting registry");
@@ -822,9 +836,12 @@ impl State {
             let n_items = props.field()?.next::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.next_unsized::<str>()?.to_owned();
-                let value = props.field()?.next_unsized::<str>()?.to_owned();
-                self.client.properties.insert(key, value);
+                let key = props.field()?.next_unsized::<CStr>()?;
+                let value = props.field()?.next_unsized::<CStr>()?;
+
+                self.client
+                    .server_properties
+                    .insert(key.to_owned(), value.to_owned());
             }
         }
 

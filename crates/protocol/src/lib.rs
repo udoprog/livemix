@@ -40,3 +40,9 @@ pub mod id;
 
 #[cfg(feature = "alloc")]
 pub mod buf;
+
+pub mod prop;
+pub use self::prop::Prop;
+
+mod properties;
+pub use self::properties::Properties;

@@ -6,6 +6,7 @@ use anyhow::Result;
 use pod::AsReader;
 use pod::Object;
 use protocol::Connection;
+use protocol::Properties;
 use protocol::consts;
 use protocol::flags;
 use protocol::id;
@@ -138,18 +139,17 @@ impl Client {
     }
 
     /// Update client properties.
-    pub fn client_update_properties(&mut self) -> Result<()> {
-        const PROPS: &[(&str, &str)] = &[
-            ("application.name", "livemix"),
-            ("node.name", "livemix_node"),
-        ];
-
+    pub fn client_update_properties(&mut self, props: &Properties) -> Result<()> {
         let mut pod = pod::array();
 
         pod.as_mut().push_struct(|st| {
-            st.field().push_struct(|props| {
-                props.field().push(PROPS.len() as u32)?;
-                props.encode(PROPS)?;
+            st.field().push_struct(|st| {
+                st.field().push(props.len() as u32)?;
+
+                for (key, value) in props.iter() {
+                    st.encode((key, value))?;
+                }
+
                 Ok(())
             })
         })?;
