@@ -92,7 +92,6 @@ impl<B, P> TypedPod<B, P> {
 impl<'de, B, P> TypedPod<B, P>
 where
     B: Reader<'de>,
-    P: ReadPod,
 {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
@@ -119,7 +118,13 @@ where
             kind,
         })
     }
+}
 
+impl<'de, B, P> TypedPod<B, P>
+where
+    B: Reader<'de>,
+    P: ReadPod,
+{
     /// Skip a value in the pod.
     ///
     /// # Examples

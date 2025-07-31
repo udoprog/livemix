@@ -18,10 +18,7 @@ pub struct Pod<B, P = PaddedPod> {
     kind: P,
 }
 
-impl<B, P> Pod<B, P>
-where
-    P: ReadPod,
-{
+impl<B, P> Pod<B, P> {
     #[inline]
     pub(crate) const fn with_kind(buf: B, kind: P) -> Self {
         Pod { buf, kind }
@@ -170,10 +167,7 @@ where
     }
 }
 
-impl<B, P> Pod<B, P>
-where
-    P: ReadPod,
-{
+impl<B, P> Pod<B, P> {
     /// Access the underlying buffer.
     ///
     /// # Examples
@@ -669,7 +663,7 @@ where
 impl<B, P> Pod<B, P>
 where
     B: AsReader,
-    P: ReadPod,
+    P: Copy,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -685,10 +679,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
-    pub fn to_owned(&self) -> Result<Pod<DynamicBuf, P>, AllocError>
-    where
-        P: Copy,
-    {
+    pub fn to_owned(&self) -> Result<Pod<DynamicBuf, P>, AllocError> {
         Ok(Pod::with_kind(
             DynamicBuf::from_slice(self.buf.as_reader().as_bytes())?,
             self.kind,
@@ -708,10 +699,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn as_ref(&self) -> Pod<B::AsReader<'_>, P>
-    where
-        P: Copy,
-    {
+    pub fn as_ref(&self) -> Pod<B::AsReader<'_>, P> {
         Pod::with_kind(self.buf.as_reader(), self.kind)
     }
 }
@@ -778,11 +766,11 @@ crate::macros::encode_into_unsized!(impl [B, P] Pod<B, P> where B: AsReader, P: 
 impl<B, P> fmt::Debug for Pod<B, P>
 where
     B: AsReader,
-    P: Copy + ReadPod,
+    P: ReadPod,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.as_reader(), self.kind) {
+        match self.as_ref().into_typed() {
             Ok(pod) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }
