@@ -138,15 +138,7 @@ impl WordBytes {
     }
 }
 
-pub(crate) fn array_remaining(
-    size: usize,
-    child_size: usize,
-    header_size: usize,
-) -> Result<usize, Error> {
-    let Some(size) = size.checked_sub(header_size) else {
-        return Err(Error::new(ErrorKind::ArraySizeUnderflow));
-    };
-
+pub(crate) fn array_remaining(size: usize, child_size: usize) -> Result<usize, Error> {
     if size % child_size != 0 || child_size == 0 {
         return Err(Error::new(ErrorKind::ArraySizeMismatch {
             size,

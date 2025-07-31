@@ -142,9 +142,9 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut buf: B, size: usize) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut buf: B) -> Result<Self, Error> {
         let (child_size, child_type) = buf.header()?;
-        let remaining = array_remaining(size, child_size, mem::size_of::<[u32; 2]>())?;
+        let remaining = array_remaining(buf.len(), child_size)?;
 
         Ok(Self {
             buf,

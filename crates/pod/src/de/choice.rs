@@ -163,7 +163,7 @@ where
     }
 
     #[inline]
-    pub(crate) fn from_reader(mut buf: B, size: usize) -> Result<Self, Error> {
+    pub(crate) fn from_reader(mut buf: B) -> Result<Self, Error> {
         let [choice_type, flags, child_size, child_type] = buf.read::<[u32; 4]>()?;
 
         let Ok(child_size) = usize::try_from(child_size) else {
@@ -172,7 +172,7 @@ where
 
         let choice_type = ChoiceType::from_u32(choice_type);
         let child_type = Type::new(child_type);
-        let remaining = array_remaining(size, child_size, mem::size_of::<[u32; 4]>())?;
+        let remaining = array_remaining(buf.len(), child_size)?;
 
         Ok(Self {
             buf,

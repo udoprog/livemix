@@ -84,7 +84,6 @@ pub(crate) enum ErrorKind {
     InvalidIsizeInt {
         value: isize,
     },
-    ArraySizeUnderflow,
     ArraySizeMismatch {
         size: usize,
         child_size: usize,
@@ -183,7 +182,6 @@ impl fmt::Display for Error {
             ErrorKind::InvalidIsizeInt { value } => {
                 write!(f, "Value {value} is a valid int")
             }
-            ErrorKind::ArraySizeUnderflow => write!(f, "Array size underflow"),
             ErrorKind::ArraySizeMismatch { size, child_size } => {
                 write!(f, "Array size {size} is not a multiple of {child_size}")
             }
