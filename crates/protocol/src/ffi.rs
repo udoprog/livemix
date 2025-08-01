@@ -333,24 +333,25 @@ pub struct IoClock {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IoBuffers {
     /// the status code.
-    status: flags::Status,
+    pub status: flags::Status,
     /// a buffer id.
-    buffer_id: u32,
+    pub buffer_id: u32,
 }
 
 /// Describes essential buffer header metadata such as flags and timestamps.
 #[repr(C)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MetaHeader {
     /// flags.
-    flags: flags::MetaHeaderFlags,
+    pub flags: flags::MetaHeaderFlags,
     /// offset in current cycle.
-    offset: u32,
+    pub offset: u32,
     /// presentation timestamp in nanoseconds.
-    pts: i64,
+    pub pts: i64,
     /// decoding timestamp as a difference with pts.
-    dts_offset: i64,
+    pub dts_offset: i64,
     /// sequence number, increments with a media specific frequency.
-    seq: u64,
+    pub seq: u64,
 }
 
 #[cfg(feature = "test-pipewire-sys")]

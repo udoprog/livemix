@@ -1,5 +1,6 @@
 //! Types to interact with raw memory.
 
+use core::any;
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
@@ -10,6 +11,7 @@ use std::io;
 use std::os::fd::AsRawFd;
 use std::os::fd::OwnedFd;
 
+use anyhow::ensure;
 use anyhow::{Result, bail};
 use protocol::flags;
 use protocol::id;
@@ -56,6 +58,31 @@ pub struct Region<T> {
 }
 
 impl Region<()> {
+    /// Cast the region to a different type.
+    #[inline]
+    pub fn cast<T>(&self) -> Result<Region<T>> {
+        ensure!(
+            self.ptr.as_ptr().addr() % mem::align_of::<T>() == 0,
+            "Region<{}> pointer must be aligned to {}",
+            any::type_name::<T>(),
+            mem::align_of::<T>()
+        );
+
+        ensure!(
+            self.size == mem::size_of::<T>(),
+            "Region<{}> cast size {} must match {}",
+            any::type_name::<T>(),
+            mem::size_of::<T>(),
+            self.size
+        );
+
+        Ok(Region {
+            file: self.file,
+            size: self.size,
+            ptr: self.ptr.cast(),
+        })
+    }
+
     /// Limit the size of the region.
     pub fn size(&self, size: usize) -> Result<Region<()>> {
         if size > self.size {
@@ -67,7 +94,7 @@ impl Region<()> {
 
         Ok(Region {
             file: self.file,
-            size: self.size - size,
+            size,
             ptr: self.ptr.cast(),
         })
     }
@@ -98,25 +125,38 @@ impl Region<()> {
     }
 
     /// Slice up the region to a smaller size.
-    pub fn slice<T>(&self, offset: isize, size: usize) -> Option<Region<T>> {
+    pub fn slice<T>(&self, offset: isize, size: usize) -> Result<Region<T>> {
         let Ok(offset) = usize::try_from(offset) else {
-            return None;
+            bail!(
+                "Region<{}> offset {offset} is not a valid memory offset",
+                any::type_name::<T>()
+            );
         };
 
-        if offset.checked_add(size)? > self.size {
-            return None;
-        }
+        let Some(offset_size) = offset.checked_add(size) else {
+            bail!(
+                "Region<{}> offset size {offset} + {size} overflows pointer size",
+                any::type_name::<T>()
+            );
+        };
+
+        ensure!(
+            offset_size <= self.size,
+            "Region<{}> offset size {offset_size} is larger than region size {}",
+            any::type_name::<T>(),
+            self.size,
+        );
 
         if mem::size_of::<T>() > 0 {
-            assert_eq!(
+            ensure!(
+                mem::size_of::<T>() == size,
+                "Region<{}> is non-zero size {} and must must match {size}",
+                any::type_name::<T>(),
                 mem::size_of::<T>(),
-                size,
-                "Size of `{}` must match",
-                core::any::type_name::<T>()
             );
         }
 
-        Some(Region {
+        Ok(Region {
             file: self.file,
             size,
             ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset).cast()) },
@@ -308,7 +348,7 @@ impl Memory {
                 mem::size_of::<T>(),
                 size,
                 "Size of `{}` must match",
-                core::any::type_name::<T>()
+                any::type_name::<T>()
             );
         }
 
@@ -328,10 +368,7 @@ impl Memory {
             bail!("Memory {mem_id} is not a memfd type, found {:?}", file.ty);
         }
 
-        let Some(region) = region.slice(offset, size) else {
-            bail!("Requested offset and size is not valid");
-        };
-
+        let region = region.slice(offset, size)?;
         file.users += 1;
         Ok(region)
     }

@@ -1,9 +1,12 @@
 use core::ffi::CStr;
 use core::mem;
+use core::slice;
 
+use core::time::Duration;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ffi::CString;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::time::SystemTime;
 
 use alloc::borrow::ToOwned;
 use alloc::string::String;
@@ -31,7 +34,7 @@ use tracing::Level;
 
 use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
-use crate::ptr::atomic;
+use crate::ptr::{atomic, volatile};
 use crate::{Buffers, Client, Memory, Ports, Region};
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
@@ -94,6 +97,7 @@ struct ClientNodeState {
     io_control: Option<Region<()>>,
     io_position: Option<Region<ffi::IoPosition>>,
     modified: bool,
+    buf: Vec<u8>,
 }
 
 impl ClientNodeState {
@@ -152,6 +156,7 @@ impl ClientNodeState {
             io_clock: None,
             io_position: None,
             modified: true,
+            buf: Vec::with_capacity(1024 * 1024),
         })
     }
 
@@ -501,8 +506,6 @@ impl State {
     /// Handle read on custom token.
     #[tracing::instrument(skip(self))]
     pub fn handle_read(&mut self, token: Token) -> Result<()> {
-        std::dbg!("handle read?");
-
         let Some(index) = self.read_to_client.get(&token) else {
             tracing::warn!(?token, "No client found for token");
             return Ok(());
@@ -526,7 +529,6 @@ impl State {
             self.ops.push_back(Op::Process);
         }
 
-        tracing::warn!(ev, "got event");
         Ok(())
     }
 
@@ -590,8 +592,8 @@ impl State {
 
         let mut ports = Ports::new();
 
-        // let port = ports.insert(consts::Direction::INPUT)?;
-        // port.name = String::from("input");
+        let port = ports.insert(consts::Direction::INPUT)?;
+        port.name = String::from("input");
 
         let port = ports.insert(consts::Direction::OUTPUT)?;
         port.name = String::from("output");
@@ -637,27 +639,106 @@ impl State {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     fn process(&mut self) -> Result<()> {
-        tracing::error!("Processing events");
+        // tracing::error!("Processing events");
 
         for (_, node) in &mut self.client_nodes {
             let Some(activation) = &node.activation else {
                 continue;
             };
 
-            for port in node.ports.outputs_mut() {
-                let Some(buffers) = &port.buffers else {
+            node.buf.clear();
+
+            for port in node.ports.inputs_mut() {
+                let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
+                    tracing::warn!("Input missing buffers");
                     continue;
                 };
 
-                std::dbg!(port.id, &buffers.buffers);
+                let status = volatile!(io_buffers, status).read();
 
-                // buffers.buffers[0].datas[0]
-                // TODO: Fill buffers.
+                if status != flags::Status::HAVE_DATA {
+                    tracing::warn!("Input io status is not HAVE_DATA: {status:?}");
+                    continue;
+                };
+
+                let id = volatile!(io_buffers, buffer_id).read();
+
+                let Some(buffer) = buffers.buffers.get(id as usize) else {
+                    bail!("No buffer with id {id} for port {}", port.id);
+                };
+
+                let header = unsafe { buffer.metas[0].region.cast::<ffi::MetaHeader>()?.read() };
+
+                let region = &buffer.datas[0].region;
+
+                let data = unsafe {
+                    slice::from_raw_parts(
+                        region.ptr.as_ptr().cast::<u8>(),
+                        buffer.datas[0].max_size,
+                    )
+                };
+
+                node.buf.extend_from_slice(data);
+
+                let old_read = volatile!(io_buffers, status).replace(flags::Status::NEED_DATA);
+                tracing::warn!(?id, ?old_read);
             }
 
-            atomic!(activation, status).store(ActivationStatus::AWAKE);
-            atomic!(activation, state[0].status).store(flags::Status::HAVE_DATA);
+            for port in node.ports.outputs_mut() {
+                let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
+                    tracing::warn!("Output missing buffers");
+                    continue;
+                };
+
+                let status = volatile!(io_buffers, status).read();
+
+                if status != flags::Status::NEED_DATA {
+                    tracing::warn!("io status is not NEED_DATA: {status:?}");
+                    continue;
+                };
+
+                let id = volatile!(io_buffers, buffer_id).read();
+
+                let Some(buffer) = buffers.buffers.get(id as usize) else {
+                    bail!("No buffer with id {id} for port {}", port.id);
+                };
+
+                let header = unsafe { buffer.metas[0].region.cast::<ffi::MetaHeader>()?.read() };
+
+                let region = &buffer.datas[0].region;
+
+                unsafe {
+                    region
+                        .ptr
+                        .as_ptr()
+                        .cast::<u8>()
+                        .copy_from_nonoverlapping(node.buf.as_ptr(), buffer.datas[0].max_size)
+                }
+
+                let old_write = volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
+                tracing::warn!(?id, ?old_write);
+            }
+
+            let now = SystemTime::now();
+
+            for (_, a) in &node.node_activations {
+                let status = volatile!(a.region, status).read();
+                let state = volatile!(a.region, state[0]).read();
+                tracing::warn!(?status, ?state);
+            }
+
+            if let Some(activation) = &node.activation {
+                let previous_status =
+                    atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
+
+                tracing::warn!(?previous_status);
+
+                if previous_status != ActivationStatus::TRIGGERED {
+                    tracing::warn!("Unexpected activation status: {previous_status:?}");
+                }
+            }
         }
 
         Ok(())
@@ -1230,11 +1311,13 @@ impl State {
                 for _ in 0..n_metas {
                     let (ty, size) = st.read::<(id::Meta, u32)>()?;
                     self.memory.track(&region);
+
                     metas.push(buffer::Meta {
                         ty,
                         size,
                         region: region.size(size as usize)?,
                     });
+
                     region = region.add(size as usize, 8)?;
                 }
             }

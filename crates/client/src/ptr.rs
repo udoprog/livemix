@@ -1,11 +1,13 @@
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use protocol::{consts, flags};
 
 /// A trait for atomic operations on types.
 pub(crate) trait AtomicOps<T> {
     fn store(&self, value: T);
+
+    fn swap(&self, value: T) -> T;
 
     fn load(&self) -> T;
 
@@ -14,26 +16,40 @@ pub(crate) trait AtomicOps<T> {
     fn sub(&self, value: T) -> T;
 }
 
-impl AtomicOps<u32> for AtomicU32 {
-    #[inline]
-    fn store(&self, value: u32) {
-        AtomicU32::store(self, value, Ordering::SeqCst);
-    }
+macro_rules! atomic {
+    ($($atomic:ident, $repr:ty),* $(,)?) => {
+        $(impl AtomicOps<$repr> for $atomic {
+            #[inline]
+            fn store(&self, value: $repr) {
+                $atomic::store(self, value, Ordering::SeqCst);
+            }
 
-    #[inline]
-    fn load(&self) -> u32 {
-        AtomicU32::load(self, Ordering::SeqCst)
-    }
+            #[inline]
+            fn swap(&self, value: $repr) -> $repr {
+                $atomic::swap(self, value, Ordering::SeqCst)
+            }
 
-    #[inline]
-    fn compare_exchange(&self, current: u32, new: u32) -> bool {
-        AtomicU32::compare_exchange(self, current, new, Ordering::SeqCst, Ordering::SeqCst).is_ok()
-    }
+            #[inline]
+            fn load(&self) -> $repr {
+                $atomic::load(self, Ordering::SeqCst)
+            }
 
-    #[inline]
-    fn sub(&self, value: u32) -> u32 {
-        AtomicU32::fetch_sub(self, value, Ordering::SeqCst)
-    }
+            #[inline]
+            fn compare_exchange(&self, current: $repr, new: $repr) -> bool {
+                $atomic::compare_exchange(self, current, new, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+            }
+
+            #[inline]
+            fn sub(&self, value: $repr) -> $repr {
+                $atomic::fetch_sub(self, value, Ordering::SeqCst)
+            }
+        })*
+    };
+}
+
+atomic! {
+    AtomicU32, u32,
+    AtomicI32, i32,
 }
 
 /// Helper trait to convert values into ones compatible with atomic operations.
@@ -62,8 +78,8 @@ impl IntoAtomic for consts::ActivationStatus {
 }
 
 impl IntoAtomic for flags::Status {
-    type Repr = u32;
-    type Atomic = AtomicU32;
+    type Repr = i32;
+    type Atomic = AtomicI32;
 
     #[inline]
     fn into_repr(self) -> Self::Repr {
@@ -111,6 +127,18 @@ where
     }
 
     #[inline]
+    pub(crate) fn store(&self, value: T) {
+        // SAFETY: We are assuming that the pointer is valid and aligned.
+        unsafe { (*self.ptr.as_ptr()).store(T::into_repr(value)) }
+    }
+
+    #[inline]
+    pub(crate) fn swap(&self, value: T) -> T {
+        // SAFETY: We are assuming that the pointer is valid and aligned.
+        unsafe { T::from_repr((*self.ptr.as_ptr()).swap(T::into_repr(value))) }
+    }
+
+    #[inline]
     pub(crate) fn sub(&self, value: T) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).sub(T::into_repr(value))) }
@@ -120,12 +148,6 @@ where
     pub(crate) fn load(&self) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).load()) }
-    }
-
-    #[inline]
-    pub(crate) fn store(&self, value: T) {
-        // SAFETY: We are assuming that the pointer is valid and aligned.
-        unsafe { (*self.ptr.as_ptr()).store(T::into_repr(value)) }
     }
 
     #[inline]
@@ -158,6 +180,16 @@ impl<T> Volatile<T> {
     pub(crate) fn write(&self, value: T) {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe { self.ptr.as_ptr().write_volatile(value) };
+    }
+
+    /// Replace a value and return the old one.
+    pub(crate) fn replace(&self, value: T) -> T {
+        // SAFETY: We are assuming that the field pointer is valid.
+        unsafe {
+            let old = self.ptr.as_ptr().read_volatile();
+            self.ptr.as_ptr().write_volatile(value);
+            old
+        }
     }
 }
 
