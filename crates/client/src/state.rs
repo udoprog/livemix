@@ -10,8 +10,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use anyhow::{Context, Result, bail};
-use pod::{DynamicBuf, Fd, Object, Pod, Slice, Struct};
+use anyhow::{Context, Result, bail, ensure};
+use pod::{ChoiceType, DynamicBuf, Fd, Object, Pod, Slice, Struct, Type};
 use protocol::EventFd;
 use protocol::Prop;
 use protocol::buf::RecvBuf;
@@ -108,14 +108,13 @@ impl ClientNodeState {
 
         pod.as_mut()
             .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE)
-                    .write_sized(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .write_sized(MediaSubType::RAW)?;
+                    .write(MediaSubType::DSP)?;
                 obj.property(Format::AUDIO_FORMAT)
-                    .write_sized(AudioFormat::F32)?;
-                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
-                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
+                    .write(AudioFormat::F32P)?;
+                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
+                obj.property(Format::AUDIO_RATE).write(44100u32)?;
                 Ok(())
             })?;
 
@@ -126,14 +125,13 @@ impl ClientNodeState {
 
         pod.as_mut()
             .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE)
-                    .write_sized(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .write_sized(MediaSubType::RAW)?;
+                    .write(MediaSubType::DSP)?;
                 obj.property(Format::AUDIO_FORMAT)
-                    .write_sized(AudioFormat::F32)?;
-                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
-                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
+                    .write(AudioFormat::F32P)?;
+                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
+                obj.property(Format::AUDIO_RATE).write(44100u32)?;
                 Ok(())
             })?;
 
@@ -640,6 +638,8 @@ impl State {
     }
 
     fn process(&mut self) -> Result<()> {
+        tracing::error!("Processing events");
+
         for (_, node) in &mut self.client_nodes {
             let Some(activation) = &node.activation else {
                 continue;
@@ -650,7 +650,9 @@ impl State {
                     continue;
                 };
 
-                buffers.buffers[0].datas[0]
+                std::dbg!(port.id, &buffers.buffers);
+
+                // buffers.buffers[0].datas[0]
                 // TODO: Fill buffers.
             }
 
@@ -1222,9 +1224,19 @@ impl State {
 
             let mut metas = Vec::new();
 
-            for _ in 0..n_metas {
-                let (ty, size) = st.read::<(id::Meta, u32)>()?;
-                metas.push(buffer::Meta { ty, size });
+            {
+                let mut region = region.clone();
+
+                for _ in 0..n_metas {
+                    let (ty, size) = st.read::<(id::Meta, u32)>()?;
+                    self.memory.track(&region);
+                    metas.push(buffer::Meta {
+                        ty,
+                        size,
+                        region: region.size(size as usize)?,
+                    });
+                    region = region.add(size as usize, 8)?;
+                }
             }
 
             let mut datas = Vec::new();
@@ -1241,17 +1253,25 @@ impl State {
 
                 let region = match ty {
                     id::DataType::MEM_PTR => {
-                        let Some(region) = region.offset(data as usize) else {
-                            bail!("Invalid memory pointer {data} for region {region:?}");
+                        let Ok(data) = usize::try_from(data) else {
+                            bail!("Invalid data offset {data} for data type {ty:?}");
                         };
 
-                        assert!(region.size <= max_size);
-                        assert!(offset == 0);
+                        let region = region.add(data, 1)?;
+
+                        ensure!(region.size <= max_size);
+                        ensure!(offset == 0);
 
                         self.memory.track(&region);
                         region
                     }
-                    id::DataType::MEM_FD => self.memory.map(data, offset as isize, max_size)?,
+                    id::DataType::MEM_FD => {
+                        let Ok(offset) = isize::try_from(offset) else {
+                            bail!("Invalid offset {offset} for data type {ty:?}");
+                        };
+
+                        self.memory.map(data, offset, max_size)?
+                    }
                     ty => {
                         bail!("Unsupported data type {ty:?} in use buffers");
                     }
@@ -1379,8 +1399,8 @@ impl State {
         let peer_id = st.field()?.read_sized::<u32>()?;
         let fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
         let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<i32>()? as isize;
-        let size = st.field()?.read_sized::<u32>()? as usize;
+        let offset = st.field()?.read_sized::<isize>()?;
+        let size = st.field()?.read_sized::<usize>()?;
 
         let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");

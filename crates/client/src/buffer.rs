@@ -10,6 +10,7 @@ use crate::memory::Region;
 pub(crate) struct Meta {
     pub(crate) ty: id::Meta,
     pub(crate) size: u32,
+    pub(crate) region: Region<()>,
 }
 
 #[derive(Debug)]

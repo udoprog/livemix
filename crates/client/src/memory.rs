@@ -1,3 +1,5 @@
+//! Types to interact with raw memory.
+
 use core::fmt;
 use core::mem;
 use core::mem::MaybeUninit;
@@ -25,40 +27,76 @@ pub(crate) struct File {
     region: Option<Region<()>>,
 }
 
+/// A region of memory which is mapped to a file descriptor.
+///
+/// # Examples
+///
+/// ```
+/// use client::memory::Region;
+///
+/// let mut data = [0u8; 1024];
+///
+/// let region = Region::from_slice(0, &mut data[..]);
+///
+/// assert_eq!(region.size, 1024);
+/// assert_eq!(region.ptr.as_ptr(), data.as_mut_ptr().cast());
+///
+/// let region = region.add(256, 1)?;
+///
+/// assert_eq!(region.size, 768);
+/// assert_eq!(region.ptr.as_ptr(), data.as_mut_ptr().wrapping_add(256).cast());
+/// # Ok::<_, anyhow::Error>(())
+/// ```
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
+#[derive(Clone)]
 pub struct Region<T> {
     file: usize,
     pub size: usize,
     pub ptr: NonNull<T>,
 }
 
-impl<T> Region<T> {
-    /// Read the whole region.
-    ///
-    /// Since a region might be memory-contested among multiple threads, this
-    /// read is never guaranteed to result in data which is up-to-date or event
-    /// partially so. We do our best regardless and make use of volatile reads
-    /// to try and avoid the reading being optimized away.
-    #[inline]
-    pub unsafe fn read(&self) -> T
-    where
-        T: Copy,
-    {
-        unsafe { self.ptr.as_ptr().read_volatile() }
-    }
-
-    /// Erase the type signature of the region.
-    #[inline]
-    pub fn erase(self) -> Region<()> {
-        Region {
-            file: self.file,
-            size: self.size,
-            ptr: self.ptr.cast(),
-        }
-    }
-}
-
 impl Region<()> {
+    /// Limit the size of the region.
+    pub fn size(&self, size: usize) -> Result<Region<()>> {
+        if size > self.size {
+            bail!(
+                "Requested size {size} is larger than region size {}",
+                self.size
+            );
+        }
+
+        Ok(Region {
+            file: self.file,
+            size: self.size - size,
+            ptr: self.ptr.cast(),
+        })
+    }
+
+    /// Add the given size aligned to the specified alignment to the region.
+    pub fn add(&self, size: usize, align: usize) -> Result<Region<()>> {
+        let size = size.next_multiple_of(align);
+
+        if size > self.size {
+            bail!("Offset {size} is larger than region size {}", self.size);
+        }
+
+        let ptr = unsafe {
+            let ptr = self
+                .ptr
+                .as_ptr()
+                .cast::<u8>()
+                .wrapping_add(size)
+                .cast::<()>();
+            NonNull::new_unchecked(ptr)
+        };
+
+        Ok(Region {
+            file: self.file,
+            size: self.size - size,
+            ptr,
+        })
+    }
+
     /// Slice up the region to a smaller size.
     pub fn slice<T>(&self, offset: isize, size: usize) -> Option<Region<T>> {
         let Ok(offset) = usize::try_from(offset) else {
@@ -84,24 +122,49 @@ impl Region<()> {
             ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset).cast()) },
         })
     }
+}
 
-    /// Add an offset to the region's pointer.
-    pub fn offset(&self, offset: usize) -> Option<Region<()>> {
-        if offset == 0 {
-            return Some(Self {
-                file: self.file,
-                size: self.size,
-                ptr: self.ptr,
-            });
+impl<T> Region<T> {
+    /// Construct a new region from a slice.
+    ///
+    /// We require mutable access, all though it won't make a difference for
+    /// safety requirements. But it's intended to indicate that whoever
+    /// constructs the region at least has the ability to exclusively access it.
+    pub fn from_slice(file: usize, data: &mut [T]) -> Self {
+        Self {
+            file,
+            size: data.len(),
+            ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()).cast() },
         }
+    }
 
-        let size = self.size.checked_sub(offset)?;
+    /// Construct a new region.
+    pub fn new(file: usize, size: usize, ptr: NonNull<T>) -> Self {
+        Self { file, size, ptr }
+    }
 
-        Some(Region {
+    /// Read the whole region.
+    ///
+    /// Since a region might be memory-contested among multiple threads, this
+    /// read is never guaranteed to result in data which is up-to-date or event
+    /// partially so. We do our best regardless and make use of volatile reads
+    /// to try and avoid the reading being optimized away.
+    #[inline]
+    pub unsafe fn read(&self) -> T
+    where
+        T: Copy,
+    {
+        unsafe { self.ptr.as_ptr().read_volatile() }
+    }
+
+    /// Erase the type signature of the region.
+    #[inline]
+    pub fn erase(self) -> Region<()> {
+        Region {
             file: self.file,
-            size,
-            ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().wrapping_add(offset)) },
-        })
+            size: self.size,
+            ptr: self.ptr.cast(),
+        }
     }
 }
 

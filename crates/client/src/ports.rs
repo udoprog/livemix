@@ -35,8 +35,8 @@ impl PortParam {
 
 #[derive(Debug)]
 pub struct Port {
-    id: u32,
-    dir: consts::Direction,
+    pub id: u32,
+    pub dir: consts::Direction,
     modified: bool,
     pub name: String,
     pub buffers: Option<Buffers>,
@@ -151,14 +151,13 @@ impl Ports {
 
         pod.as_mut()
             .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE)
-                    .write_sized(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .write_sized(MediaSubType::RAW)?;
+                    .write(MediaSubType::DSP)?;
                 obj.property(Format::AUDIO_FORMAT)
-                    .write_sized(AudioFormat::S16)?;
-                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
-                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
+                    .write(AudioFormat::F32P)?;
+                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
+                obj.property(Format::AUDIO_RATE).write(44100u32)?;
                 Ok(())
             })?;
 
@@ -169,14 +168,13 @@ impl Ports {
 
         pod.as_mut()
             .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE)
-                    .write_sized(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
                 obj.property(Format::MEDIA_SUB_TYPE)
-                    .write_sized(MediaSubType::RAW)?;
+                    .write(MediaSubType::DSP)?;
                 obj.property(Format::AUDIO_FORMAT)
-                    .write_sized(AudioFormat::S16)?;
-                obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
-                obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
+                    .write(AudioFormat::F32P)?;
+                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
+                obj.property(Format::AUDIO_RATE).write(44100u32)?;
                 Ok(())
             })?;
 
@@ -187,10 +185,9 @@ impl Ports {
 
         pod.as_mut()
             .write_object(ObjectType::PARAM_META, Param::META, |obj| {
-                obj.property(ParamMeta::TYPE)
-                    .write_sized(id::Meta::HEADER)?;
+                obj.property(ParamMeta::TYPE).write(id::Meta::HEADER)?;
                 obj.property(ParamMeta::SIZE)
-                    .write_sized(mem::size_of::<ffi::MetaHeader>())?;
+                    .write(mem::size_of::<ffi::MetaHeader>())?;
                 Ok(())
             })?;
 
@@ -204,9 +201,9 @@ impl Ports {
 
             pod.as_mut()
                 .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-                    obj.property(ParamIo::ID).write_sized(id::IoType::CLOCK)?;
+                    obj.property(ParamIo::ID).write(id::IoType::CLOCK)?;
                     obj.property(ParamIo::SIZE)
-                        .write_sized(mem::size_of::<ffi::IoClock>())?;
+                        .write(mem::size_of::<ffi::IoClock>())?;
                     Ok(())
                 })?;
 

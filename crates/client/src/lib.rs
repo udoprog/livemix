@@ -14,7 +14,7 @@ use self::client::Client;
 mod state;
 pub use self::state::State;
 
-mod memory;
+pub mod memory;
 use self::memory::{Memory, Region};
 
 mod buffer;
