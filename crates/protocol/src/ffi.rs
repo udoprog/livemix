@@ -1,8 +1,8 @@
 use core::ffi::c_char;
 use core::fmt;
 
-use protocol::consts;
-use protocol::flags;
+use crate::consts;
+use crate::flags;
 
 /** the maximum number of segments visible in the future */
 const IO_POSITION_MAX_SEGMENTS: usize = 8;
@@ -174,8 +174,11 @@ pub struct IoSegmentBar {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct NodeActivation {
     pub status: consts::ActivationStatus,
-    /// unsigned int version:1; A sync is pending. unsigned int pending_sync:1;
-    /// A new position is pending. unsigned int pending_new_pos:1;
+    /// * unsigned int version:1;
+    /// * A sync is pending.
+    ///   `unsigned int pending_sync:1;`
+    /// * A new position is pending.
+    ///   `unsigned int pending_new_pos:1;`
     pub header_bits: u32,
     /// One current state and one next state as version flag.
     pub state: [NodeActivationState; 2],

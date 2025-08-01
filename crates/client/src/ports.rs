@@ -8,16 +8,15 @@ use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
 use pod::{ChoiceType, DynamicBuf, Object, Type};
-use protocol::{
-    consts,
-    id::{
-        self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers,
-        ParamIo, ParamMeta,
-    },
+use protocol::consts;
+use protocol::ffi;
+use protocol::id::{
+    self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
+    ParamMeta,
 };
 use tracing::Level;
 
-use crate::{Buffers, Region, ffi};
+use crate::{Buffers, Region};
 
 const BUFFER_SAMPLES: u32 = 128;
 

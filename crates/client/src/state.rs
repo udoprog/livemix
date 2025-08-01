@@ -17,6 +17,7 @@ use protocol::Prop;
 use protocol::buf::RecvBuf;
 use protocol::consts;
 use protocol::consts::ActivationStatus;
+use protocol::ffi;
 use protocol::flags;
 use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::Ids;
@@ -30,7 +31,7 @@ use tracing::Level;
 use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
 use crate::ptr::atomic;
-use crate::{Buffers, Client, Memory, Ports, Region, ffi};
+use crate::{Buffers, Client, Memory, Ports, Region};
 
 const CREATE_CLIENT_NODE: u32 = 0x2000;
 const GET_REGISTRY_SYNC: u32 = 0x1000;
