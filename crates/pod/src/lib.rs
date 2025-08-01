@@ -15,6 +15,10 @@ pub mod macros;
 
 pub(crate) mod bstr;
 
+mod into_raw;
+#[doc(inline)]
+pub use self::into_raw::IntoRaw;
+
 mod pod;
 #[doc(inline)]
 pub use self::pod::Pod;

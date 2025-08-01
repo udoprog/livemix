@@ -22,6 +22,7 @@ use protocol::flags;
 use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::Ids;
 use protocol::op;
+use protocol::op::{ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
 use protocol::poll::{Interest, Token};
 use protocol::types::Header;
 use protocol::{Connection, Properties, prop};
@@ -112,7 +113,7 @@ impl ClientNodeState {
                 obj.property(Format::MEDIA_SUB_TYPE)
                     .write_sized(MediaSubType::RAW)?;
                 obj.property(Format::AUDIO_FORMAT)
-                    .write_sized(AudioFormat::S16)?;
+                    .write_sized(AudioFormat::F32)?;
                 obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
                 obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
                 Ok(())
@@ -130,7 +131,7 @@ impl ClientNodeState {
                 obj.property(Format::MEDIA_SUB_TYPE)
                     .write_sized(MediaSubType::RAW)?;
                 obj.property(Format::AUDIO_FORMAT)
-                    .write_sized(AudioFormat::S16)?;
+                    .write_sized(AudioFormat::F32)?;
                 obj.property(Format::AUDIO_CHANNELS).write_sized(1u32)?;
                 obj.property(Format::AUDIO_RATE).write_sized(44100u32)?;
                 Ok(())
@@ -197,6 +198,7 @@ enum Op {
     NodeUpdate { client: usize },
     NodeStart { client: usize },
     NodeReadInterest { client: usize },
+    Process,
 }
 
 #[derive(Debug)]
@@ -356,18 +358,19 @@ impl State {
                         }
                     }
                     Op::NodeUpdate { client } => {
-                        if let Some(client) = self.client_nodes.get_mut(client) {
-                            if client.take_modified() {
-                                self.c.client_node_update(client.id, 4, 4, &client.params)?;
+                        if let Some(node) = self.client_nodes.get_mut(client) {
+                            if node.take_modified() {
+                                self.c.client_node_update(node.id, 4, 4, &node.params)?;
+                                self.c.client_node_set_active(node.id, true)?;
                             }
 
-                            for port in client.ports.inputs_mut() {
+                            for port in node.ports.inputs_mut() {
                                 if !port.take_modified() {
                                     continue;
                                 }
 
                                 self.c.client_node_port_update(
-                                    client.id,
+                                    node.id,
                                     consts::Direction::INPUT,
                                     port.id(),
                                     &port.name,
@@ -375,13 +378,13 @@ impl State {
                                 )?;
                             }
 
-                            for port in client.ports.outputs_mut() {
+                            for port in node.ports.outputs_mut() {
                                 if !port.take_modified() {
                                     continue;
                                 }
 
                                 self.c.client_node_port_update(
-                                    client.id,
+                                    node.id,
                                     consts::Direction::OUTPUT,
                                     port.id(),
                                     &port.name,
@@ -399,7 +402,6 @@ impl State {
                                 ActivationStatus::NOT_TRIGGERED,
                             ) {
                                 tracing::info!("Starting node");
-                                self.c.client_node_set_active(node.id, true)?;
                             }
                         } else {
                             tracing::error!(
@@ -408,26 +410,11 @@ impl State {
                             );
                         }
                     }
-                    Op::NodeReadInterest { client: index } => {
-                        if let Some(client) = self.client_nodes.get(index) {
-                            if let Some(read_fd) = &client.read_fd {
-                                self.read_to_client.insert(client.read_token, index);
-                                self.add_interest.push_back((
-                                    read_fd.as_raw_fd(),
-                                    client.read_token,
-                                    Interest::READ | Interest::HUP | Interest::ERROR,
-                                ));
-                            }
-
-                            if let Some(write_fd) = &client.write_fd {
-                                self.write_to_client.insert(client.write_token, index);
-                                self.add_interest.push_back((
-                                    write_fd.as_raw_fd(),
-                                    client.write_token,
-                                    Interest::HUP | Interest::ERROR,
-                                ));
-                            }
-                        }
+                    Op::NodeReadInterest { client } => {
+                        self.node_read_interest(client)?;
+                    }
+                    Op::Process => {
+                        self.process()?;
                     }
                 }
             }
@@ -538,7 +525,7 @@ impl State {
         };
 
         if let Some(a) = &client.activation {
-            // std::dbg!(atomic!(a, status).compare_exchange(ActivationStatus::TRIGGERED, ActivationStatus::NOT_TRIGGERED));
+            self.ops.push_back(Op::Process);
         }
 
         tracing::warn!(ev, "got event");
@@ -605,11 +592,11 @@ impl State {
 
         let mut ports = Ports::new();
 
-        let port = ports.insert(consts::Direction::INPUT)?;
-        port.name = String::from("input");
+        // let port = ports.insert(consts::Direction::INPUT)?;
+        // port.name = String::from("input");
 
-        // let port = ports.insert(consts::Direction::OUTPUT)?;
-        // port.name = String::from("output");
+        let port = ports.insert(consts::Direction::OUTPUT)?;
+        port.name = String::from("output");
 
         let write_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
         let read_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
@@ -626,31 +613,82 @@ impl State {
         Ok(())
     }
 
+    fn node_read_interest(&mut self, client: usize) -> Result<()> {
+        let Some(node) = self.client_nodes.get(client) else {
+            bail!("No client found for index {client}");
+        };
+
+        if let Some(read_fd) = &node.read_fd {
+            self.read_to_client.insert(node.read_token, client);
+            self.add_interest.push_back((
+                read_fd.as_raw_fd(),
+                node.read_token,
+                Interest::READ | Interest::HUP | Interest::ERROR,
+            ));
+        }
+
+        if let Some(write_fd) = &node.write_fd {
+            self.write_to_client.insert(node.write_token, client);
+            self.add_interest.push_back((
+                write_fd.as_raw_fd(),
+                node.write_token,
+                Interest::HUP | Interest::ERROR,
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn process(&mut self) -> Result<()> {
+        for (_, node) in &mut self.client_nodes {
+            let Some(activation) = &node.activation else {
+                continue;
+            };
+
+            for port in node.ports.outputs_mut() {
+                let Some(buffers) = &port.buffers else {
+                    continue;
+                };
+
+                buffers.buffers[0].datas[0]
+                // TODO: Fill buffers.
+            }
+
+            atomic!(activation, status).store(ActivationStatus::AWAKE);
+            atomic!(activation, state[0].status).store(flags::Status::HAVE_DATA);
+        }
+
+        Ok(())
+    }
+
     fn core(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        match self.header.op() {
-            op::CORE_INFO_EVENT => {
-                self.core_info_event(pod).context("Core::Info")?;
+        let op = CoreEvent::from_raw(self.header.op());
+        tracing::info!("Event: {op}");
+
+        match op {
+            CoreEvent::INFO => {
+                self.core_info_event(pod).context(op)?;
             }
-            op::CORE_DONE_EVENT => {
-                self.core_done_event(pod).context("Core::Done")?;
+            CoreEvent::DONE => {
+                self.core_done_event(pod).context(op)?;
             }
-            op::CORE_PING_EVENT => {
-                self.core_ping_event(pod).context("Core::Ping")?;
+            CoreEvent::PING => {
+                self.core_ping_event(pod).context(op)?;
             }
-            op::CORE_ERROR_EVENT => {
-                self.core_error_event(pod).context("Core::Error")?;
+            CoreEvent::ERROR => {
+                self.core_error_event(pod).context(op)?;
             }
-            op::CORE_BOUND_ID_EVENT => {
-                self.core_bound_id_event(pod).context("Core::BoundId")?;
+            CoreEvent::BOUND_ID => {
+                self.core_bound_id_event(pod).context(op)?;
             }
-            op::CORE_ADD_MEM_EVENT => {
-                self.core_add_mem_event(pod).context("Core::AddMem")?;
+            CoreEvent::ADD_MEM => {
+                self.core_add_mem_event(pod).context(op)?;
             }
-            op::CORE_DESTROY_EVENT => {
-                self.core_destroy(pod).context("Core::Destroy")?;
+            CoreEvent::DESTROY => {
+                self.core_destroy(pod).context(op)?;
             }
             op => {
-                tracing::warn!(op, "Core unsupported op");
+                tracing::warn!("Unsupported event: {op}");
             }
         }
 
@@ -658,15 +696,17 @@ impl State {
     }
 
     fn client(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        match self.header.op() {
-            op::CLIENT_INFO_EVENT => {
-                self.client_info(pod).context("Client::Info")?;
+        let op = ClientEvent::from_raw(self.header.op());
+
+        match op {
+            ClientEvent::INFO => {
+                self.client_info(pod).context(op)?;
             }
-            op::CLIENT_ERROR_EVENT => {
-                self.client_error(pod).context("Client::Error")?;
+            ClientEvent::ERROR => {
+                self.client_error(pod).context(op)?;
             }
             op => {
-                tracing::warn!(op, "Client unsupported op");
+                tracing::warn!("Unsupported event: {op}");
             }
         }
 
@@ -680,59 +720,59 @@ impl State {
         };
 
         match *kind {
-            Kind::Registry => match self.header.op() {
-                op::REGISTRY_GLOBAL_EVENT => {
-                    self.registry_global(pod).context("Registry::Global")?;
+            Kind::Registry => {
+                let op = RegistryEvent::from_raw(self.header.op());
+                tracing::info!("Event: {op}");
+
+                match op {
+                    RegistryEvent::GLOBAL => {
+                        self.registry_global(pod).context(op)?;
+                    }
+                    RegistryEvent::GLOBAL_REMOVE => {
+                        self.registry_global_remove(pod).context(op)?;
+                    }
+                    op => {
+                        tracing::warn!(?op, "Registry unsupported op");
+                    }
                 }
-                op::REGISTRY_GLOBAL_REMOVE_EVENT => {
-                    self.registry_global_remove(pod)
-                        .context("Registry::GlobalRemove")?;
+            }
+            Kind::ClientNode(index) => {
+                let op = ClientNodeEvent::from_raw(self.header.op());
+                tracing::info!("Event: {op}");
+
+                match op {
+                    ClientNodeEvent::TRANSPORT => {
+                        self.client_node_transport(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::SET_PARAM => {
+                        self.client_node_set_param(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::SET_IO => {
+                        self.client_node_set_io(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::COMMAND => {
+                        self.client_node_command(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::PORT_SET_PARAM => {
+                        self.client_node_port_set_param(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::USE_BUFFERS => {
+                        self.client_node_use_buffers(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::PORT_SET_IO => {
+                        self.client_node_port_set_io(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::SET_ACTIVATION => {
+                        self.client_node_set_activation(index, pod).context(op)?;
+                    }
+                    ClientNodeEvent::PORT_SET_MIX_INFO => {
+                        self.client_node_set_mix_info(index, pod).context(op)?;
+                    }
+                    op => {
+                        tracing::warn!("Unsupported event: {op}");
+                    }
                 }
-                op => {
-                    tracing::warn!(op, "Registry unsupported op");
-                }
-            },
-            Kind::ClientNode(index) => match self.header.op() {
-                op::CLIENT_NODE_TRANSPORT_EVENT => {
-                    self.client_node_transport(index, pod)
-                        .context("ClientNode::Transport")?;
-                }
-                op::CLIENT_NODE_SET_PARAM_EVENT => {
-                    self.client_node_set_param(index, pod)
-                        .context("ClientNode::SetParam")?;
-                }
-                op::CLIENT_NODE_SET_IO_EVENT => {
-                    self.client_node_set_io(index, pod)
-                        .context("ClientNode::SetIO")?;
-                }
-                op::CLIENT_NODE_COMMAND_EVENT => {
-                    self.client_node_command(index, pod)
-                        .context("ClientNode::Command")?;
-                }
-                op::CLIENT_NODE_PORT_SET_PARAM_EVENT => {
-                    self.client_node_port_set_param(index, pod)
-                        .context("ClientNode::PortSetParam")?;
-                }
-                op::CLIENT_NODE_USE_BUFFERS_EVENT => {
-                    self.client_node_use_buffers(index, pod)
-                        .context("ClientNode::UseBuffers")?;
-                }
-                op::CLIENT_NODE_PORT_SET_IO_EVENT => {
-                    self.client_node_port_set_io(index, pod)
-                        .context("ClientNode::PortSetIO")?;
-                }
-                op::CLIENT_NODE_SET_ACTIVATION_EVENT => {
-                    self.client_node_set_activation(index, pod)
-                        .context("ClientNode::SetActivation")?;
-                }
-                op::CLIENT_NODE_PORT_SET_MIX_INFO_EVENT => {
-                    self.client_node_set_mix_info(index, pod)
-                        .context("ClientNode::SetMixInfo")?;
-                }
-                op => {
-                    tracing::warn!(op, "Client node unsupported op");
-                }
-            },
+            }
         }
 
         Ok(())
@@ -1174,6 +1214,7 @@ impl State {
 
         for _ in 0..n_buffers {
             let (mem_id, offset, size, n_metas) = st.read::<(u32, i32, u32, u32)>()?;
+
             let region = self
                 .memory
                 .map(mem_id, offset as isize, size as usize)
@@ -1223,6 +1264,8 @@ impl State {
                     max_size,
                 });
             }
+
+            self.memory.free(region);
 
             buffers.push(Buffer {
                 mem_id,

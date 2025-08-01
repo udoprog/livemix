@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     )?;
     poll.add(timer.as_raw_fd(), timer_token, Interest::READ)?;
 
-    timer.set_interval(Duration::from_secs(1))?;
+    timer.set_interval(Duration::from_secs(10))?;
 
     let mut events = ArrayVec::<PollEvent, 4>::new();
 

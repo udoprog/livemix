@@ -45,7 +45,7 @@ impl Client {
             .write_struct(|st| st.field().write_sized(consts::VERSION))?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_HELLO, pod.as_ref())?;
+            .request(consts::CORE_ID, op::Core::HELLO, pod.as_ref())?;
         Ok(())
     }
 
@@ -60,7 +60,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_GET_REGISTRY, pod.as_ref())?;
+            .request(consts::CORE_ID, op::Core::GET_REGISTRY, pod.as_ref())?;
         Ok(())
     }
 
@@ -78,7 +78,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_SYNC, pod.as_ref())?;
+            .request(consts::CORE_ID, op::Core::SYNC, pod.as_ref())?;
         Ok(sync_sequence)
     }
 
@@ -93,7 +93,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_PONG, pod.as_ref())?;
+            .request(consts::CORE_ID, op::Core::PONG, pod.as_ref())?;
         Ok(())
     }
 
@@ -132,7 +132,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(consts::CORE_ID, op::CORE_CREATE_OBJECT, pod.as_ref())?;
+            .request(consts::CORE_ID, op::Core::CREATE_OBJECT, pod.as_ref())?;
         Ok(())
     }
 
@@ -154,7 +154,7 @@ impl Client {
 
         self.connection.request(
             consts::CLIENT_ID,
-            op::CLIENT_UPDATE_PROPERTIES,
+            op::Client::UPDATE_PROPERTIES,
             pod.as_ref(),
         )?;
         Ok(())
@@ -171,7 +171,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(id, op::CLIENT_NODE_GET_NODE, pod.as_ref())?;
+            .request(id, op::ClientNode::GET_NODE, pod.as_ref())?;
         Ok(())
     }
 
@@ -247,7 +247,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(id, op::CLIENT_NODE_UPDATE, pod.as_ref())?;
+            .request(id, op::ClientNode::UPDATE, pod.as_ref())?;
         Ok(())
     }
 
@@ -326,7 +326,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(id, op::CLIENT_NODE_PORT_UPDATE, pod.as_ref())?;
+            .request(id, op::ClientNode::PORT_UPDATE, pod.as_ref())?;
         Ok(())
     }
 
@@ -337,7 +337,7 @@ impl Client {
         pod.as_mut().write_struct(|st| st.write(active))?;
 
         self.connection
-            .request(id, op::CLIENT_NODE_SET_ACTIVE, pod.as_ref())?;
+            .request(id, op::ClientNode::SET_ACTIVE, pod.as_ref())?;
         Ok(())
     }
 }

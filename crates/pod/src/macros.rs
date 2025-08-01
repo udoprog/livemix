@@ -179,8 +179,109 @@ macro_rules! __id {
 pub use __id as id;
 
 #[macro_export]
+macro_rules! __one_of {
+    ($fallback:expr, $value:expr) => {
+        $value
+    };
+
+    ($fallback:expr, ) => {
+        $fallback
+    };
+}
+
+pub use __one_of as one_of;
+
+#[macro_export]
 macro_rules! __consts {
     (
+        constants;
+
+        $(
+            $(#[doc = $doc:literal])*
+            #[example = $example:ident]
+            #[module = $module:path]
+            $ty_vis:vis struct $ty:ident($repr:ty) {
+                $default:ident;
+                $(
+                    $(#[doc = $field_doc:literal])*
+                    $(#[display = $display:literal])?
+                    $field:ident = $field_value:expr;
+                )*
+            }
+        )*
+    ) => {
+        $(
+            $(#[doc = $doc])*
+            #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+            #[repr(transparent)]
+            $ty_vis struct $ty($repr);
+
+            impl $ty {
+                $(
+                    $(#[doc = $field_doc])*
+                    $ty_vis const $field: Self = Self($field_value);
+                )*
+            }
+
+            impl $ty {
+                /// Test if the identifier is invalid.
+                pub fn is_invalid(&self) -> bool {
+                    match self.0 {
+                        $($field_value => false,)*
+                        _ => true,
+                    }
+                }
+
+                /// Get the identifier value.
+                #[inline]
+                pub fn into_raw(self) -> $repr {
+                    self.0
+                }
+
+                /// Convert an identifier value into the type.
+                #[inline]
+                pub fn from_raw(value: $repr) -> Self {
+                    match value {
+                        $($field_value => Self::$field,)*
+                        _ => Self(value),
+                    }
+                }
+            }
+
+            impl $crate::IntoRaw<$repr> for $ty {
+                #[inline]
+                fn into_raw(self) -> $repr {
+                    $ty::into_raw(self)
+                }
+            }
+
+            impl core::fmt::Debug for $ty {
+                #[inline]
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    match self.0 {
+                        $($field_value => write!(f, "{}", stringify!($field)),)*
+                        _ => write!(f, "{}({})", stringify!($default), self.0),
+                    }
+                }
+            }
+
+            impl core::fmt::Display for $ty {
+                #[inline]
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    match self.0 {
+                        $(
+                            $field_value => write!(f, "{}", $crate::macros::one_of!(stringify!($field), $($display)*)),
+                        )*
+                        _ => write!(f, "{}({})", stringify!($default), self.0),
+                    }
+                }
+            }
+        )*
+    };
+
+    (
+        readable_writable;
+
         $(
             $(#[doc = $doc:literal])*
             #[example = $example:ident]
@@ -195,18 +296,6 @@ macro_rules! __consts {
         )*
     ) => {
         $(
-            $(#[doc = $doc])*
-            #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-            #[repr(transparent)]
-            $ty_vis struct $ty($repr);
-
-            impl $ty {
-                $(
-                    $(#[$($field_meta)*])*
-                    $ty_vis const $field: Self = Self($field_value);
-                )*
-            }
-
             #[doc = concat!(" `SizedWritable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
@@ -284,42 +373,12 @@ macro_rules! __consts {
                     Ok(Self(<$repr as $crate::SizedReadable<'de>>::read_content(reader, len)?))
                 }
             }
-
-            impl $ty {
-                /// Test if the identifier is invalid.
-                pub fn is_invalid(&self) -> bool {
-                    match self.0 {
-                        $($field_value => false,)*
-                        _ => true,
-                    }
-                }
-
-                /// Get the identifier value.
-                #[inline]
-                pub fn into_raw(self) -> $repr {
-                    self.0
-                }
-
-                /// Convert an identifier value into the type.
-                #[inline]
-                pub fn from_raw(value: $repr) -> Self {
-                    match value {
-                        $($field_value => Self::$field,)*
-                        _ => Self(value),
-                    }
-                }
-            }
-
-            impl core::fmt::Debug for $ty {
-                #[inline]
-                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    match self.0 {
-                        $($field_value => write!(f, "{}", stringify!($field)),)*
-                        _ => write!(f, "{}({})", stringify!($default), self.0),
-                    }
-                }
-            }
         )*
+    };
+
+    ($($tt:tt)*) => {
+        $crate::macros::consts!(constants; $($tt)*);
+        $crate::macros::consts!(readable_writable; $($tt)*);
     };
 }
 

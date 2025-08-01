@@ -1,7 +1,7 @@
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use protocol::consts;
+use protocol::{consts, flags};
 
 /// A trait for atomic operations on types.
 pub(crate) trait AtomicOps<T> {
@@ -47,6 +47,21 @@ pub(crate) trait IntoAtomic {
 }
 
 impl IntoAtomic for consts::ActivationStatus {
+    type Repr = u32;
+    type Atomic = AtomicU32;
+
+    #[inline]
+    fn into_repr(self) -> Self::Repr {
+        self.into_raw()
+    }
+
+    #[inline]
+    fn from_repr(repr: Self::Repr) -> Self {
+        Self::from_raw(repr)
+    }
+}
+
+impl IntoAtomic for flags::Status {
     type Repr = u32;
     type Atomic = AtomicU32;
 

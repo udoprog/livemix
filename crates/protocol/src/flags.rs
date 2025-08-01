@@ -266,7 +266,7 @@ pod::macros::flags! {
     #[module = protocol::flags]
     pub struct Status(u32) {
         /// Equivalent of `SPA_STATUS_NEED_OK`.
-        NONE;
+        OK;
         /// Equivalent of `SPA_STATUS_NEED_DATA`.
         NEED_DATA = 1 << 0;
         /// Equivalent of `SPA_STATUS_HAVE_DATA`.

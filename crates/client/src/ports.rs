@@ -39,7 +39,7 @@ pub struct Port {
     dir: consts::Direction,
     modified: bool,
     pub name: String,
-    buffers: Option<Buffers>,
+    pub buffers: Option<Buffers>,
     pub io_clock: Option<Region<ffi::IoClock>>,
     pub io_position: Option<Region<ffi::IoPosition>>,
     pub io_buffers: Option<Region<ffi::IoBuffers>>,

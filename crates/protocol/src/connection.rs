@@ -1,5 +1,5 @@
-use core::mem;
-use core::mem::MaybeUninit;
+use core::fmt;
+use core::mem::{self, MaybeUninit};
 use core::ptr;
 
 use std::env;
@@ -9,6 +9,7 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
+use pod::IntoRaw;
 use pod::{AsSlice, Pod};
 use tracing::Level;
 
@@ -264,7 +265,14 @@ impl Connection {
     ///
     /// This will write the request to the outgoing buffer.
     #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.len()), ret(level = Level::DEBUG))]
-    pub fn request(&mut self, id: u32, op: u8, pod: Pod<impl AsSlice>) -> Result<(), Error> {
+    pub fn request(
+        &mut self,
+        id: u32,
+        op: impl IntoRaw<u8> + fmt::Display + fmt::Debug,
+        pod: Pod<impl AsSlice>,
+    ) -> Result<(), Error> {
+        tracing::info!("Request");
+
         let pod = pod.as_ref();
         let buf = pod.as_buf();
 
@@ -275,7 +283,7 @@ impl Connection {
         let message_sequence = self.message_sequence;
         self.message_sequence = self.message_sequence.wrapping_add(1);
 
-        let Some(header) = Header::new(id, op, size, message_sequence, 0) else {
+        let Some(header) = Header::new(id, op.into_raw(), size, message_sequence, 0) else {
             return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
         };
 

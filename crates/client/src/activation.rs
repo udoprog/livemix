@@ -1,9 +1,9 @@
 use anyhow::Result;
 use protocol::EventFd;
 use protocol::consts::ActivationStatus;
+use protocol::ffi;
 use tracing::Level;
 
-use crate::ffi;
 use crate::memory::Region;
 use crate::ptr;
 
