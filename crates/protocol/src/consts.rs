@@ -39,7 +39,7 @@ pod::macros::consts! {
 
     /// Describes `PW_NODE_ACTIVATION_*`.
     ///
-    /// See [`client::ffi::NodeActivation`] for more information.
+    /// See [`crate::ffi::NodeActivation`] for more information.
     ///
     /// Nodes start as `INACTIVE`, when they are ready to be scheduled, they add
     /// their fd to the loop and change status to FINISHED. When the node shuts

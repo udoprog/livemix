@@ -16,10 +16,10 @@ pub enum Version {
 
 #[derive(Debug)]
 pub struct Activation {
-    peer_id: u32,
-    signal_fd: EventFd,
+    pub peer_id: u32,
+    pub signal_fd: EventFd,
     pub region: Region<ffi::NodeActivation>,
-    version: Version,
+    pub version: Version,
 }
 
 impl Activation {

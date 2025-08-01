@@ -88,9 +88,7 @@ struct ClientNodeState {
     /// Activation record for this node.
     activation: Option<Region<ffi::NodeActivation>>,
     /// Activation records for dependent nodes.
-    node_activations: Slab<Activation>,
-    /// Map of peer ids to their activation indices.
-    peer_to_activation: BTreeMap<u32, usize>,
+    peer_activations: Slab<Activation>,
     params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
     ports: Ports,
     io_clock: Option<Region<ffi::IoClock>>,
@@ -149,8 +147,7 @@ impl ClientNodeState {
             write_token,
             read_token,
             activation: None,
-            node_activations: Slab::new(),
-            peer_to_activation: BTreeMap::new(),
+            peer_activations: Slab::new(),
             params,
             io_control: None,
             io_clock: None,
@@ -237,6 +234,7 @@ impl GlobalMap {
 /// The local connection state.
 #[derive(Debug)]
 pub struct State {
+    tick: usize,
     c: Client,
     core: CoreState,
     client: ClientState,
@@ -277,6 +275,7 @@ impl State {
             .insert(prop::NODE_NAME, String::from("livemix_node"));
 
         Self {
+            tick: 0,
             c: Client::new(connection),
             core: CoreState::default(),
             client,
@@ -482,7 +481,7 @@ impl State {
                 );
             }
 
-            for (_, a) in &node.node_activations {
+            for (_, a) in &node.peer_activations {
                 tracing::info!(
                     "Target status: {:?}",
                     crate::ptr::volatile!(a.region, status).read()
@@ -641,9 +640,17 @@ impl State {
 
     #[tracing::instrument(skip(self))]
     fn process(&mut self) -> Result<()> {
-        // tracing::error!("Processing events");
+        self.tick = self.tick.wrapping_add(1);
 
         for (_, node) in &mut self.client_nodes {
+            if let Some(activation) = &node.activation {
+                let previous_status = atomic!(activation, status).swap(ActivationStatus::AWAKE);
+
+                if previous_status != ActivationStatus::TRIGGERED {
+                    tracing::warn!(?previous_status, "Expected TRIGGERED");
+                }
+            }
+
             let Some(activation) = &node.activation else {
                 continue;
             };
@@ -659,84 +666,109 @@ impl State {
                 let status = volatile!(io_buffers, status).read();
 
                 if status != flags::Status::HAVE_DATA {
-                    tracing::warn!("Input io status is not HAVE_DATA: {status:?}");
+                    tracing::trace!("Input io status is not HAVE_DATA: {status:?}");
                     continue;
                 };
 
                 let id = volatile!(io_buffers, buffer_id).read();
 
                 let Some(buffer) = buffers.buffers.get(id as usize) else {
-                    bail!("No buffer with id {id} for port {}", port.id);
+                    bail!("Input no buffer with id {id} for port {}", port.id);
                 };
 
-                let header = unsafe { buffer.metas[0].region.cast::<ffi::MetaHeader>()?.read() };
+                let meta = &buffer.metas[0];
+                let data = &buffer.datas[0];
 
-                let region = &buffer.datas[0].region;
+                let header;
 
-                let data = unsafe {
-                    slice::from_raw_parts(
-                        region.ptr.as_ptr().cast::<u8>(),
-                        buffer.datas[0].max_size,
-                    )
-                };
+                unsafe {
+                    let chunk = data.chunk.as_ref();
 
-                node.buf.extend_from_slice(data);
+                    header = meta.region.cast::<ffi::MetaHeader>()?.read();
+                    let offset = chunk.offset as usize % data.max_size;
+
+                    node.buf.set_len(0);
+                    node.buf.reserve(chunk.size as usize);
+                    node.buf.as_mut_ptr().copy_from_nonoverlapping(
+                        data.region.ptr.as_ptr().cast::<u8>().wrapping_add(offset),
+                        chunk.size as usize,
+                    );
+                    node.buf.set_len(chunk.size as usize);
+                }
 
                 let old_read = volatile!(io_buffers, status).replace(flags::Status::NEED_DATA);
-                tracing::warn!(?id, ?old_read);
+
+                if self.tick % 100 == 0 {
+                    tracing::warn!(?data.flags, ?header, ?id, ?old_read);
+                }
             }
 
             for port in node.ports.outputs_mut() {
-                let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
-                    tracing::warn!("Output missing buffers");
+                let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &port.io_buffers)
+                else {
+                    tracing::trace!("Output missing buffers");
                     continue;
                 };
 
                 let status = volatile!(io_buffers, status).read();
 
                 if status != flags::Status::NEED_DATA {
-                    tracing::warn!("io status is not NEED_DATA: {status:?}");
+                    tracing::trace!("Output status is not NEED_DATA: {status:?}");
                     continue;
                 };
 
                 let id = volatile!(io_buffers, buffer_id).read();
 
-                let Some(buffer) = buffers.buffers.get(id as usize) else {
-                    bail!("No buffer with id {id} for port {}", port.id);
+                let Some(buffer) = buffers.buffers.get_mut(id as usize) else {
+                    bail!("Output no buffer with id {id} for port {}", port.id);
                 };
 
-                let header = unsafe { buffer.metas[0].region.cast::<ffi::MetaHeader>()?.read() };
+                let meta = &buffer.metas[0];
+                let data = &mut buffer.datas[0];
 
-                let region = &buffer.datas[0].region;
+                let header;
 
                 unsafe {
-                    region
+                    let chunk = data.chunk.as_mut();
+
+                    header = meta.region.cast::<ffi::MetaHeader>()?.read();
+
+                    std::dbg!(chunk.offset, chunk.stride);
+
+                    assert!(data.region.size >= node.buf.len());
+
+                    data.region
                         .ptr
                         .as_ptr()
                         .cast::<u8>()
-                        .copy_from_nonoverlapping(node.buf.as_ptr(), buffer.datas[0].max_size)
+                        .copy_from_nonoverlapping(node.buf.as_ptr(), node.buf.len());
+
+                    chunk.size = node.buf.len() as u32;
+                    chunk.stride = 4;
                 }
 
                 let old_write = volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
-                tracing::warn!(?id, ?old_write);
-            }
 
-            let now = SystemTime::now();
-
-            for (_, a) in &node.node_activations {
-                let status = volatile!(a.region, status).read();
-                let state = volatile!(a.region, state[0]).read();
-                tracing::warn!(?status, ?state);
+                if self.tick % 100 == 0 {
+                    tracing::warn!(?data.flags, ?header, ?id, ?old_write);
+                }
             }
 
             if let Some(activation) = &node.activation {
-                let previous_status =
-                    atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
+                let previous_status = atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
 
-                tracing::warn!(?previous_status);
+                if previous_status != ActivationStatus::AWAKE {
+                    tracing::warn!(?previous_status, "Expected AWAKE");
+                }
+            }
 
-                if previous_status != ActivationStatus::TRIGGERED {
-                    tracing::warn!("Unexpected activation status: {previous_status:?}");
+            for (_, a) in &node.peer_activations {
+                a.signal()?;
+
+                let activation = unsafe { a.region.read() };
+
+                if self.tick % 100 == 0 {
+                    tracing::warn!(?activation, "ACTIVATION");
                 }
             }
         }
@@ -1123,7 +1155,13 @@ impl State {
 
         // Set node as not triggered.
         if let Some(activation) = &node.activation {
-            atomic!(activation, status).store(ActivationStatus::NOT_TRIGGERED);
+            let old = atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
+
+            if old != ActivationStatus::INACTIVE {
+                tracing::warn!("Expected node to be INACTIVE, but was {old:?}",);
+            }
+
+            tracing::error!(?old);
         }
 
         tracing::debug!(index, ?read_fd, ?write_fd, mem_id, offset, size,);
@@ -1298,35 +1336,37 @@ impl State {
         for _ in 0..n_buffers {
             let (mem_id, offset, size, n_metas) = st.read::<(u32, i32, u32, u32)>()?;
 
-            let region = self
+            let mm = self
                 .memory
                 .map(mem_id, offset as isize, size as usize)
                 .context("mapping buffer")?;
 
             let mut metas = Vec::new();
 
-            {
-                let mut region = region.clone();
+            let mut region = mm.clone();
 
-                for _ in 0..n_metas {
-                    let (ty, size) = st.read::<(id::Meta, u32)>()?;
-                    self.memory.track(&region);
+            for _ in 0..n_metas {
+                let (ty, size) = st.read::<(id::Meta, u32)>()?;
+                self.memory.track(&region);
 
-                    metas.push(buffer::Meta {
-                        ty,
-                        size,
-                        region: region.size(size as usize)?,
-                    });
+                metas.push(buffer::Meta {
+                    ty,
+                    size,
+                    region: region.size(size as usize)?,
+                });
 
-                    region = region.add(size as usize, 8)?;
-                }
+                region = region.add(size as usize, 8)?;
             }
 
             let mut datas = Vec::new();
 
-            let n_datas = st.read::<u32>()?;
+            let n_datas = st.read::<usize>()?;
 
             for _ in 0..n_datas {
+                let chunk = region.clone().size(mem::size_of::<ffi::Chunk>())?.cast()?;
+                region = region.add(mem::size_of::<ffi::Chunk>(), 8)?;
+                self.memory.track(&chunk);
+
                 let (ty, data, flags, offset, max_size) =
                     st.read::<(id::DataType, u32, flags::DataFlag, i32, u32)>()?;
 
@@ -1340,7 +1380,7 @@ impl State {
                             bail!("Invalid data offset {data} for data type {ty:?}");
                         };
 
-                        let region = region.add(data, 1)?;
+                        let region = mm.add(data, 1)?;
 
                         ensure!(region.size <= max_size);
                         ensure!(offset == 0);
@@ -1365,10 +1405,11 @@ impl State {
                     region,
                     flags,
                     max_size,
+                    chunk,
                 });
             }
 
-            self.memory.free(region);
+            self.memory.free(mm);
 
             buffers.push(Buffer {
                 mem_id,
@@ -1393,8 +1434,13 @@ impl State {
 
         if let Some(replaced) = replaced {
             for buffer in replaced.buffers {
+                for meta in buffer.metas {
+                    self.memory.free(meta.region);
+                }
+
                 for data in buffer.datas {
                     self.memory.free(data.region);
+                    self.memory.free(data.chunk);
                 }
             }
         }
@@ -1489,22 +1535,21 @@ impl State {
             bail!("Missing client node {index}");
         };
 
-        if let Some(index) = node.peer_to_activation.remove(&peer_id) {
-            if let Some(a) = node.node_activations.try_remove(index) {
-                self.memory.free(a.region);
-            }
-        }
-
-        let (Some(fd), Ok(mem_id)) = (fd, u32::try_from(mem_id)) else {
+        let Ok(mem_id) = u32::try_from(mem_id) else {
+            node.peer_activations.retain(|_, n| n.peer_id != peer_id);
             return Ok(());
+        };
+
+        let Some(fd) = fd else {
+            bail!("Missing fd for peer {peer_id} in node {index}");
         };
 
         let region = self.memory.map(mem_id, offset, size)?;
 
         let index =
-            node.node_activations
+            node.peer_activations
                 .insert(Activation::new(peer_id, EventFd::from(fd), region));
-        node.peer_to_activation.insert(peer_id, index);
+
         Ok(())
     }
 

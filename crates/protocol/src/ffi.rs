@@ -19,7 +19,7 @@ impl<T> fmt::Debug for Pad<T> {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct NodeActivationState {
+pub struct ActivationState {
     /// Current status, the result of spa_node_process().
     pub status: flags::Status,
     /// Required number of signals.
@@ -179,9 +179,9 @@ pub struct NodeActivation {
     ///   `unsigned int pending_sync:1;`
     /// * A new position is pending.
     ///   `unsigned int pending_new_pos:1;`
-    pub header_bits: u32,
+    pub header_bits: [u8; 4],
     /// One current state and one next state as version flag.
-    pub state: [NodeActivationState; 2],
+    pub state: [ActivationState; 2],
     /// Time at which the node was triggered (i.e. as ready to start processing
     /// in the current  iteration).
     pub signal_time: u64,
@@ -352,6 +352,21 @@ pub struct MetaHeader {
     pub dts_offset: i64,
     /// sequence number, increments with a media specific frequency.
     pub seq: u64,
+}
+
+/// Chunk of memory, can change for each buffer.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Chunk {
+    /// Offset of valid data. Should be taken modulo the data maxsize to get the
+    /// offset in the data memory.
+    pub offset: u32,
+    /// Size of valid data. Should be clamped to maxsize.
+    pub size: u32,
+    /// Stride of valid data.
+    pub stride: i32,
+    /// Chunk flags.
+    pub flags: flags::ChunkFlags,
 }
 
 #[cfg(feature = "test-pipewire-sys")]

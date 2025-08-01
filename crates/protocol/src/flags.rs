@@ -140,7 +140,8 @@ pod::macros::flags! {
         /// Node needs configuration before it can be started.
         #[constant = libspa_sys::SPA_NODE_FLAG_NEED_CONFIGURE]
         NEED_CONFIGURE = 1 << 5;
-        /// The process function might not immediately produce or consume data but might offload the work to a worker thread.
+        /// The process function might not immediately produce or consume data
+        /// but might offload the work to a worker thread.
         #[constant = libspa_sys::SPA_NODE_FLAG_ASYNC]
         ASYNC = 1 << 6;
     }
@@ -261,6 +262,8 @@ pod::macros::flags! {
     }
 
     /// Describes `SPA_STATUS_*`.
+    ///
+    /// See [`crate::ffi::IoBuffers`] for what these mean.
     #[examples = [NEED_DATA]]
     #[not_set = [HAVE_DATA]]
     #[module = protocol::flags]
@@ -295,6 +298,20 @@ pod::macros::flags! {
         GAP = 1 << 4;
         /// cannot be decoded independently.
         DELTA_UNIT = 1 << 5;
+    }
+
+    /// See [`crate::ffi::Chunk`].
+    ///
+    /// Describes `SPA_CHUNK_FLAG_*`.
+    #[examples = [CORRUPTED]]
+    #[not_set = [HEADER]]
+    #[module = protocol::flags]
+    pub struct ChunkFlags(u32) {
+        NONE;
+        /// Chunk data is corrupted in some way.
+        CORRUPTED = 1 << 0;
+        /// Chunk data is empty with media specific neutral data such as silence or black. This could be used to optimize processing.
+        EMPTY = 1 << 1;
     }
 }
 

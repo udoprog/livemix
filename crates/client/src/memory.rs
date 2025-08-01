@@ -206,6 +206,28 @@ impl<T> Region<T> {
             ptr: self.ptr.cast(),
         }
     }
+
+    /// Coerce the memory region into a reference.
+    ///
+    /// # Safety
+    ///
+    /// This is basically never sound, so don't use it for other things than
+    /// debugging. The correct way to read the struct is field-wise using the
+    /// [`volatile!`] macro.
+    pub unsafe fn as_ref(&self) -> &T {
+        unsafe { self.ptr.as_ref() }
+    }
+
+    /// Coerce the memory region into a mutable reference.
+    ///
+    /// # Safety
+    ///
+    /// This is basically never sound, so don't use it for other things than
+    /// debugging. The correct way to read the struct is field-wise using the
+    /// [`volatile!`] macro.
+    pub unsafe fn as_mut(&mut self) -> &mut T {
+        unsafe { self.ptr.as_mut() }
+    }
 }
 
 impl<T> fmt::Debug for Region<T> {

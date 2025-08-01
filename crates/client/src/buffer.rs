@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 
 use protocol::consts;
+use protocol::ffi;
 use protocol::flags;
 use protocol::id;
 
@@ -19,6 +20,7 @@ pub(crate) struct Data {
     pub(crate) region: Region<()>,
     pub(crate) flags: flags::DataFlag,
     pub(crate) max_size: usize,
+    pub(crate) chunk: Region<ffi::Chunk>,
 }
 
 #[derive(Debug)]
