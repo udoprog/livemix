@@ -37,8 +37,8 @@ use crate::buffer::{self, Buffer};
 use crate::ptr::{atomic, volatile};
 use crate::{Buffers, Client, Memory, Ports, Region};
 
-const CREATE_CLIENT_NODE: u32 = 0x2000;
-const GET_REGISTRY_SYNC: u32 = 0x1000;
+const CREATE_CLIENT_NODE: i32 = 0x2000;
+const GET_REGISTRY_SYNC: i32 = 0x1000;
 
 macro_rules! tracing_error {
     ($error:expr, $($tt:tt)*) => {{
@@ -755,7 +755,8 @@ impl State {
             }
 
             if let Some(activation) = &node.activation {
-                let previous_status = atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
+                let previous_status =
+                    atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
 
                 if previous_status != ActivationStatus::AWAKE {
                     tracing::warn!(?previous_status, "Expected AWAKE");
@@ -928,7 +929,7 @@ impl State {
 
     #[tracing::instrument(skip_all)]
     fn core_done_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let (id, seq) = pod.read_struct()?.read::<(u32, u32)>()?;
+        let (id, seq) = pod.read_struct()?.read::<(i32, i32)>()?;
 
         match id {
             GET_REGISTRY_SYNC => {
@@ -1160,8 +1161,6 @@ impl State {
             if old != ActivationStatus::INACTIVE {
                 tracing::warn!("Expected node to be INACTIVE, but was {old:?}",);
             }
-
-            tracing::error!(?old);
         }
 
         tracing::debug!(index, ?read_fd, ?write_fd, mem_id, offset, size,);

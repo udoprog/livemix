@@ -1,3 +1,4 @@
+use core::any;
 #[cfg(feature = "alloc")]
 use core::ffi::CStr;
 
@@ -22,13 +23,108 @@ pub trait SizedReadable<'de>
 where
     Self: Sized,
 {
-    /// The type of the decoded value.
-    #[doc(hidden)]
-    const TYPE: Type;
-
     /// Read the content of a type.
     #[doc(hidden)]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error>;
+    fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error>;
+}
+
+#[inline]
+fn read_integer<'de, T>(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<T, Error>
+where
+    T: SizedReadable<'de>,
+    T: TryFrom<i32> + TryFrom<i64>,
+{
+    match (ty, size) {
+        (Type::INT, 4) => {
+            let value = reader.read::<i32>()?;
+
+            let Ok(value) = T::try_from(value) else {
+                return Err(Error::new(ErrorKind::InvalidInt {
+                    value,
+                    ty: any::type_name::<T>(),
+                }));
+            };
+
+            Ok(value)
+        }
+        (Type::LONG, 8) => {
+            let value = reader.read::<i64>()?;
+
+            let Ok(value) = T::try_from(value) else {
+                return Err(Error::new(ErrorKind::InvalidLong {
+                    value,
+                    ty: any::type_name::<T>(),
+                }));
+            };
+
+            Ok(value)
+        }
+        (ty, size) => Err(Error::new(ErrorKind::ExpectedNumber { actual: ty, size })),
+    }
+}
+
+macro_rules! signed {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            #[doc = concat!(" [`SizedReadable`] implementation for `", stringify!($ty), "`.")]
+            ///
+            /// This is decoded as an `Int` or `Long` and will be checked that it's
+            /// in bounds.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// let mut pod = pod::array();
+            /// pod.as_mut().write(-10i32)?;
+            #[doc = concat!(" assert_eq!(pod.as_ref().read_sized::<", stringify!($ty), ">()?, -10);")]
+            ///
+            /// let mut pod = pod::array();
+            /// pod.as_mut().write(-10i64)?;
+            #[doc = concat!(" assert_eq!(pod.as_ref().read_sized::<", stringify!($ty), ">()?, -10);")]
+            /// # Ok::<_, pod::Error>(())
+            /// ```
+            impl<'de> SizedReadable<'de> for $ty {
+                #[inline]
+                fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+                    read_integer(reader, ty, size)
+                }
+            }
+
+            crate::macros::decode_from_sized!($ty);
+        )*
+    }
+}
+
+macro_rules! unsigned {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            #[doc = concat!(" [`SizedReadable`] implementation for `", stringify!($ty), "`.")]
+            ///
+            /// This is decoded as an `Int` or `Long` and will be checked that it's
+            /// in bounds.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// let mut pod = pod::array();
+            /// pod.as_mut().write(10i32)?;
+            #[doc = concat!(" assert_eq!(pod.as_ref().read_sized::<", stringify!($ty), ">()?, 10);")]
+            ///
+            /// let mut pod = pod::array();
+            /// pod.as_mut().write(10i64)?;
+            #[doc = concat!(" assert_eq!(pod.as_ref().read_sized::<", stringify!($ty), ">()?, 10);")]
+            /// # Ok::<_, pod::Error>(())
+            /// ```
+            impl<'de> SizedReadable<'de> for $ty {
+                #[inline]
+                fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+                    read_integer(reader, ty, size)
+                }
+            }
+
+            crate::macros::decode_from_sized!($ty);
+        )*
+    }
 }
 
 /// [`SizedReadable`] implementation for `bool`.
@@ -42,10 +138,12 @@ where
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for bool {
-    const TYPE: Type = Type::BOOL;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::BOOL != ty {
+            return Err(Error::expected(Type::BOOL, ty, size));
+        }
+
         Ok(reader.read::<u32>()? != 0)
     }
 }
@@ -69,175 +167,16 @@ impl<'de, I> SizedReadable<'de> for Id<I>
 where
     I: RawId,
 {
-    const TYPE: Type = Type::ID;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, _: Type, _: usize) -> Result<Self, Error> {
         Ok(Id(I::from_id(reader.read()?)))
     }
 }
 
 crate::macros::decode_from_sized!(impl [I] Id<I> where I: RawId);
 
-/// [`SizedReadable`] implementation for `i32`.
-///
-/// # Examples
-///
-/// ```
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10i32)?;
-/// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de> SizedReadable<'de> for i32 {
-    const TYPE: Type = Type::INT;
-
-    #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        Ok(reader.read::<u32>()?.cast_signed())
-    }
-}
-
-crate::macros::decode_from_sized!(i32);
-
-/// [`SizedReadable`] implementation for `u32`.
-///
-/// # Examples
-///
-/// ```
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10u32)?;
-/// assert_eq!(pod.as_ref().read_sized::<u32>()?, 10u32);
-///
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10i32)?;
-/// assert_eq!(pod.as_ref().read_sized::<u32>()?, 10u32);
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de> SizedReadable<'de> for u32 {
-    const TYPE: Type = Type::INT;
-
-    #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
-        Ok(i32::read_content(reader, size)?.cast_unsigned())
-    }
-}
-
-crate::macros::decode_from_sized!(u32);
-
-/// [`SizedReadable`] implementation for `usize`.
-///
-/// This is decoded as an `u32`, or `Int` and will be checked that it's in
-/// bounds.
-///
-/// # Examples
-///
-/// ```
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10u32)?;
-/// assert_eq!(pod.as_ref().read_sized::<usize>()?, 10);
-///
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10i32)?;
-/// assert_eq!(pod.as_ref().read_sized::<usize>()?, 10);
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de> SizedReadable<'de> for usize {
-    const TYPE: Type = Type::INT;
-
-    #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
-        let value = i32::read_content(reader, size)?;
-
-        let Ok(value) = usize::try_from(value) else {
-            return Err(Error::new(ErrorKind::InvalidUsize { value }));
-        };
-
-        Ok(value)
-    }
-}
-
-crate::macros::decode_from_sized!(usize);
-
-/// [`SizedReadable`] implementation for `isize`.
-///
-/// This is decoded as an `i32`, or `Int` and will be checked that it's in
-/// bounds.
-///
-/// # Examples
-///
-/// ```
-/// let mut pod = pod::array();
-/// pod.as_mut().write(-10)?;
-/// assert_eq!(pod.as_ref().read_sized::<isize>()?, -10);
-///
-/// let mut pod = pod::array();
-/// pod.as_mut().write(-10)?;
-/// assert_eq!(pod.as_ref().read_sized::<isize>()?, -10);
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de> SizedReadable<'de> for isize {
-    const TYPE: Type = Type::INT;
-
-    #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
-        let value = i32::read_content(reader, size)?;
-
-        let Ok(value) = isize::try_from(value) else {
-            return Err(Error::new(ErrorKind::InvalidIsize { value }));
-        };
-
-        Ok(value)
-    }
-}
-
-crate::macros::decode_from_sized!(isize);
-
-/// [`SizedReadable`] implementation for `i64`.
-///
-/// # Examples
-///
-/// ```
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10i64)?;
-/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10i64);
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de> SizedReadable<'de> for i64 {
-    const TYPE: Type = Type::LONG;
-
-    #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
-        Ok(reader.read::<u64>()?.cast_signed())
-    }
-}
-
-crate::macros::decode_from_sized!(i64);
-
-/// [`SizedReadable`] implementation for `u64`.
-///
-/// # Examples
-///
-/// ```
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10u64)?;
-/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10);
-///
-/// let mut pod = pod::array();
-/// pod.as_mut().write(10i64)?;
-/// assert_eq!(pod.as_ref().read_sized::<i64>()?, 10);
-/// # Ok::<_, pod::Error>(())
-/// ```
-impl<'de> SizedReadable<'de> for u64 {
-    const TYPE: Type = Type::LONG;
-
-    #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
-        Ok(i64::read_content(reader, size)?.cast_unsigned())
-    }
-}
-
-crate::macros::decode_from_sized!(u64);
+signed!(i16, i32, i64, i128, isize);
+unsigned!(u16, u32, u64, u128, usize);
 
 /// [`SizedReadable`] implementation for `f32`.
 ///
@@ -250,10 +189,16 @@ crate::macros::decode_from_sized!(u64);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for f32 {
-    const TYPE: Type = Type::FLOAT;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::FLOAT != ty || size != 4 {
+            return Err(Error::new(ErrorKind::Expected {
+                expected: Type::FLOAT,
+                actual: ty,
+                size,
+            }));
+        }
+
         Ok(f32::from_bits(reader.read()?))
     }
 }
@@ -271,10 +216,12 @@ crate::macros::decode_from_sized!(f32);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for f64 {
-    const TYPE: Type = Type::DOUBLE;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::DOUBLE != ty {
+            return Err(Error::expected(Type::DOUBLE, ty, size));
+        }
+
         Ok(f64::from_bits(reader.read::<u64>()?))
     }
 }
@@ -294,10 +241,12 @@ crate::macros::decode_from_sized!(f64);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for Rectangle {
-    const TYPE: Type = Type::RECTANGLE;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::RECTANGLE != ty {
+            return Err(Error::expected(Type::RECTANGLE, ty, size));
+        }
+
         let [width, height] = reader.read()?;
         Ok(Rectangle::new(width, height))
     }
@@ -318,10 +267,12 @@ crate::macros::decode_from_sized!(Rectangle);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for Fraction {
-    const TYPE: Type = Type::FRACTION;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::FRACTION != ty {
+            return Err(Error::expected(Type::FRACTION, ty, size));
+        }
+
         let [num, denom] = reader.read()?;
         Ok(Fraction::new(num, denom))
     }
@@ -331,21 +282,45 @@ crate::macros::decode_from_sized!(Fraction);
 
 /// [`SizedReadable`] a an array of bytes `[u8; N]`.
 ///
+/// # Errors
+///
+/// Decoding a fixed-size array of the wrong size will return an error.
+///
+/// ```
+/// use pod::Pod;
+///
+/// let mut pod = pod::array();
+/// pod.as_mut().write(*b"hello")?;
+/// assert!(pod.as_ref().read_sized::<[u8; 42]>().is_err());
+/// # Ok::<_, pod::Error>(())
+/// ```
+///
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Fraction};
+/// use pod::Pod;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(*b"hello world")?;
+/// assert_eq!(pod.as_ref().read_sized::<[u8; 11]>()?, *b"hello world");
 /// assert_eq!(pod.as_ref().read_unsized::<[u8]>()?, b"hello world");
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de, const N: usize> SizedReadable<'de> for [u8; N] {
-    const TYPE: Type = Type::BYTES;
-
     #[inline]
-    fn read_content(reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::BYTES != ty {
+            return Err(Error::expected(Type::BYTES, ty, size));
+        }
+
+        if size != N {
+            return Err(Error::new(ErrorKind::ExpectedSize {
+                ty,
+                expected: N,
+                actual: size,
+            }));
+        }
+
         let mut buf = ArrayVec::<u8, N>::new();
 
         <[u8]>::read_content(reader, N, |data: &[u8]| buf.extend_from_slice(data))??;
@@ -373,10 +348,12 @@ crate::macros::decode_from_sized!(impl [const N: usize] [u8; N]);
 /// ```
 #[cfg(feature = "alloc")]
 impl<'de> SizedReadable<'de> for CString {
-    const TYPE: Type = Type::STRING;
-
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::STRING != ty {
+            return Err(Error::expected(Type::STRING, ty, size));
+        }
+
         CStr::read_content(reader, size, CStr::to_owned)
     }
 }
@@ -402,10 +379,12 @@ crate::macros::decode_from_borrowed!(CStr);
 /// ```
 #[cfg(feature = "alloc")]
 impl<'de> SizedReadable<'de> for String {
-    const TYPE: Type = Type::STRING;
-
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::STRING != ty {
+            return Err(Error::expected(Type::STRING, ty, size));
+        }
+
         str::read_content(reader, size, str::to_owned)
     }
 }
@@ -431,10 +410,12 @@ crate::macros::decode_from_borrowed!(str);
 /// ```
 #[cfg(feature = "alloc")]
 impl<'de> SizedReadable<'de> for Vec<u8> {
-    const TYPE: Type = Type::BYTES;
-
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::BYTES != ty {
+            return Err(Error::expected(Type::BYTES, ty, size));
+        }
+
         <[u8]>::read_content(reader, size, <[u8]>::to_vec)
     }
 }
@@ -457,10 +438,12 @@ crate::macros::decode_from_borrowed!([u8]);
 /// ```
 #[cfg(feature = "alloc")]
 impl<'de> SizedReadable<'de> for OwnedBitmap {
-    const TYPE: Type = Type::BITMAP;
-
     #[inline]
-    fn read_content(reader: impl Reader<'de>, size: usize) -> Result<Self, Error> {
+    fn read_content(reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::BITMAP != ty {
+            return Err(Error::expected(Type::BITMAP, ty, size));
+        }
+
         Bitmap::read_content(reader, size, Bitmap::to_owned)
     }
 }
@@ -484,10 +467,12 @@ crate::macros::decode_from_borrowed!(Bitmap);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for Pointer {
-    const TYPE: Type = Type::POINTER;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::POINTER != ty {
+            return Err(Error::expected(Type::POINTER, ty, size));
+        }
+
         let [ty, _pad, p1, p2] = reader.read::<[u32; 4]>()?;
 
         let mut bytes = WordBytes::new();
@@ -512,10 +497,12 @@ crate::macros::decode_from_sized!(Pointer);
 /// # Ok::<_, pod::Error>(())
 /// ```
 impl<'de> SizedReadable<'de> for Fd {
-    const TYPE: Type = Type::FD;
-
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::FD != ty {
+            return Err(Error::expected(Type::FD, ty, size));
+        }
+
         Ok(Self::new(reader.read::<u64>()?.cast_signed()))
     }
 }

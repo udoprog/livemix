@@ -146,10 +146,7 @@ impl BuildPod for ChildPod {
     #[inline]
     fn check(self, ty: Type, size: usize) -> Result<(), Error> {
         if self.ty != ty {
-            return Err(Error::new(ErrorKind::Expected {
-                expected: self.ty,
-                actual: ty,
-            }));
+            return Err(Error::expected(self.ty, ty, size));
         }
 
         if size > self.size {

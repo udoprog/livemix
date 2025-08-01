@@ -102,11 +102,9 @@ macro_rules! __id {
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl<'de> $crate::SizedReadable<'de> for $ty {
-                const TYPE: $crate::Type = $crate::Type::ID;
-
                 #[inline]
-                fn read_content(reader: impl $crate::Reader<'de>, len: usize) -> Result<Self, $crate::Error> {
-                    let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, len)?;
+                fn read_content(reader: impl $crate::Reader<'de>, ty: $crate::Type, len: usize) -> Result<Self, $crate::Error> {
+                    let $crate::Id(id) = $crate::Id::<$ty>::read_content(reader, ty, len)?;
                     Ok(id)
                 }
             }
@@ -366,11 +364,9 @@ macro_rules! __consts {
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl<'de> $crate::SizedReadable<'de> for $ty {
-                const TYPE: $crate::Type = <$repr as $crate::SizedReadable<'de>>::TYPE;
-
                 #[inline]
-                fn read_content(reader: impl $crate::Reader<'de>, len: usize) -> Result<Self, $crate::Error> {
-                    Ok(Self(<$repr as $crate::SizedReadable<'de>>::read_content(reader, len)?))
+                fn read_content(reader: impl $crate::Reader<'de>, ty: $crate::Type, len: usize) -> Result<Self, $crate::Error> {
+                    Ok(Self(<$repr as $crate::SizedReadable<'de>>::read_content(reader, ty, len)?))
                 }
             }
         )*
@@ -532,11 +528,9 @@ macro_rules! __flags {
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl<'de> $crate::SizedReadable<'de> for $ty {
-                const TYPE: $crate::Type = <$repr as $crate::SizedReadable<'de>>::TYPE;
-
                 #[inline]
-                fn read_content(reader: impl $crate::Reader<'de>, len: usize) -> Result<Self, $crate::Error> {
-                    Ok(Self(<$repr as $crate::SizedReadable<'de>>::read_content(reader, len)?))
+                fn read_content(reader: impl $crate::Reader<'de>, ty: $crate::Type, len: usize) -> Result<Self, $crate::Error> {
+                    Ok(Self(<$repr as $crate::SizedReadable<'de>>::read_content(reader, ty, len)?))
                 }
             }
 

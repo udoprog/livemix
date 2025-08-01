@@ -174,14 +174,7 @@ where
     where
         T: SizedReadable<'de>,
     {
-        if T::TYPE != self.ty {
-            return Err(Error::new(ErrorKind::Expected {
-                expected: T::TYPE,
-                actual: self.ty,
-            }));
-        }
-
-        let value = T::read_content(self.buf.borrow_mut(), self.size)?;
+        let value = T::read_content(self.buf.borrow_mut(), self.ty, self.size)?;
         self.kind.unpad(self.buf)?;
         Ok(value)
     }
@@ -207,10 +200,7 @@ where
         V: Visitor<'de, T>,
     {
         if T::TYPE != self.ty {
-            return Err(Error::new(ErrorKind::Expected {
-                expected: self.ty,
-                actual: T::TYPE,
-            }));
+            return Err(Error::expected(T::TYPE, self.ty, self.size));
         }
 
         let value = T::read_content(self.buf.borrow_mut(), self.size, visitor)?;
@@ -238,10 +228,7 @@ where
         T: ?Sized + UnsizedReadable<'de>,
     {
         if T::TYPE != self.ty {
-            return Err(Error::new(ErrorKind::Expected {
-                expected: T::TYPE,
-                actual: self.ty,
-            }));
+            return Err(Error::expected(T::TYPE, self.ty, self.size));
         }
 
         let value = T::read_borrowed(self.buf.borrow_mut(), self.size)?;
@@ -320,11 +307,8 @@ where
     #[inline]
     pub fn read_array(self) -> Result<Array<Slice<'de>>, Error> {
         match self.ty {
-            Type::ARRAY => Array::from_reader(self.split_buffer()?),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::ARRAY,
-                actual: self.ty,
-            })),
+            Type::ARRAY => Array::from_reader(self.split()?),
+            _ => Err(Error::expected(Type::ARRAY, self.ty, self.size)),
         }
     }
 
@@ -354,11 +338,8 @@ where
     #[inline]
     pub fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
         match self.ty {
-            Type::STRUCT => Ok(Struct::new(self.split_buffer()?)),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::STRUCT,
-                actual: self.ty,
-            })),
+            Type::STRUCT => Ok(Struct::new(self.split()?)),
+            _ => Err(Error::expected(Type::STRUCT, self.ty, self.size)),
         }
     }
 
@@ -401,11 +382,8 @@ where
     #[inline]
     pub fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
         match self.ty {
-            Type::OBJECT => Object::from_reader(self.split_buffer()?),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::OBJECT,
-                actual: self.ty,
-            })),
+            Type::OBJECT => Object::from_reader(self.split()?),
+            _ => Err(Error::expected(Type::OBJECT, self.ty, self.size)),
         }
     }
 
@@ -448,11 +426,8 @@ where
     #[inline]
     pub fn read_sequence(self) -> Result<Sequence<Slice<'de>>, Error> {
         match self.ty {
-            Type::SEQUENCE => Sequence::from_reader(self.split_buffer()?),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::SEQUENCE,
-                actual: self.ty,
-            })),
+            Type::SEQUENCE => Sequence::from_reader(self.split()?),
+            _ => Err(Error::expected(Type::SEQUENCE, self.ty, self.size)),
         }
     }
 
@@ -482,11 +457,8 @@ where
     #[inline]
     pub fn read_choice(self) -> Result<Choice<Slice<'de>>, Error> {
         match self.ty {
-            Type::CHOICE => Choice::from_reader(self.split_buffer()?),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::CHOICE,
-                actual: self.ty,
-            })),
+            Type::CHOICE => Choice::from_reader(self.split()?),
+            _ => Err(Error::expected(Type::CHOICE, self.ty, self.size)),
         }
     }
 
@@ -511,15 +483,12 @@ where
     #[inline]
     pub fn read_pod(self) -> Result<Pod<Slice<'de>, PackedPod>, Error> {
         match self.ty {
-            Type::POD => Ok(Pod::packed(self.split_buffer()?)),
-            _ => Err(Error::new(ErrorKind::Expected {
-                expected: Type::POD,
-                actual: self.ty,
-            })),
+            Type::POD => Ok(Pod::packed(self.split()?)),
+            _ => Err(Error::expected(Type::POD, self.ty, self.size)),
         }
     }
 
-    fn split_buffer(mut self) -> Result<Slice<'de>, Error> {
+    fn split(mut self) -> Result<Slice<'de>, Error> {
         let Some(buf) = self.buf.split(self.size) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };

@@ -29,6 +29,15 @@ impl Error {
     pub(crate) fn kind(&self) -> &ErrorKind {
         &self.kind
     }
+
+    #[inline]
+    pub fn expected(expected: Type, actual: Type, size: usize) -> Self {
+        Self::new(ErrorKind::Expected {
+            expected,
+            actual,
+            size,
+        })
+    }
 }
 
 impl<E> From<E> for Error
@@ -58,6 +67,16 @@ pub(crate) enum ErrorKind {
     Expected {
         expected: Type,
         actual: Type,
+        size: usize,
+    },
+    ExpectedNumber {
+        actual: Type,
+        size: usize,
+    },
+    ExpectedSize {
+        ty: Type,
+        expected: usize,
+        actual: usize,
     },
     ReservedSizeMismatch {
         expected: usize,
@@ -72,16 +91,20 @@ pub(crate) enum ErrorKind {
         expected: usize,
         actual: usize,
     },
-    InvalidUsize {
+    InvalidInt {
+        ty: &'static str,
         value: i32,
     },
-    InvalidIsize {
-        value: i32,
+    InvalidLong {
+        ty: &'static str,
+        value: i64,
     },
     InvalidUsizeInt {
+        ty: Type,
         value: usize,
     },
     InvalidIsizeInt {
+        ty: Type,
         value: isize,
     },
     ArraySizeMismatch {
@@ -145,8 +168,31 @@ impl fmt::Display for Error {
                 f,
                 "Unsized type {ty:?} in array, use write_unsized_array instead"
             ),
-            ErrorKind::Expected { expected, actual } => {
-                write!(f, "Expected {expected:?}, but found {actual:?}")
+            ErrorKind::Expected {
+                expected,
+                actual,
+                size,
+            } => {
+                write!(
+                    f,
+                    "Expected {expected:?}, but found {actual:?} with size {size}"
+                )
+            }
+            ErrorKind::ExpectedNumber { actual, size } => {
+                write!(
+                    f,
+                    "Expected a number type, but found {actual:?} with size {size}"
+                )
+            }
+            ErrorKind::ExpectedSize {
+                ty,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Expected size {expected} for type {ty:?}, but found {actual}"
+                )
             }
             ErrorKind::ReservedSizeMismatch { expected, actual } => {
                 write!(
@@ -170,20 +216,20 @@ impl fmt::Display for Error {
                     "Expected array element size {expected}, but found {actual}"
                 )
             }
-            ErrorKind::InvalidUsize { value } => {
-                write!(f, "Value {value} is a valid usize")
+            ErrorKind::InvalidInt { value, ty } => {
+                write!(f, "Int value {value} is not a valid {ty}")
             }
-            ErrorKind::InvalidIsize { value } => {
-                write!(f, "Value {value} is a valid isize")
-            }
-            ErrorKind::InvalidUsizeInt { value } => {
-                write!(f, "Value {value} is a valid int")
-            }
-            ErrorKind::InvalidIsizeInt { value } => {
-                write!(f, "Value {value} is a valid int")
+            ErrorKind::InvalidLong { value, ty } => {
+                write!(f, "Long value {value} is not a valid {ty}")
             }
             ErrorKind::ArraySizeMismatch { size, child_size } => {
                 write!(f, "Array size {size} is not a multiple of {child_size}")
+            }
+            ErrorKind::InvalidUsizeInt { ty, value } => {
+                write!(f, "The usize value {value} is not a valid {ty}")
+            }
+            ErrorKind::InvalidIsizeInt { ty, value } => {
+                write!(f, "The isize value {value} is not a valid {ty}")
             }
             ErrorKind::CapacityError(ref e) => e.fmt(f),
             #[cfg(feature = "alloc")]

@@ -105,7 +105,10 @@ impl SizedWritable for isize {
     #[inline]
     fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
         let Ok(value) = i32::try_from(*self) else {
-            return Err(Error::new(ErrorKind::InvalidIsizeInt { value: *self }));
+            return Err(Error::new(ErrorKind::InvalidIsizeInt {
+                ty: Type::INT,
+                value: *self,
+            }));
         };
 
         value.write_sized(writer)
@@ -160,11 +163,14 @@ impl SizedWritable for usize {
 
     #[inline]
     fn write_sized(&self, writer: impl Writer) -> Result<(), Error> {
-        let Ok(value) = u32::try_from(*self) else {
-            return Err(Error::new(ErrorKind::InvalidUsizeInt { value: *self }));
+        let Ok(value) = i32::try_from(*self) else {
+            return Err(Error::new(ErrorKind::InvalidUsizeInt {
+                ty: Type::INT,
+                value: *self,
+            }));
         };
 
-        value.cast_signed().write_sized(writer)
+        value.write_sized(writer)
     }
 }
 

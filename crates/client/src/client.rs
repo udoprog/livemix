@@ -65,7 +65,7 @@ impl Client {
     }
 
     /// Synchronize.
-    pub fn core_sync(&mut self, id: u32) -> Result<u32> {
+    pub fn core_sync(&mut self, id: i32) -> Result<u32> {
         let sync_sequence = self.sync_sequence;
         self.sync_sequence = self.sync_sequence.wrapping_add(1);
 

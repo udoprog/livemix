@@ -39,8 +39,17 @@ fn write_none() -> Result<Pod<impl AsSlice>, Error> {
 }
 
 #[inline]
-fn expected(expected: Type, actual: Type) -> ErrorKind {
-    ErrorKind::Expected { expected, actual }
+fn expected(expected: Type, actual: Type, size: usize) -> ErrorKind {
+    ErrorKind::Expected {
+        expected,
+        actual,
+        size,
+    }
+}
+
+#[inline]
+fn expected_number(actual: Type, size: usize) -> ErrorKind {
+    ErrorKind::ExpectedNumber { actual, size }
 }
 
 #[test]
@@ -117,141 +126,84 @@ fn test_array_underflow() -> Result<(), Error> {
 }
 
 #[test]
-fn test_none() -> Result<(), Error> {
+fn test_long() -> Result<(), Error> {
     let pod = write_none()?;
 
     assert!(pod.as_ref().read_option()?.is_none());
 
     assert_eq!(
         pod.as_ref().read_sized::<bool>().unwrap_err().kind(),
-        expected(Type::BOOL, Type::NONE)
+        expected(Type::BOOL, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_bool() -> Result<(), Error> {
-    let pod = write_none()?;
-
-    assert_eq!(
-        pod.as_ref().read_sized::<bool>().unwrap_err().kind(),
-        expected(Type::BOOL, Type::NONE)
-    );
-
-    Ok(())
-}
-
-#[test]
-fn test_int() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_sized::<i32>().unwrap_err().kind(),
-        expected(Type::INT, Type::NONE)
+        expected_number(Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_long() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_sized::<i64>().unwrap_err().kind(),
-        expected(Type::LONG, Type::NONE)
+        expected_number(Type::NONE, 0)
     );
 
-    Ok(())
-}
+    assert_eq!(
+        pod.as_ref().read_sized::<i128>().unwrap_err().kind(),
+        expected_number(Type::NONE, 0)
+    );
 
-#[test]
-fn test_float() -> Result<(), Error> {
-    let pod = write_none()?;
+    assert_eq!(
+        pod.as_ref().read_sized::<u32>().unwrap_err().kind(),
+        expected_number(Type::NONE, 0)
+    );
+
+    assert_eq!(
+        pod.as_ref().read_sized::<u64>().unwrap_err().kind(),
+        expected_number(Type::NONE, 0)
+    );
+
+    assert_eq!(
+        pod.as_ref().read_sized::<u128>().unwrap_err().kind(),
+        expected_number(Type::NONE, 0)
+    );
 
     assert_eq!(
         pod.as_ref().read_sized::<f32>().unwrap_err().kind(),
-        expected(Type::FLOAT, Type::NONE)
+        expected(Type::FLOAT, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_double() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_sized::<f64>().unwrap_err().kind(),
-        expected(Type::DOUBLE, Type::NONE)
+        expected(Type::DOUBLE, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_string() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_unsized::<CStr>().unwrap_err().kind(),
-        expected(Type::STRING, Type::NONE)
+        expected(Type::STRING, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_bytes() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_unsized::<[u8]>().unwrap_err().kind(),
-        expected(Type::BYTES, Type::NONE)
+        expected(Type::BYTES, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_rectangle() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_sized::<Rectangle>().unwrap_err().kind(),
-        expected(Type::RECTANGLE, Type::NONE)
+        expected(Type::RECTANGLE, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_fraction() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_sized::<Fraction>().unwrap_err().kind(),
-        expected(Type::FRACTION, Type::NONE)
+        expected(Type::FRACTION, Type::NONE, 0)
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_bitmap() -> Result<(), Error> {
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_unsized::<Bitmap>().unwrap_err().kind(),
-        expected(Type::BITMAP, Type::NONE)
+        expected(Type::BITMAP, Type::NONE, 0)
     );
-
-    let pod = write_none()?;
 
     assert_eq!(
         pod.as_ref().read_sized::<OwnedBitmap>().unwrap_err().kind(),
-        expected(Type::BITMAP, Type::NONE)
+        expected(Type::BITMAP, Type::NONE, 0)
     );
 
     Ok(())
