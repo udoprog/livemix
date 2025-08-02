@@ -37,7 +37,7 @@ impl ExampleApplication {
 
         let mut start = None;
 
-        if self.tick % 100 == 0 {
+        if self.tick % 1000 == 0 {
             start = Some(SystemTime::now());
         }
 
@@ -49,7 +49,7 @@ impl ExampleApplication {
                 tracing::warn!(?previous_status, "Expected TRIGGERED");
             }
 
-            if self.tick % 100 == 0 {
+            if self.tick % 1000 == 0 {
                 let xrun_count = unsafe { volatile!(activation, xrun_count).read() };
                 let signal_time = unsafe { volatile!(activation, signal_time).read() };
                 tracing::warn!(xrun_count, signal_time);
@@ -101,7 +101,7 @@ impl ExampleApplication {
             let old_read =
                 unsafe { volatile!(io_buffers, status).replace(flags::Status::NEED_DATA) };
 
-            if self.tick % 100 == 0 {
+            if self.tick % 1000 == 0 {
                 tracing::warn!(?data.flags, ?id, ?old_read, samples);
             }
         }
@@ -113,7 +113,13 @@ impl ExampleApplication {
                     continue;
                 };
 
-                let Some(buffer) = buffers.buffers.get_mut(self.tick % 2) else {
+                let status = unsafe { volatile!(io_buffers, status).read() };
+
+                if !matches!(status, Status::OK | Status::NEED_DATA) {
+                    continue;
+                };
+
+                let Some(buffer) = buffers.buffers.get_mut(1) else {
                     bail!("Output no buffer for port {}", port.id);
                 };
 
@@ -124,19 +130,18 @@ impl ExampleApplication {
 
                 unsafe {
                     let chunk = data.chunk.as_mut();
-                    samples = data.max_size / mem::size_of::<f32>();
+                    samples = data.region.len() / mem::size_of::<f32>();
 
-                    let mut ptr = data.region.as_mut_ptr().cast::<f32>();
+                    let mut ptr = data.region.cast_array::<f32>()?;
 
-                    for _ in 0..samples {
-                        ptr.write(self.accumulator.sin() * DEFAULT_VOLUME);
+                    for d in ptr.as_slice_mut() {
+                        *d = self.accumulator.sin() * DEFAULT_VOLUME;
                         self.accumulator += M_PI_M2 * 440.0 / DEFAULT_RATE;
-                        ptr = ptr.wrapping_add(1);
                     }
 
                     chunk.size = (samples * mem::size_of::<f32>()) as u32;
                     chunk.offset = 0;
-                    chunk.stride = 0;
+                    chunk.stride = 4;
                 }
 
                 unsafe {
@@ -144,14 +149,14 @@ impl ExampleApplication {
                     volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
                 };
 
-                if self.tick % 100 == 0 {
+                if self.tick % 1000 == 0 {
                     tracing::warn!(?data.flags, samples);
                 }
             }
         }
 
+        // Signal peers that we are done.
         for (_, a) in &node.peer_activations {
-            // Signal peers that we are done.
             unsafe {
                 a.signal()?;
             }
@@ -234,42 +239,6 @@ fn main() -> Result<()> {
                 StreamEvent::NodeCreated(node) => {
                     let node = stream.node_mut(node)?;
 
-                    let mut pod = pod::array();
-
-                    /*
-                    let value = pod.clear_mut().embed_object(
-                        ObjectType::FORMAT,
-                        Param::ENUM_FORMAT,
-                        |obj| {
-                            obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                            obj.property(Format::MEDIA_SUB_TYPE)
-                                .write(MediaSubType::DSP)?;
-                            obj.property(Format::AUDIO_FORMAT)
-                                .write(AudioFormat::F32P)?;
-                            obj.property(Format::AUDIO_CHANNELS).write(1)?;
-                            obj.property(Format::AUDIO_RATE).write(48000)?;
-                            Ok(())
-                        },
-                    )?;
-
-                    node.set_param(Param::ENUM_FORMAT, [value])?;
-                    */
-
-                    let value =
-                        pod.clear_mut()
-                            .embed_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                                obj.property(Format::MEDIA_SUB_TYPE)
-                                    .write(MediaSubType::DSP)?;
-                                obj.property(Format::AUDIO_FORMAT)
-                                    .write(AudioFormat::F32P)?;
-                                obj.property(Format::AUDIO_CHANNELS).write(1)?;
-                                obj.property(Format::AUDIO_RATE).write(48000)?;
-                                Ok(())
-                            })?;
-
-                    node.set_param(Param::FORMAT, [value])?;
-
                     let port = node.ports.insert(Direction::INPUT)?;
                     port.name = String::from("input");
                     add_port_params(port)?;
@@ -314,14 +283,13 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             obj.property(Format::AUDIO_FORMAT).write_choice(
                 ChoiceType::ENUM,
                 Type::ID,
-                |choice| {
-                    choice.write(AudioFormat::F32)?;
-                    choice.write(AudioFormat::S16)?;
-                    Ok(())
-                },
+                |choice| choice.write((AudioFormat::S16, AudioFormat::F32, AudioFormat::F32P)),
             )?;
             obj.property(Format::AUDIO_CHANNELS).write(1)?;
-            obj.property(Format::AUDIO_RATE).write(48000)?;
+            obj.property(Format::AUDIO_RATE)
+                .write_choice(ChoiceType::RANGE, Type::INT, |c| {
+                    c.write((DEFAULT_RATE as u32, 44100, 48000))
+                })?;
             Ok(())
         })?;
 
