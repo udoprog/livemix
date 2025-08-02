@@ -199,8 +199,8 @@ enum Op {
     NodeActive { client: usize },
     NodeUpdate { client: usize },
     NodeStart { client: usize },
+    NodePause { client: usize },
     NodeReadInterest { client: usize },
-    Process,
 }
 
 #[derive(Debug)]
@@ -344,143 +344,166 @@ impl State {
         }
     }
 
-    /// Process client.
-    pub fn run(&mut self, recv: &mut RecvBuf) -> Result<()> {
-        'next: loop {
-            while let Some(op) = self.ops.pop_front() {
-                match op {
-                    Op::CoreHello => {
-                        self.c.core_hello()?;
-                        self.c.client_update_properties(&self.client.properties)?;
-                    }
-                    Op::GetRegistry => {
-                        tracing::info!("Getting registry");
+    #[tracing::instrument(skip(self))]
+    fn process_operations(&mut self) -> Result<()> {
+        while let Some(op) = self.ops.pop_front() {
+            tracing::trace!(?op);
 
-                        let local_id = self.ids.alloc().context("ran out of identifiers")?;
-                        self.c.core_get_registry(local_id)?;
-                        self.local_id_to_kind.insert(local_id, Kind::Registry);
-                        self.c.core_sync(GET_REGISTRY_SYNC)?;
+            match op {
+                Op::CoreHello => {
+                    self.c.core_hello()?;
+                    self.c.client_update_properties(&self.client.properties)?;
+                }
+                Op::GetRegistry => {
+                    let local_id = self.ids.alloc().context("ran out of identifiers")?;
+                    self.c.core_get_registry(local_id)?;
+                    self.local_id_to_kind.insert(local_id, Kind::Registry);
+                    self.c.core_sync(GET_REGISTRY_SYNC)?;
+                }
+                Op::Pong { id, seq } => {
+                    self.c.core_pong(id, seq)?;
+                }
+                Op::ConstructNode => {
+                    if let Err(error) = self.op_construct_node() {
+                        tracing_error!(error, "Failed to construct client node");
                     }
-                    Op::Pong { id, seq } => {
-                        self.c.core_pong(id, seq)?;
+                }
+                Op::NodeActive { client } => {
+                    if let Some(node) = self.client_nodes.get(client) {
+                        self.c.client_node_set_active(node.id, true)?;
                     }
-                    Op::ConstructNode => {
-                        if let Err(error) = self.op_construct_node() {
-                            tracing_error!(error, "Failed to construct client node");
+                }
+                Op::NodeUpdate { client } => {
+                    if let Some(node) = self.client_nodes.get_mut(client) {
+                        if node.take_modified() {
+                            self.c.client_node_update(node.id, 4, 4, &node.params)?;
                         }
-                    }
-                    Op::NodeActive { client } => {
-                        if let Some(node) = self.client_nodes.get(client) {
-                            self.c.client_node_set_active(node.id, true)?;
-                        }
-                    }
-                    Op::NodeUpdate { client } => {
-                        if let Some(node) = self.client_nodes.get_mut(client) {
-                            if node.take_modified() {
-                                self.c.client_node_update(node.id, 4, 4, &node.params)?;
+
+                        for port in node.ports.inputs_mut() {
+                            if !port.take_modified() {
+                                continue;
                             }
 
-                            for port in node.ports.inputs_mut() {
-                                if !port.take_modified() {
-                                    continue;
-                                }
+                            self.c.client_node_port_update(
+                                node.id,
+                                consts::Direction::INPUT,
+                                port.id(),
+                                &port.name,
+                                port.params(),
+                            )?;
+                        }
 
-                                self.c.client_node_port_update(
-                                    node.id,
-                                    consts::Direction::INPUT,
-                                    port.id(),
-                                    &port.name,
-                                    port.params(),
-                                )?;
+                        for port in node.ports.outputs_mut() {
+                            if !port.take_modified() {
+                                continue;
                             }
 
-                            for port in node.ports.outputs_mut() {
-                                if !port.take_modified() {
-                                    continue;
-                                }
-
-                                self.c.client_node_port_update(
-                                    node.id,
-                                    consts::Direction::OUTPUT,
-                                    port.id(),
-                                    &port.name,
-                                    port.params(),
-                                )?;
-                            }
+                            self.c.client_node_port_update(
+                                node.id,
+                                consts::Direction::OUTPUT,
+                                port.id(),
+                                &port.name,
+                                port.params(),
+                            )?;
                         }
                     }
-                    Op::NodeStart { client } => {
-                        if let Some(node) = self.client_nodes.get(client)
-                            && let Some(a) = &node.activation
-                        {
-                            if atomic!(a, status).compare_exchange(
-                                ActivationStatus::INACTIVE,
-                                ActivationStatus::NOT_TRIGGERED,
-                            ) {
-                                tracing::info!("Starting node");
-                            }
-                        } else {
-                            tracing::error!(
-                                ?client,
-                                "Cannot start node, missing activation for client"
-                            );
+                }
+                Op::NodeStart { client } => {
+                    if let Some(node) = self.client_nodes.get(client)
+                        && let Some(a) = &node.activation
+                    {
+                        if atomic!(a, status).compare_exchange(
+                            ActivationStatus::INACTIVE,
+                            ActivationStatus::NOT_TRIGGERED,
+                        ) {
+                            tracing::info!("Starting node");
                         }
+                    } else {
+                        tracing::error!(
+                            ?client,
+                            "Cannot start node, missing activation for client"
+                        );
                     }
-                    Op::NodeReadInterest { client } => {
-                        self.node_read_interest(client)?;
+                }
+                Op::NodePause { client } => {
+                    if let Some(node) = self.client_nodes.get(client)
+                        && let Some(a) = &node.activation
+                    {
+                        atomic!(a, status).store(ActivationStatus::INACTIVE);
+                    } else {
+                        tracing::error!(
+                            ?client,
+                            "Cannot pause node, missing activation for client"
+                        );
                     }
-                    Op::Process => {
-                        self.process()?;
-                    }
+                }
+                Op::NodeReadInterest { client } => {
+                    self.node_read_interest(client)?;
                 }
             }
-
-            if !self.has_header {
-                if let Some(h) = recv.read::<Header>() {
-                    self.header = h;
-                    self.has_header = true;
-                }
-            }
-
-            'done: {
-                if !self.has_header {
-                    break 'done;
-                }
-
-                if (self.header.n_fds() as usize) > self.fds.len() {
-                    break 'done;
-                }
-
-                let Some(pod) = frame(recv, &self.header)? else {
-                    break 'done;
-                };
-
-                let result = match self.header.id() {
-                    consts::CORE_ID => self.core(pod),
-                    consts::CLIENT_ID => self.client(pod),
-                    _ => self.dynamic(pod),
-                };
-
-                if self.header.n_fds() > 0 {
-                    let n = self.header.n_fds() as usize;
-
-                    for fd in self.fds.drain(..n) {
-                        if let Some(fd) = fd.fd {
-                            tracing::warn!("Unused file descriptor dropped: {fd:?}");
-                        }
-                    }
-                }
-
-                self.has_header = false;
-                result?;
-                continue 'next;
-            }
-
-            return Ok(());
         }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self, recv))]
+    fn process_messages(&mut self, recv: &mut RecvBuf) -> Result<bool> {
+        if !self.has_header {
+            if let Some(h) = recv.read::<Header>() {
+                self.header = h;
+                self.has_header = true;
+            }
+        }
+
+        if !self.has_header {
+            return Ok(false);
+        }
+
+        if (self.header.n_fds() as usize) > self.fds.len() {
+            return Ok(false);
+        }
+
+        let Some(pod) = frame(recv, &self.header)? else {
+            return Ok(false);
+        };
+
+        let result = match self.header.id() {
+            consts::CORE_ID => self.core(pod),
+            consts::CLIENT_ID => self.client(pod),
+            _ => self.dynamic(pod),
+        };
+
+        if self.header.n_fds() > 0 {
+            let n = self.header.n_fds() as usize;
+
+            for fd in self.fds.drain(..n) {
+                if let Some(fd) = fd.fd {
+                    tracing::warn!("Unused file descriptor dropped: {fd:?}");
+                }
+            }
+        }
+
+        self.has_header = false;
+        result?;
+        Ok(true)
     }
 
     /// Process client.
+    #[tracing::instrument(skip(self, recv))]
+    pub fn run(&mut self, recv: &mut RecvBuf) -> Result<()> {
+        loop {
+            self.process_operations()?;
+
+            if !self.process_messages(recv)? {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Process client.
+    #[tracing::instrument(skip(self))]
     pub fn tick(&mut self) -> Result<()> {
         let mut samples = 0;
         let mut sum = 0.0;
@@ -493,40 +516,8 @@ impl State {
             }
         }
 
-        tracing::warn!(samples, sum, len = self.writer.len());
         self.writer.flush()?;
-
-        for (_, node) in &mut self.client_nodes {
-            if let Some(a) = &node.activation {
-                tracing::info!(
-                    "Activation status: {:?}",
-                    crate::ptr::volatile!(a, status).read()
-                );
-
-                tracing::info!(
-                    "Activation driver id: {:?}",
-                    crate::ptr::volatile!(a, driver_id).read()
-                );
-            }
-
-            for (_, a) in &node.peer_activations {
-                tracing::info!(
-                    "Target status: {:?}",
-                    crate::ptr::volatile!(a.region, status).read()
-                );
-
-                tracing::info!(
-                    "Target state: {:?}",
-                    crate::ptr::volatile!(a.region, state).read()
-                );
-
-                tracing::info!(
-                    "Target driver id: {:?}",
-                    crate::ptr::volatile!(a.region, driver_id).read()
-                );
-            }
-        }
-
+        tracing::warn!(samples, sum, len = self.writer.len(), "Flushed to file");
         Ok(())
     }
 
@@ -552,10 +543,7 @@ impl State {
             return Ok(());
         };
 
-        if let Some(a) = &client.activation {
-            self.ops.push_back(Op::Process);
-        }
-
+        self.process()?;
         Ok(())
     }
 
@@ -719,18 +707,17 @@ impl State {
                     samples = size / mem::size_of::<f32>();
 
                     node.buf.reserve(samples);
+
                     node.buf
                         .as_mut_ptr()
-                        .add(samples)
-                        .cast::<f32>()
+                        .add(node.buf.len())
                         .copy_from_nonoverlapping(
                             data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
                             samples,
                         );
+
                     node.buf.set_len(node.buf.len() + samples);
                 }
-
-                tracing::warn!(samples, len = node.buf.len());
 
                 let old_read = volatile!(io_buffers, status).replace(flags::Status::NEED_DATA);
 
@@ -804,14 +791,17 @@ impl State {
             }
         }
 
-        let elapsed = start.elapsed().context("Failed to get elapsed time")?;
-        tracing::warn!(?elapsed);
+        if self.tick % 100 == 0 {
+            let elapsed = start.elapsed().context("Failed to get elapsed time")?;
+            tracing::info!(?elapsed);
+        }
+
         Ok(())
     }
 
     fn core(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
         let op = CoreEvent::from_raw(self.header.op());
-        tracing::info!("Event: {op}");
+        tracing::trace!("Event: {op}");
 
         match op {
             CoreEvent::INFO => {
@@ -870,7 +860,7 @@ impl State {
         match *kind {
             Kind::Registry => {
                 let op = RegistryEvent::from_raw(self.header.op());
-                tracing::info!("Event: {op}");
+                tracing::trace!("Event: {op}");
 
                 match op {
                     RegistryEvent::GLOBAL => {
@@ -886,7 +876,7 @@ impl State {
             }
             Kind::ClientNode(index) => {
                 let op = ClientNodeEvent::from_raw(self.header.op());
-                tracing::info!("Event: {op}");
+                tracing::trace!("Event: {op}");
 
                 match op {
                     ClientNodeEvent::TRANSPORT => {
@@ -966,10 +956,10 @@ impl State {
         match id {
             GET_REGISTRY_SYNC => {
                 self.ops.push_back(Op::ConstructNode);
-                tracing::info!(id, seq, "Intitial registry sync done");
+                tracing::trace!(id, seq, "Intitial registry sync done");
             }
             CREATE_CLIENT_NODE => {
-                tracing::info!(id, seq, "Client node created");
+                tracing::trace!(id, seq, "Client node created");
             }
             id => {
                 tracing::warn!(id, seq, "Unknown core done event id");
@@ -1303,7 +1293,7 @@ impl State {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_command(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(..) = self.client_nodes.get_mut(index) else {
+        let Some(node) = self.client_nodes.get_mut(index) else {
             bail!("Missing client node {index}");
         };
 
@@ -1313,13 +1303,17 @@ impl State {
         let object_type = id::CommandType::from_id(obj.object_type());
         let object_id = id::NodeCommand::from_id(obj.object_id());
 
+        tracing::trace!(?object_id);
+
         match object_id {
             id::NodeCommand::START => {
                 self.ops.push_back(Op::NodeStart { client: index });
-                tracing::info!(?object_type, ?object_id, ?pod);
+            }
+            id::NodeCommand::PAUSE => {
+                self.ops.push_back(Op::NodePause { client: index });
             }
             _ => {
-                tracing::info!(?object_type, ?object_id, ?pod);
+                tracing::warn!(?object_id, "Unsupported command");
             }
         }
 
@@ -1359,8 +1353,6 @@ impl State {
         };
 
         let mut st = pod.read_struct()?;
-
-        tracing::warn!(?st);
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
             .read::<(consts::Direction, u32, i32, u32, u32)>()
@@ -1599,7 +1591,7 @@ impl State {
         };
 
         let st = pod.read_struct()?;
-        tracing::info!(?st);
+        tracing::warn!(?st, "Not implemented yet");
         Ok(())
     }
 }

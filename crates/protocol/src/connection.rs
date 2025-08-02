@@ -271,7 +271,7 @@ impl Connection {
         op: impl IntoRaw<u8> + fmt::Display + fmt::Debug,
         pod: Pod<impl AsSlice>,
     ) -> Result<(), Error> {
-        tracing::info!("Request");
+        tracing::trace!("Request");
 
         let pod = pod.as_ref();
         let buf = pod.as_buf();
