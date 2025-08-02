@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     timer.set_nonblocking(true)?;
 
     let mut recv = RecvBuf::new();
-    let mut state = client::State::new(c)?;
+    let mut state = client::Stream::new(c)?;
 
     let conn_token = state.token()?;
     let timer_token = state.token()?;

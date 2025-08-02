@@ -11,8 +11,8 @@ extern crate std;
 mod client;
 use self::client::Client;
 
-mod state;
-pub use self::state::State;
+mod stream;
+pub use self::stream::Stream;
 
 pub mod memory;
 use self::memory::{Memory, Region};

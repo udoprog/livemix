@@ -51,190 +51,8 @@ macro_rules! tracing_error {
     }};
 }
 
-#[derive(Default, Debug)]
-struct CoreState {
-    id: u32,
-    cookie: i32,
-    user_name: String,
-    host_name: String,
-    version: String,
-    name: String,
-    properties: BTreeMap<String, String>,
-}
-
-#[derive(Default, Debug)]
-struct ClientState {
-    id: u32,
-    properties: Properties,
-    server_properties: BTreeMap<CString, CString>,
-}
-
-#[derive(Default, Debug)]
-struct RegistryState {
-    id: u32,
-    permissions: i32,
-    ty: String,
-    version: u32,
-    properties: BTreeMap<String, String>,
-}
-
-#[derive(Debug)]
-#[allow(unused)]
-struct ClientNodeState {
-    id: u32,
-    read_fd: Option<EventFd>,
-    write_token: Token,
-    write_fd: Option<EventFd>,
-    read_token: Token,
-    /// Activation record for this node.
-    activation: Option<Region<ffi::NodeActivation>>,
-    /// Activation records for dependent nodes.
-    peer_activations: Slab<Activation>,
-    params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
-    ports: Ports,
-    io_clock: Option<Region<ffi::IoClock>>,
-    io_control: Option<Region<()>>,
-    io_position: Option<Region<ffi::IoPosition>>,
-    modified: bool,
-    buf: Vec<f32>,
-}
-
-impl ClientNodeState {
-    pub(crate) fn new(
-        id: u32,
-        ports: Ports,
-        write_token: Token,
-        read_token: Token,
-    ) -> Result<Self> {
-        let mut params = BTreeMap::new();
-        let mut pod = pod::array();
-
-        pod.as_mut()
-            .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                obj.property(Format::MEDIA_SUB_TYPE)
-                    .write(MediaSubType::DSP)?;
-                obj.property(Format::AUDIO_FORMAT)
-                    .write(AudioFormat::F32P)?;
-                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                Ok(())
-            })?;
-
-        params.insert(
-            Param::ENUM_FORMAT,
-            vec![pod.take().read_object()?.to_owned()?],
-        );
-
-        pod.as_mut()
-            .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                obj.property(Format::MEDIA_SUB_TYPE)
-                    .write(MediaSubType::DSP)?;
-                obj.property(Format::AUDIO_FORMAT)
-                    .write(AudioFormat::F32P)?;
-                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                Ok(())
-            })?;
-
-        params.insert(Param::FORMAT, vec![pod.take().read_object()?.to_owned()?]);
-
-        Ok(Self {
-            id,
-            ports,
-            write_fd: None,
-            read_fd: None,
-            write_token,
-            read_token,
-            activation: None,
-            peer_activations: Slab::new(),
-            params,
-            io_control: None,
-            io_clock: None,
-            io_position: None,
-            modified: true,
-            buf: Vec::with_capacity(1024 * 1024),
-        })
-    }
-
-    /// Set a parameter for the node.
-    #[inline]
-    fn set_param(&mut self, param: Param, value: Object<DynamicBuf>) {
-        self.params.insert(param, vec![value]);
-        self.modified = true;
-    }
-
-    /// Remove a parameter for the node.
-    #[inline]
-    fn remove_param(&mut self, param: Param) {
-        self.params.remove(&param);
-        self.modified = true;
-    }
-
-    /// Take and return the modified state of the node.
-    #[inline]
-    fn take_modified(&mut self) -> bool {
-        mem::take(&mut self.modified)
-    }
-}
-
-#[derive(Debug)]
-enum Kind {
-    Registry,
-    ClientNode(usize),
-}
-
-#[derive(Debug)]
-struct ReceivedFd {
-    fd: Option<OwnedFd>,
-}
-
-#[derive(Debug)]
-enum Op {
-    CoreHello,
-    GetRegistry,
-    Pong { id: u32, seq: u32 },
-    ConstructNode,
-    NodeActive { client: usize },
-    NodeUpdate { client: usize },
-    NodeStart { client: usize },
-    NodePause { client: usize },
-    NodeReadInterest { client: usize },
-}
-
-#[derive(Debug)]
-pub struct GlobalMap {
-    global_to_local: BTreeMap<u32, u32>,
-}
-
-impl GlobalMap {
-    #[inline]
-    fn new() -> Self {
-        Self {
-            global_to_local: BTreeMap::new(),
-        }
-    }
-
-    #[inline]
-    fn insert(&mut self, local_id: u32, global_id: u32) {
-        self.global_to_local.insert(global_id, local_id);
-    }
-
-    /// Map a global to a local id.
-    #[inline]
-    fn by_global(&self, global_id: u32) -> Option<u32> {
-        self.global_to_local.get(&global_id).copied()
-    }
-
-    #[inline]
-    fn remove_by_global(&mut self, global_id: u32) -> Option<u32> {
-        self.global_to_local.remove(&global_id)
-    }
-}
-
 /// The local connection state.
-pub struct State {
+pub struct Stream {
     tick: usize,
     writer: hound::WavWriter<File>,
     c: Client,
@@ -259,7 +77,7 @@ pub struct State {
     modify_interest: VecDeque<(RawFd, Token, Interest)>,
 }
 
-impl State {
+impl Stream {
     pub fn new(connection: Connection) -> Result<Self> {
         let mut ids = Ids::new();
 
@@ -1605,4 +1423,186 @@ fn frame<'buf>(buf: &'buf mut RecvBuf, header: &Header) -> Result<Option<Pod<Sli
     };
 
     Ok(Some(Pod::new(pod::buf::slice(bytes))))
+}
+
+#[derive(Default, Debug)]
+struct CoreState {
+    id: u32,
+    cookie: i32,
+    user_name: String,
+    host_name: String,
+    version: String,
+    name: String,
+    properties: BTreeMap<String, String>,
+}
+
+#[derive(Default, Debug)]
+struct ClientState {
+    id: u32,
+    properties: Properties,
+    server_properties: BTreeMap<CString, CString>,
+}
+
+#[derive(Default, Debug)]
+struct RegistryState {
+    id: u32,
+    permissions: i32,
+    ty: String,
+    version: u32,
+    properties: BTreeMap<String, String>,
+}
+
+#[derive(Debug)]
+#[allow(unused)]
+struct ClientNodeState {
+    id: u32,
+    read_fd: Option<EventFd>,
+    write_token: Token,
+    write_fd: Option<EventFd>,
+    read_token: Token,
+    /// Activation record for this node.
+    activation: Option<Region<ffi::NodeActivation>>,
+    /// Activation records for dependent nodes.
+    peer_activations: Slab<Activation>,
+    params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
+    ports: Ports,
+    io_clock: Option<Region<ffi::IoClock>>,
+    io_control: Option<Region<()>>,
+    io_position: Option<Region<ffi::IoPosition>>,
+    modified: bool,
+    buf: Vec<f32>,
+}
+
+impl ClientNodeState {
+    pub(crate) fn new(
+        id: u32,
+        ports: Ports,
+        write_token: Token,
+        read_token: Token,
+    ) -> Result<Self> {
+        let mut params = BTreeMap::new();
+        let mut pod = pod::array();
+
+        pod.as_mut()
+            .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_SUB_TYPE)
+                    .write(MediaSubType::DSP)?;
+                obj.property(Format::AUDIO_FORMAT)
+                    .write(AudioFormat::F32P)?;
+                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
+                obj.property(Format::AUDIO_RATE).write(44100u32)?;
+                Ok(())
+            })?;
+
+        params.insert(
+            Param::ENUM_FORMAT,
+            vec![pod.take().read_object()?.to_owned()?],
+        );
+
+        pod.as_mut()
+            .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
+                obj.property(Format::MEDIA_SUB_TYPE)
+                    .write(MediaSubType::DSP)?;
+                obj.property(Format::AUDIO_FORMAT)
+                    .write(AudioFormat::F32P)?;
+                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
+                obj.property(Format::AUDIO_RATE).write(44100u32)?;
+                Ok(())
+            })?;
+
+        params.insert(Param::FORMAT, vec![pod.take().read_object()?.to_owned()?]);
+
+        Ok(Self {
+            id,
+            ports,
+            write_fd: None,
+            read_fd: None,
+            write_token,
+            read_token,
+            activation: None,
+            peer_activations: Slab::new(),
+            params,
+            io_control: None,
+            io_clock: None,
+            io_position: None,
+            modified: true,
+            buf: Vec::with_capacity(1024 * 1024),
+        })
+    }
+
+    /// Set a parameter for the node.
+    #[inline]
+    fn set_param(&mut self, param: Param, value: Object<DynamicBuf>) {
+        self.params.insert(param, vec![value]);
+        self.modified = true;
+    }
+
+    /// Remove a parameter for the node.
+    #[inline]
+    fn remove_param(&mut self, param: Param) {
+        self.params.remove(&param);
+        self.modified = true;
+    }
+
+    /// Take and return the modified state of the node.
+    #[inline]
+    fn take_modified(&mut self) -> bool {
+        mem::take(&mut self.modified)
+    }
+}
+
+#[derive(Debug)]
+enum Kind {
+    Registry,
+    ClientNode(usize),
+}
+
+#[derive(Debug)]
+struct ReceivedFd {
+    fd: Option<OwnedFd>,
+}
+
+#[derive(Debug)]
+enum Op {
+    CoreHello,
+    GetRegistry,
+    Pong { id: u32, seq: u32 },
+    ConstructNode,
+    NodeActive { client: usize },
+    NodeUpdate { client: usize },
+    NodeStart { client: usize },
+    NodePause { client: usize },
+    NodeReadInterest { client: usize },
+}
+
+#[derive(Debug)]
+pub struct GlobalMap {
+    global_to_local: BTreeMap<u32, u32>,
+}
+
+impl GlobalMap {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            global_to_local: BTreeMap::new(),
+        }
+    }
+
+    #[inline]
+    fn insert(&mut self, local_id: u32, global_id: u32) {
+        self.global_to_local.insert(global_id, local_id);
+    }
+
+    /// Map a global to a local id.
+    #[inline]
+    fn by_global(&self, global_id: u32) -> Option<u32> {
+        self.global_to_local.get(&global_id).copied()
+    }
+
+    #[inline]
+    fn remove_by_global(&mut self, global_id: u32) -> Option<u32> {
+        self.global_to_local.remove(&global_id)
+    }
 }
