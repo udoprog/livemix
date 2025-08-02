@@ -6,6 +6,7 @@ use core::time::Duration;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ffi::CString;
 use std::fs::File;
+use std::os::fd::FromRawFd;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::time::SystemTime;
 
@@ -15,8 +16,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
+use pod::AsSlice;
 use pod::{ChoiceType, DynamicBuf, Fd, Object, Pod, Slice, Struct, Type};
 use protocol::EventFd;
+use protocol::Poll;
 use protocol::Prop;
 use protocol::buf::RecvBuf;
 use protocol::consts;
@@ -27,6 +30,8 @@ use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectTyp
 use protocol::ids::Ids;
 use protocol::op;
 use protocol::op::{ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
+use protocol::poll::ChangeInterest;
+use protocol::poll::PollEvent;
 use protocol::poll::{Interest, Token};
 use protocol::types::Header;
 use protocol::{Connection, Properties, prop};
@@ -35,8 +40,19 @@ use tracing::Level;
 
 use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
+use crate::ports::PortParam;
 use crate::ptr::{atomic, volatile};
-use crate::{Buffers, Client, Memory, Ports, Region};
+use crate::{Buffers, Client, ClientNode, Memory, Ports, Region};
+
+/// A client node identifier.
+#[repr(transparent)]
+pub struct ClientNodeId(usize);
+
+/// A stream event.
+pub enum StreamEvent {
+    Process(ClientNodeId),
+    NodeCreated(ClientNodeId),
+}
 
 const CREATE_CLIENT_NODE: i32 = 0x2000;
 const GET_REGISTRY_SYNC: i32 = 0x1000;
@@ -54,20 +70,22 @@ macro_rules! tracing_error {
 /// The local connection state.
 pub struct Stream {
     tick: usize,
-    writer: hound::WavWriter<File>,
     c: Client,
+    connection_added: bool,
+    connection_token: Token,
     core: CoreState,
     client: ClientState,
     registries: Slab<RegistryState>,
     id_to_registry: BTreeMap<u32, usize>,
     factories: BTreeMap<String, usize>,
     globals: GlobalMap,
-    client_nodes: Slab<ClientNodeState>,
+    client_nodes: Slab<ClientNode>,
     local_id_to_kind: BTreeMap<u32, Kind>,
     has_header: bool,
     header: Header,
     ids: Ids,
     tokens: Ids,
+    process_set: Ids,
     read_to_client: HashMap<Token, usize>,
     write_to_client: HashMap<Token, usize>,
     fds: VecDeque<ReceivedFd>,
@@ -90,21 +108,19 @@ impl Stream {
         client
             .properties
             .insert(prop::APPLICATION_NAME, String::from("livemix"));
+
         client
             .properties
             .insert(prop::NODE_NAME, String::from("livemix_node"));
 
-        let spec = hound::WavSpec {
-            channels: 1,
-            sample_rate: 44100,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
-        };
+        let mut tokens = Ids::new();
+        let connection_token = Token::new(tokens.alloc().context("no more tokens")? as u64);
 
         Ok(Self {
             tick: 0,
-            writer: hound::WavWriter::new(File::create("output.wav")?, spec)?,
             c: Client::new(connection),
+            connection_added: false,
+            connection_token,
             core: CoreState::default(),
             client,
             registries: Slab::new(),
@@ -116,7 +132,8 @@ impl Stream {
             has_header: false,
             header: Header::default(),
             ids,
-            tokens: Ids::new(),
+            tokens,
+            process_set: Ids::new(),
             read_to_client: HashMap::new(),
             write_to_client: HashMap::new(),
             fds: VecDeque::with_capacity(16),
@@ -125,6 +142,24 @@ impl Stream {
             add_interest: VecDeque::new(),
             modify_interest: VecDeque::new(),
         })
+    }
+
+    /// Get a node.
+    pub fn node(&self, node: ClientNodeId) -> Result<&ClientNode> {
+        let Some(node) = self.client_nodes.get(node.0) else {
+            bail!("No client node found for index {}", node.0);
+        };
+
+        Ok(node)
+    }
+
+    /// Get a mutable node.
+    pub fn node_mut(&mut self, node: ClientNodeId) -> Result<&mut ClientNode> {
+        let Some(node) = self.client_nodes.get_mut(node.0) else {
+            bail!("No client node found for index {}", node.0);
+        };
+
+        Ok(node)
     }
 
     /// Allocate a unique token.
@@ -137,22 +172,25 @@ impl Stream {
 
     #[inline]
     pub fn add_interest(&mut self) -> Option<(RawFd, Token, Interest)> {
+        if !self.connection_added {
+            self.connection_added = true;
+            return Some((self.c.as_raw_fd(), self.connection_token, self.c.interest()));
+        }
+
         self.add_interest.pop_front()
     }
 
     #[inline]
     pub fn modify_interest(&mut self) -> Option<(RawFd, Token, Interest)> {
-        self.modify_interest.pop_front()
-    }
+        if let ChangeInterest::Changed(interest) = self.c.modify_interest() {
+            return Some((self.c.as_raw_fd(), self.connection_token, interest));
+        }
 
-    #[inline]
-    pub fn connection(&self) -> &Connection {
-        self.c.connection()
-    }
+        if let Some((fd, token, interest)) = self.modify_interest.pop_front() {
+            return Some((fd, token, interest));
+        }
 
-    #[inline]
-    pub fn connection_mut(&mut self) -> &mut Connection {
-        self.c.connection_mut()
+        None
     }
 
     /// Add file descriptors.
@@ -163,7 +201,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip(self))]
-    fn process_operations(&mut self) -> Result<()> {
+    fn process_operations(&mut self) -> Result<Option<StreamEvent>> {
         while let Some(op) = self.ops.pop_front() {
             tracing::trace!(?op);
 
@@ -186,54 +224,63 @@ impl Stream {
                         tracing_error!(error, "Failed to construct client node");
                     }
                 }
+                Op::NodeCreated { client } => {
+                    return Ok(Some(StreamEvent::NodeCreated(ClientNodeId(client))));
+                }
                 Op::NodeActive { client } => {
-                    if let Some(node) = self.client_nodes.get(client) {
-                        self.c.client_node_set_active(node.id, true)?;
-                    }
+                    let Some(node) = self.client_nodes.get(client) else {
+                        bail!("Missing client node for index {client}");
+                    };
+
+                    self.c.client_node_set_active(node.id, true)?;
                 }
                 Op::NodeUpdate { client } => {
-                    if let Some(node) = self.client_nodes.get_mut(client) {
-                        if node.take_modified() {
-                            self.c.client_node_update(node.id, 4, 4, &node.params)?;
+                    let Some(node) = self.client_nodes.get_mut(client) else {
+                        bail!("Missing client node for index {client}");
+                    };
+
+                    if node.take_modified() {
+                        self.c.client_node_update(node.id, 4, 4, &node.params)?;
+                    }
+
+                    for port in node.ports.inputs_mut() {
+                        if !port.take_modified() {
+                            continue;
                         }
 
-                        for port in node.ports.inputs_mut() {
-                            if !port.take_modified() {
-                                continue;
-                            }
+                        self.c.client_node_port_update(
+                            node.id,
+                            consts::Direction::INPUT,
+                            port.id(),
+                            &port.name,
+                            port.params(),
+                        )?;
+                    }
 
-                            self.c.client_node_port_update(
-                                node.id,
-                                consts::Direction::INPUT,
-                                port.id(),
-                                &port.name,
-                                port.params(),
-                            )?;
+                    for port in node.ports.outputs_mut() {
+                        if !port.take_modified() {
+                            continue;
                         }
 
-                        for port in node.ports.outputs_mut() {
-                            if !port.take_modified() {
-                                continue;
-                            }
-
-                            self.c.client_node_port_update(
-                                node.id,
-                                consts::Direction::OUTPUT,
-                                port.id(),
-                                &port.name,
-                                port.params(),
-                            )?;
-                        }
+                        self.c.client_node_port_update(
+                            node.id,
+                            consts::Direction::OUTPUT,
+                            port.id(),
+                            &port.name,
+                            port.params(),
+                        )?;
                     }
                 }
                 Op::NodeStart { client } => {
                     if let Some(node) = self.client_nodes.get(client)
                         && let Some(a) = &node.activation
                     {
-                        if atomic!(a, status).compare_exchange(
-                            ActivationStatus::INACTIVE,
-                            ActivationStatus::NOT_TRIGGERED,
-                        ) {
+                        if unsafe {
+                            atomic!(a, status).compare_exchange(
+                                ActivationStatus::INACTIVE,
+                                ActivationStatus::NOT_TRIGGERED,
+                            )
+                        } {
                             tracing::info!("Starting node");
                         }
                     } else {
@@ -247,7 +294,7 @@ impl Stream {
                     if let Some(node) = self.client_nodes.get(client)
                         && let Some(a) = &node.activation
                     {
-                        atomic!(a, status).store(ActivationStatus::INACTIVE);
+                        unsafe { atomic!(a, status).store(ActivationStatus::INACTIVE) };
                     } else {
                         tracing::error!(
                             ?client,
@@ -261,7 +308,7 @@ impl Stream {
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     #[tracing::instrument(skip(self, recv))]
@@ -307,35 +354,69 @@ impl Stream {
     }
 
     /// Process client.
-    #[tracing::instrument(skip(self, recv))]
-    pub fn run(&mut self, recv: &mut RecvBuf) -> Result<()> {
+    #[tracing::instrument(skip(self, poll, recv))]
+    pub fn run(&mut self, poll: &mut Poll, recv: &mut RecvBuf) -> Result<Option<StreamEvent>> {
         loop {
-            self.process_operations()?;
+            if let Some(ev) = self.process_operations()? {
+                return Ok(Some(ev));
+            }
 
             if !self.process_messages(recv)? {
                 break;
             }
         }
 
-        Ok(())
-    }
-
-    /// Process client.
-    #[tracing::instrument(skip(self))]
-    pub fn tick(&mut self) -> Result<()> {
-        let mut samples = 0;
-        let mut sum = 0.0;
-
-        for (_, node) in self.client_nodes.iter_mut() {
-            for sample in node.buf.drain(..) {
-                self.writer.write_sample(sample)?;
-                sum += sample;
-                samples += 1;
-            }
+        if let Some(index) = self.process_set.take_next() {
+            return Ok(Some(StreamEvent::Process(ClientNodeId(index as usize))));
         }
 
-        self.writer.flush()?;
-        tracing::warn!(samples, sum, len = self.writer.len(), "Flushed to file");
+        while let Some((fd, token, interest)) = self.add_interest() {
+            tracing::trace!(?fd, ?token, ?interest, "Adding interest");
+            poll.add(fd, token, interest)?;
+        }
+
+        while let Some((fd, token, interest)) = self.modify_interest() {
+            tracing::trace!(?fd, ?token, ?interest, "Modifying interest");
+            poll.modify(fd, token, interest)?;
+        }
+
+        Ok(None)
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub fn drive(&mut self, recv: &mut RecvBuf, e: PollEvent) -> Result<()> {
+        if e.token == self.connection_token {
+            tracing::trace!(?e.interest, "connection");
+
+            if e.interest.is_read() {
+                let mut fds = [0; 16];
+
+                let n_fds = self
+                    .c
+                    .recv_with_fds(recv, &mut fds[..])
+                    .context("Failed to receive file descriptors")?;
+
+                // SAFETY: We must trust the file descriptor we have
+                // just received.
+                let iter = fds[..n_fds]
+                    .iter_mut()
+                    .map(|fd| unsafe { OwnedFd::from_raw_fd(mem::take(fd)) });
+
+                self.add_fds(iter);
+            }
+
+            if e.interest.is_write() {
+                self.c.send()?;
+            }
+
+            return Ok(());
+        }
+
+        if e.interest.is_read() {
+            self.handle_read(e.token)?;
+            return Ok(());
+        }
+
         Ok(())
     }
 
@@ -353,7 +434,7 @@ impl Stream {
         };
 
         let Some(read_fd) = &client.read_fd else {
-            tracing::warn!(?client, "No read file descriptor for client");
+            tracing::warn!(client.id, "No read file descriptor for client");
             return Ok(());
         };
 
@@ -361,7 +442,7 @@ impl Stream {
             return Ok(());
         };
 
-        self.process()?;
+        self.process_set.set(*index as u32);
         Ok(())
     }
 
@@ -425,24 +506,17 @@ impl Stream {
 
         let mut ports = Ports::new();
 
-        let port = ports.insert(consts::Direction::INPUT)?;
-        port.name = String::from("input");
-
-        let port = ports.insert(consts::Direction::OUTPUT)?;
-        port.name = String::from("output");
-
         let write_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
         let read_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
 
-        let index = self.client_nodes.insert(ClientNodeState::new(
-            new_id,
-            ports,
-            write_token,
-            read_token,
-        )?);
+        let index =
+            self.client_nodes
+                .insert(ClientNode::new(new_id, ports, write_token, read_token)?);
 
         self.local_id_to_kind
             .insert(new_id, Kind::ClientNode(index));
+
+        self.ops.push_back(Op::NodeCreated { client: index });
         Ok(())
     }
 
@@ -467,151 +541,6 @@ impl Stream {
                 node.write_token,
                 Interest::HUP | Interest::ERROR,
             ));
-        }
-
-        Ok(())
-    }
-
-    #[tracing::instrument(skip(self))]
-    fn process(&mut self) -> Result<()> {
-        self.tick = self.tick.wrapping_add(1);
-        let start = SystemTime::now();
-
-        for (_, node) in &mut self.client_nodes {
-            if let Some(activation) = &node.activation {
-                let previous_status = atomic!(activation, status).swap(ActivationStatus::AWAKE);
-
-                if previous_status != ActivationStatus::TRIGGERED {
-                    tracing::warn!(?previous_status, "Expected TRIGGERED");
-                }
-            }
-
-            let Some(activation) = &node.activation else {
-                continue;
-            };
-
-            for port in node.ports.inputs_mut() {
-                let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
-                    tracing::warn!("Input missing buffers");
-                    continue;
-                };
-
-                let status = volatile!(io_buffers, status).read();
-
-                if status != flags::Status::HAVE_DATA {
-                    tracing::trace!("Input io status is not HAVE_DATA: {status:?}");
-                    continue;
-                };
-
-                let id = volatile!(io_buffers, buffer_id).read();
-
-                let Some(buffer) = buffers.buffers.get(id as usize) else {
-                    bail!("Input no buffer with id {id} for port {}", port.id);
-                };
-
-                let meta = &buffer.metas[0];
-                let data = &buffer.datas[0];
-
-                let header;
-                let samples;
-
-                unsafe {
-                    header = meta.region.cast::<ffi::MetaHeader>()?.read();
-
-                    let chunk = data.chunk.as_ref();
-                    let offset = chunk.offset as usize % data.max_size;
-                    let size = (chunk.size as usize - offset).min(data.max_size);
-
-                    samples = size / mem::size_of::<f32>();
-
-                    node.buf.reserve(samples);
-
-                    node.buf
-                        .as_mut_ptr()
-                        .add(node.buf.len())
-                        .copy_from_nonoverlapping(
-                            data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
-                            samples,
-                        );
-
-                    node.buf.set_len(node.buf.len() + samples);
-                }
-
-                let old_read = volatile!(io_buffers, status).replace(flags::Status::NEED_DATA);
-
-                if self.tick % 100 == 0 {
-                    tracing::warn!(?data.flags, ?header, ?id, ?old_read);
-                }
-            }
-
-            for port in node.ports.outputs_mut() {
-                let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &port.io_buffers)
-                else {
-                    tracing::trace!("Output missing buffers");
-                    continue;
-                };
-
-                let status = volatile!(io_buffers, status).read();
-
-                if status != flags::Status::NEED_DATA {
-                    tracing::trace!("Output status is not NEED_DATA: {status:?}");
-                    continue;
-                };
-
-                let id = volatile!(io_buffers, buffer_id).read();
-
-                let Some(buffer) = buffers.buffers.get_mut(1) else {
-                    bail!("Output no buffer with id {id} for port {}", port.id);
-                };
-
-                let meta = &buffer.metas[0];
-                let data = &mut buffer.datas[0];
-
-                let header;
-
-                unsafe {
-                    let chunk = data.chunk.as_mut();
-
-                    header = meta.region.cast::<ffi::MetaHeader>()?.read();
-
-                    let size = (chunk.size as usize).min(data.max_size);
-                    let len = size.min(node.buf.len().wrapping_mul(mem::size_of::<f32>()));
-
-                    data.region
-                        .as_mut_ptr()
-                        .cast::<u8>()
-                        .copy_from_nonoverlapping(node.buf.as_ptr().cast::<u8>(), len);
-
-                    chunk.offset = 0;
-                    chunk.size = len as u32;
-                    chunk.stride = 4;
-                }
-
-                volatile!(io_buffers, buffer_id).write(buffer.id);
-                let old_write = volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
-
-                if self.tick % 100 == 0 {
-                    tracing::warn!(?data.flags, ?header, ?id, ?old_write);
-                }
-            }
-
-            if let Some(activation) = &node.activation {
-                let previous_status =
-                    atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
-
-                if previous_status != ActivationStatus::AWAKE {
-                    tracing::warn!(?previous_status, "Expected AWAKE");
-                }
-            }
-
-            for (_, a) in &node.peer_activations {
-                a.signal()?;
-            }
-        }
-
-        if self.tick % 100 == 0 {
-            let elapsed = start.elapsed().context("Failed to get elapsed time")?;
-            tracing::info!(?elapsed);
         }
 
         Ok(())
@@ -997,7 +926,7 @@ impl Stream {
 
         // Set node as not triggered.
         if let Some(activation) = &node.activation {
-            let old = atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED);
+            let old = unsafe { atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED) };
 
             if old != ActivationStatus::INACTIVE {
                 tracing::warn!("Expected node to be INACTIVE, but was {old:?}",);
@@ -1032,7 +961,7 @@ impl Stream {
 
         if let Some(obj) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            node.set_param(id, obj.read_object()?.to_owned()?);
+            node.set_param(id, [obj.read_object()?.to_owned()?]);
         } else {
             tracing::trace!(?id, "remove");
             node.remove_param(id);
@@ -1154,10 +1083,10 @@ impl Stream {
 
         if let Some(param) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            port.set_param(id, param.read_object()?.to_owned()?, flags)?;
+            port.set_param(id, [PortParam::with_flags(param.read_object()?, flags)])?;
         } else {
             tracing::trace!(?id, "remove");
-            port.remove_param(id)?;
+            _ = port.remove_param(id);
         }
 
         self.ops.push_back(Op::NodeUpdate { client: index });
@@ -1395,10 +1324,9 @@ impl Stream {
 
         let region = self.memory.map(mem_id, offset, size)?;
 
-        let index =
-            node.peer_activations
-                .insert(Activation::new(peer_id, EventFd::from(fd), region));
+        let activation = unsafe { Activation::new(peer_id, EventFd::from(fd), region) };
 
+        node.peer_activations.insert(activation);
         Ok(())
     }
 
@@ -1453,107 +1381,6 @@ struct RegistryState {
 }
 
 #[derive(Debug)]
-#[allow(unused)]
-struct ClientNodeState {
-    id: u32,
-    read_fd: Option<EventFd>,
-    write_token: Token,
-    write_fd: Option<EventFd>,
-    read_token: Token,
-    /// Activation record for this node.
-    activation: Option<Region<ffi::NodeActivation>>,
-    /// Activation records for dependent nodes.
-    peer_activations: Slab<Activation>,
-    params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
-    ports: Ports,
-    io_clock: Option<Region<ffi::IoClock>>,
-    io_control: Option<Region<()>>,
-    io_position: Option<Region<ffi::IoPosition>>,
-    modified: bool,
-    buf: Vec<f32>,
-}
-
-impl ClientNodeState {
-    pub(crate) fn new(
-        id: u32,
-        ports: Ports,
-        write_token: Token,
-        read_token: Token,
-    ) -> Result<Self> {
-        let mut params = BTreeMap::new();
-        let mut pod = pod::array();
-
-        pod.as_mut()
-            .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                obj.property(Format::MEDIA_SUB_TYPE)
-                    .write(MediaSubType::DSP)?;
-                obj.property(Format::AUDIO_FORMAT)
-                    .write(AudioFormat::F32P)?;
-                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                Ok(())
-            })?;
-
-        params.insert(
-            Param::ENUM_FORMAT,
-            vec![pod.take().read_object()?.to_owned()?],
-        );
-
-        pod.as_mut()
-            .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                obj.property(Format::MEDIA_SUB_TYPE)
-                    .write(MediaSubType::DSP)?;
-                obj.property(Format::AUDIO_FORMAT)
-                    .write(AudioFormat::F32P)?;
-                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                Ok(())
-            })?;
-
-        params.insert(Param::FORMAT, vec![pod.take().read_object()?.to_owned()?]);
-
-        Ok(Self {
-            id,
-            ports,
-            write_fd: None,
-            read_fd: None,
-            write_token,
-            read_token,
-            activation: None,
-            peer_activations: Slab::new(),
-            params,
-            io_control: None,
-            io_clock: None,
-            io_position: None,
-            modified: true,
-            buf: Vec::with_capacity(1024 * 1024),
-        })
-    }
-
-    /// Set a parameter for the node.
-    #[inline]
-    fn set_param(&mut self, param: Param, value: Object<DynamicBuf>) {
-        self.params.insert(param, vec![value]);
-        self.modified = true;
-    }
-
-    /// Remove a parameter for the node.
-    #[inline]
-    fn remove_param(&mut self, param: Param) {
-        self.params.remove(&param);
-        self.modified = true;
-    }
-
-    /// Take and return the modified state of the node.
-    #[inline]
-    fn take_modified(&mut self) -> bool {
-        mem::take(&mut self.modified)
-    }
-}
-
-#[derive(Debug)]
 enum Kind {
     Registry,
     ClientNode(usize),
@@ -1570,6 +1397,7 @@ enum Op {
     GetRegistry,
     Pong { id: u32, seq: u32 },
     ConstructNode,
+    NodeCreated { client: usize },
     NodeActive { client: usize },
     NodeUpdate { client: usize },
     NodeStart { client: usize },

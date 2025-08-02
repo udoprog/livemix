@@ -36,7 +36,6 @@ impl AsRawFd for Connection {
 pub struct Connection {
     socket: UnixStream,
     message_sequence: u32,
-    outgoing: SendBuf,
     interest: Interest,
     modified: ChangeInterest,
 }
@@ -72,7 +71,6 @@ impl Connection {
         Ok(Self {
             socket,
             message_sequence: 0,
-            outgoing: SendBuf::new(),
             interest: Interest::READ | Interest::HUP | Interest::ERROR,
             modified: ChangeInterest::Unchanged,
         })
@@ -103,18 +101,18 @@ impl Connection {
     ///
     /// If this method returns `true`, the interest for the connection has been
     /// changed and should be updated with the main loop.
-    pub fn send(&mut self) -> Result<(), Error> {
+    pub fn send(&mut self, outgoing: &mut SendBuf) -> Result<(), Error> {
         // Keep track of how much we've sent to limit the amount of time we
         // spend sending.
         let mut sent = MAX_SEND_SIZE;
 
         loop {
-            if self.outgoing.is_empty() {
+            if outgoing.is_empty() {
                 self.modified |= self.interest.unset(Interest::WRITE);
                 return Ok(());
             }
 
-            let bytes = self.outgoing.as_bytes();
+            let bytes = outgoing.as_bytes();
             let bytes = bytes.get(..bytes.len().min(sent)).unwrap_or_default();
             let remaining_before = bytes.len();
 
@@ -131,10 +129,10 @@ impl Connection {
                     // SAFETY: We trust the returned value `n` as the number of
                     // bytes read constained by the number of bytes available.
                     unsafe {
-                        self.outgoing.advance_read_bytes(n);
+                        outgoing.advance_read_bytes(n);
                     }
 
-                    let remaining = self.outgoing.remaining_bytes();
+                    let remaining = outgoing.remaining_bytes();
 
                     tracing::trace!(bytes = n, remaining_before, remaining, "sent");
 
@@ -264,9 +262,10 @@ impl Connection {
     /// Send an outgoing request.
     ///
     /// This will write the request to the outgoing buffer.
-    #[tracing::instrument(skip(self, pod), fields(remaining = self.outgoing.len()), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self, pod), fields(remaining = outgoing.len()), ret(level = Level::DEBUG))]
     pub fn request(
         &mut self,
+        outgoing: &mut SendBuf,
         id: u32,
         op: impl IntoRaw<u8> + fmt::Display + fmt::Debug,
         pod: Pod<impl AsSlice>,
@@ -287,8 +286,8 @@ impl Connection {
             return Err(Error::new(ErrorKind::HeaderSizeOverflow { size }));
         };
 
-        self.outgoing.push_bytes(&header)?;
-        self.outgoing.extend_from_words(buf.as_bytes())?;
+        outgoing.push_bytes(&header)?;
+        outgoing.extend_from_words(buf.as_bytes())?;
         self.modified |= self.interest.set(Interest::WRITE);
         Ok(())
     }

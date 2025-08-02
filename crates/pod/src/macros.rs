@@ -1,4 +1,5 @@
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __id {
     (
         $(
@@ -177,6 +178,7 @@ macro_rules! __id {
 pub use __id as id;
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __one_of {
     ($fallback:expr, $value:expr) => {
         $value
@@ -190,6 +192,7 @@ macro_rules! __one_of {
 pub use __one_of as one_of;
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __consts {
     (
         constants;
@@ -381,6 +384,7 @@ macro_rules! __consts {
 pub use __consts as consts;
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __flags {
     (
         $(

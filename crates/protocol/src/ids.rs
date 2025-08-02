@@ -2,6 +2,8 @@
 
 use core::fmt;
 
+use bittle::{Bits, BitsMut};
+
 /// Id allocator for the protocol.
 pub struct Ids {
     /// 64 bits indicating which buckets in layer1 are used.
@@ -34,7 +36,7 @@ impl Ids {
     /// ```
     pub fn set(&mut self, index: u32) {
         assert!(index < 128, "Index out of bounds: {index}");
-        self.layer |= 1u128 << index;
+        self.layer.set_bit(index);
     }
 
     /// Unset an identifier.
@@ -59,7 +61,7 @@ impl Ids {
     /// ```
     pub fn unset(&mut self, index: u32) {
         assert!(index < 128, "Index out of bounds: {index}");
-        self.layer &= !(1u128 << index);
+        self.layer.clear_bit(index);
     }
 
     /// Test if the given index is set.
@@ -81,11 +83,7 @@ impl Ids {
     /// assert!(!ids.test(4));
     /// ```
     pub fn test(&self, index: u32) -> bool {
-        if index >= 128 {
-            return false;
-        }
-
-        (self.layer & (1u128 << index)) != 0
+        self.layer.test_bit(index)
     }
 
     /// Allocate a new identifier.
@@ -107,14 +105,16 @@ impl Ids {
     /// assert!(!ids.test(4));
     /// ```
     pub fn alloc(&mut self) -> Option<u32> {
-        let value = self.layer.trailing_ones();
+        let id = self.layer.iter_zeros().next()?;
+        self.set(id);
+        Some(id)
+    }
 
-        if value >= 128 {
-            return None;
-        }
-
-        self.layer |= 1u128 << value;
-        Some(value)
+    /// Iterate over all bits that are set.
+    pub fn take_next(&mut self) -> Option<u32> {
+        let id = self.layer.iter_ones().next()?;
+        self.unset(id);
+        Some(id)
     }
 }
 

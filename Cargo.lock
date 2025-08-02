@@ -110,7 +110,6 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "hound",
  "libc",
  "libspa-sys",
  "pipewire-sys",
@@ -220,6 +219,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "client",
+ "hound",
  "pod",
  "protocol",
  "tracing",

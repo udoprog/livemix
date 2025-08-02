@@ -7,8 +7,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
+use pod::AsSlice;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
-use protocol::consts;
+use protocol::consts::{self, Direction};
 use protocol::ffi;
 use protocol::id::{
     self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
@@ -18,32 +19,53 @@ use tracing::Level;
 
 use crate::{Buffers, Region};
 
-const BUFFER_SAMPLES: u32 = 128;
-
 #[derive(Debug)]
-pub struct PortParam {
-    pub value: Object<DynamicBuf>,
+#[non_exhaustive]
+pub struct PortParam<B = DynamicBuf>
+where
+    B: AsSlice,
+{
+    pub value: Object<B>,
     pub flags: u32,
 }
 
-impl PortParam {
+impl<B> PortParam<B>
+where
+    B: AsSlice,
+{
+    /// Construct a port parameter with empty flags.
     #[inline]
-    fn new(value: Object<DynamicBuf>, flags: u32) -> Self {
-        Self { flags, value }
+    pub fn new(value: Object<B>) -> Self {
+        Self { value, flags: 0 }
+    }
+
+    /// Construct a port parameter with associated flags.
+    #[inline]
+    pub fn with_flags(value: Object<B>, flags: u32) -> Self {
+        Self { value, flags }
     }
 }
 
+/// The definition of a port.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Port {
+    /// Identifier of the port, unique per direction.
     pub id: u32,
-    pub dir: consts::Direction,
-    modified: bool,
+    /// The direction of the port.
+    pub dir: Direction,
+    /// The name of the port.
     pub name: String,
+    /// Buffers associated with the port.
     pub buffers: Option<Buffers>,
+    /// The IO clock region for the port.
     pub io_clock: Option<Region<ffi::IoClock>>,
+    /// The IO position region for the port.
     pub io_position: Option<Region<ffi::IoPosition>>,
+    /// The IO buffers region for the port.
     pub io_buffers: Option<Region<ffi::IoBuffers>>,
-    params: BTreeMap<Param, Vec<PortParam>>,
+    modified: bool,
+    params: BTreeMap<Param, Vec<PortParam<DynamicBuf>>>,
 }
 
 impl Port {
@@ -61,27 +83,51 @@ impl Port {
 
     /// Set a parameter on the port.
     #[inline]
-    pub(crate) fn set_param(
+    pub fn set_param(
         &mut self,
         id: Param,
-        value: Object<DynamicBuf>,
-        flags: u32,
+        values: impl IntoIterator<Item = PortParam<impl AsSlice>, IntoIter: ExactSizeIterator>,
     ) -> Result<()> {
-        self.params.insert(id, vec![PortParam::new(value, flags)]);
+        let mut iter = values.into_iter();
+        let mut params = Vec::with_capacity(iter.len());
+
+        for param in iter {
+            params.push(PortParam::with_flags(
+                param.value.as_ref().to_owned()?,
+                param.flags,
+            ));
+        }
+
+        self.params.insert(id, params);
         self.modified = true;
         Ok(())
     }
 
-    /// Remove a parameter from the port.
+    /// Set a parameter on the port.
     #[inline]
-    pub(crate) fn remove_param(&mut self, id: Param) -> Result<()> {
-        self.params.remove(&id);
+    pub fn add_param(&mut self, id: Param, value: PortParam<impl AsSlice>) -> Result<()> {
+        self.params
+            .entry(id)
+            .or_default()
+            .push(PortParam::with_flags(
+                value.value.as_ref().to_owned()?,
+                value.flags,
+            ));
         self.modified = true;
         Ok(())
+    }
+
+    /// Remove a parameter from the port and return the values of the removed
+    /// parameter if it exists.
+    #[inline]
+    pub fn remove_param(&mut self, id: Param) -> Option<Vec<PortParam>> {
+        let param = self.params.remove(&id)?;
+        self.modified = true;
+        Some(param)
     }
 
     /// Get parameters from the port.
-    pub(crate) fn params(&self) -> &BTreeMap<Param, Vec<PortParam>> {
+    pub(crate) fn params(&self) -> &BTreeMap<Param, Vec<PortParam<impl AsSlice>>> {
         &self.params
     }
 
@@ -110,27 +156,28 @@ impl Ports {
     }
 
     /// Access input ports.
-    pub(crate) fn inputs(&self) -> &[Port] {
+    pub fn inputs(&self) -> &[Port] {
         &self.input_ports
     }
 
     /// Access input ports mutably.
-    pub(crate) fn inputs_mut(&mut self) -> &mut [Port] {
+    pub fn inputs_mut(&mut self) -> &mut [Port] {
         &mut self.input_ports
     }
 
     /// Access output ports.
-    pub(crate) fn outputs(&self) -> &[Port] {
+    pub fn outputs(&self) -> &[Port] {
         &self.output_ports
     }
 
     /// Access output ports mutably.
-    pub(crate) fn outputs_mut(&mut self) -> &mut [Port] {
+    pub fn outputs_mut(&mut self) -> &mut [Port] {
         &mut self.output_ports
     }
 
-    /// Insert a new port in the specified direction.
-    pub(crate) fn insert(&mut self, dir: consts::Direction) -> Result<&mut Port> {
+    /// Insert a new port in the specified direction and return the inserted
+    /// port for configuration.
+    pub fn insert(&mut self, dir: Direction) -> Result<&mut Port> {
         let ports = self.get_direction_mut(dir)?;
 
         let id = ports.len() as u32;
@@ -147,126 +194,12 @@ impl Ports {
             params: BTreeMap::new(),
         };
 
-        let mut pod = pod::array();
-
-        pod.as_mut()
-            .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                obj.property(Format::MEDIA_SUB_TYPE)
-                    .write(MediaSubType::DSP)?;
-                obj.property(Format::AUDIO_FORMAT)
-                    .write(AudioFormat::F32P)?;
-                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                Ok(())
-            })?;
-
-        port.params.insert(
-            Param::ENUM_FORMAT,
-            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
-        );
-
-        pod.as_mut()
-            .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                obj.property(Format::MEDIA_SUB_TYPE)
-                    .write(MediaSubType::DSP)?;
-                obj.property(Format::AUDIO_FORMAT)
-                    .write(AudioFormat::F32P)?;
-                obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                Ok(())
-            })?;
-
-        port.params.insert(
-            Param::FORMAT,
-            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
-        );
-
-        pod.as_mut()
-            .write_object(ObjectType::PARAM_META, Param::META, |obj| {
-                obj.property(ParamMeta::TYPE).write(id::Meta::HEADER)?;
-                obj.property(ParamMeta::SIZE)
-                    .write(mem::size_of::<ffi::MetaHeader>())?;
-                Ok(())
-            })?;
-
-        port.params.insert(
-            Param::META,
-            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
-        );
-
-        {
-            let mut params = Vec::new();
-
-            pod.as_mut()
-                .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-                    obj.property(ParamIo::ID).write(id::IoType::CLOCK)?;
-                    obj.property(ParamIo::SIZE)
-                        .write(mem::size_of::<ffi::IoClock>())?;
-                    Ok(())
-                })?;
-
-            params.push(PortParam::new(pod.take().read_object()?.to_owned()?, 0));
-
-            pod.as_mut()
-                .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-                    obj.property(ParamIo::ID)
-                        .write_sized(id::IoType::POSITION)?;
-                    obj.property(ParamIo::SIZE)
-                        .write_sized(mem::size_of::<ffi::IoPosition>())?;
-                    Ok(())
-                })?;
-
-            params.push(PortParam::new(pod.take().read_object()?.to_owned()?, 0));
-
-            port.params.insert(Param::IO, params);
-        }
-
-        pod.as_mut()
-            .write_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
-                obj.property(ParamBuffers::BUFFERS).write_choice(
-                    ChoiceType::RANGE,
-                    Type::INT,
-                    |choice| {
-                        choice.child().write_sized(1u32)?;
-                        choice.child().write_sized(1u32)?;
-                        choice.child().write_sized(32u32)?;
-                        Ok(())
-                    },
-                )?;
-
-                obj.property(ParamBuffers::BLOCKS).write_sized(1i32)?;
-
-                obj.property(ParamBuffers::SIZE).write_choice(
-                    ChoiceType::RANGE,
-                    Type::INT,
-                    |choice| {
-                        choice
-                            .child()
-                            .write_sized(BUFFER_SAMPLES * mem::size_of::<f32>() as u32)?;
-                        choice.child().write_sized(32)?;
-                        choice.child().write_sized(i32::MAX)?;
-                        Ok(())
-                    },
-                )?;
-
-                obj.property(ParamBuffers::STRIDE)
-                    .write_sized(mem::size_of::<f32>())?;
-                Ok(())
-            })?;
-
-        port.params.insert(
-            Param::BUFFERS,
-            vec![PortParam::new(pod.take().read_object()?.to_owned()?, 0)],
-        );
-
         ports.push(port);
         Ok(&mut ports[id as usize])
     }
 
     /// Get a port.
-    fn get(&self, direction: consts::Direction, id: u32) -> Result<&Port> {
+    fn get(&self, direction: Direction, id: u32) -> Result<&Port> {
         let Ok(id) = usize::try_from(id) else {
             bail!("Invalid port id: {id}");
         };
@@ -281,7 +214,7 @@ impl Ports {
     }
 
     /// Get a port mutably.
-    pub(crate) fn get_mut(&mut self, direction: consts::Direction, id: u32) -> Result<&mut Port> {
+    pub(crate) fn get_mut(&mut self, direction: Direction, id: u32) -> Result<&mut Port> {
         let Ok(id) = usize::try_from(id) else {
             bail!("Invalid port id: {id}");
         };
@@ -296,19 +229,19 @@ impl Ports {
     }
 
     #[inline]
-    fn get_direction(&self, dir: consts::Direction) -> Result<&Vec<Port>> {
+    fn get_direction(&self, dir: Direction) -> Result<&Vec<Port>> {
         match dir {
-            consts::Direction::INPUT => Ok(&self.input_ports),
-            consts::Direction::OUTPUT => Ok(&self.output_ports),
+            Direction::INPUT => Ok(&self.input_ports),
+            Direction::OUTPUT => Ok(&self.output_ports),
             dir => panic!("Unknown port direction: {dir:?}"),
         }
     }
 
     #[inline]
-    fn get_direction_mut(&mut self, dir: consts::Direction) -> Result<&mut Vec<Port>> {
+    fn get_direction_mut(&mut self, dir: Direction) -> Result<&mut Vec<Port>> {
         match dir {
-            consts::Direction::INPUT => Ok(&mut self.input_ports),
-            consts::Direction::OUTPUT => Ok(&mut self.output_ports),
+            Direction::INPUT => Ok(&mut self.input_ports),
+            Direction::OUTPUT => Ok(&mut self.output_ports),
             dir => panic!("Unknown port direction: {dir:?}"),
         }
     }

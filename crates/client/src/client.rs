@@ -1,13 +1,17 @@
 use std::collections::BTreeMap;
+use std::os::fd::{AsRawFd, RawFd};
 
 use alloc::vec::Vec;
 
 use anyhow::Result;
 use pod::{AsSlice, Object};
+use protocol::buf::RecvBuf;
+use protocol::buf::SendBuf;
 use protocol::consts;
 use protocol::flags;
 use protocol::id;
 use protocol::op;
+use protocol::poll::{ChangeInterest, Interest};
 use protocol::{Connection, Properties};
 use tracing::Level;
 
@@ -17,6 +21,7 @@ use crate::ports::PortParam;
 pub struct Client {
     connection: Connection,
     sync_sequence: u32,
+    outgoing: SendBuf,
 }
 
 impl Client {
@@ -25,17 +30,31 @@ impl Client {
         Self {
             connection,
             sync_sequence: 1,
+            outgoing: SendBuf::new(),
         }
     }
 
+    /// Get the connection interest.
     #[inline]
-    pub fn connection(&self) -> &Connection {
-        &self.connection
+    pub fn interest(&self) -> Interest {
+        self.connection.interest()
     }
 
     #[inline]
-    pub fn connection_mut(&mut self) -> &mut Connection {
-        &mut self.connection
+    pub fn modify_interest(&mut self) -> ChangeInterest {
+        self.connection.modified()
+    }
+
+    /// Receive file descriptors from the server.
+    #[inline]
+    pub fn recv_with_fds(&mut self, recv: &mut RecvBuf, fds: &mut [RawFd]) -> Result<usize> {
+        Ok(self.connection.recv_with_fds(recv, fds)?)
+    }
+
+    /// Send data to the server.
+    pub fn send(&mut self) -> Result<()> {
+        self.connection.send(&mut self.outgoing)?;
+        Ok(())
     }
 
     /// Send client hello.
@@ -44,8 +63,12 @@ impl Client {
         pod.as_mut()
             .write_struct(|st| st.field().write_sized(consts::VERSION))?;
 
-        self.connection
-            .request(consts::CORE_ID, op::Core::HELLO, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            consts::CORE_ID,
+            op::Core::HELLO,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -59,8 +82,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(consts::CORE_ID, op::Core::GET_REGISTRY, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            consts::CORE_ID,
+            op::Core::GET_REGISTRY,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -77,8 +104,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(consts::CORE_ID, op::Core::SYNC, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            consts::CORE_ID,
+            op::Core::SYNC,
+            pod.as_ref(),
+        )?;
         Ok(sync_sequence)
     }
 
@@ -92,8 +123,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(consts::CORE_ID, op::Core::PONG, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            consts::CORE_ID,
+            op::Core::PONG,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -131,8 +166,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(consts::CORE_ID, op::Core::CREATE_OBJECT, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            consts::CORE_ID,
+            op::Core::CREATE_OBJECT,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -153,6 +192,7 @@ impl Client {
         })?;
 
         self.connection.request(
+            &mut self.outgoing,
             consts::CLIENT_ID,
             op::Client::UPDATE_PROPERTIES,
             pod.as_ref(),
@@ -170,8 +210,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(id, op::ClientNode::GET_NODE, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            id,
+            op::ClientNode::GET_NODE,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -247,7 +291,7 @@ impl Client {
         })?;
 
         self.connection
-            .request(id, op::ClientNode::UPDATE, pod.as_ref())?;
+            .request(&mut self.outgoing, id, op::ClientNode::UPDATE, pod.as_ref())?;
         Ok(())
     }
 
@@ -259,7 +303,7 @@ impl Client {
         direction: consts::Direction,
         port_id: u32,
         name: &str,
-        params: &BTreeMap<id::Param, Vec<PortParam>>,
+        params: &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>>,
     ) -> Result<()> {
         const PARAMS: &[(id::Param, flags::Param)] = &[
             (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
@@ -325,8 +369,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(id, op::ClientNode::PORT_UPDATE, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            id,
+            op::ClientNode::PORT_UPDATE,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -336,8 +384,19 @@ impl Client {
 
         pod.as_mut().write_struct(|st| st.write(active))?;
 
-        self.connection
-            .request(id, op::ClientNode::SET_ACTIVE, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            id,
+            op::ClientNode::SET_ACTIVE,
+            pod.as_ref(),
+        )?;
         Ok(())
+    }
+}
+
+impl AsRawFd for Client {
+    #[inline]
+    fn as_raw_fd(&self) -> RawFd {
+        self.connection.as_raw_fd()
     }
 }

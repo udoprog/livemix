@@ -86,7 +86,7 @@ impl Poll {
     }
 
     /// Poll for the next events.
-    pub fn poll(&mut self, out: &mut dyn Events<PollEvent>) -> io::Result<()> {
+    pub fn poll(&mut self, out: &mut impl Events<PollEvent>) -> io::Result<()> {
         // SAFETY: We're ensuring safety through type invariants.
         unsafe {
             let mut events = [mem::zeroed(); 4];

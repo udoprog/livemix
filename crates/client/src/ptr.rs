@@ -1,10 +1,24 @@
+//! Unsafe utilities for working with pointers to data structures.
+
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use protocol::{consts, flags};
 
+mod sealed_atomic_ops {
+    use core::sync::atomic::{AtomicI32, AtomicU32, AtomicU64};
+
+    pub trait Sealed {}
+    impl Sealed for AtomicU32 {}
+    impl Sealed for AtomicI32 {}
+    impl Sealed for AtomicU64 {}
+}
+
 /// A trait for atomic operations on types.
-pub(crate) trait AtomicOps<T> {
+pub trait AtomicOps<T>
+where
+    Self: self::sealed_atomic_ops::Sealed,
+{
     fn store(&self, value: T);
 
     fn swap(&self, value: T) -> T;
@@ -52,8 +66,22 @@ atomic! {
     AtomicI32, i32,
 }
 
+mod sealed_into_atomic {
+    use protocol::consts;
+    use protocol::flags;
+
+    pub trait Sealed {}
+    impl Sealed for consts::ActivationStatus {}
+    impl Sealed for flags::Status {}
+    impl Sealed for u32 {}
+    impl Sealed for u64 {}
+}
+
 /// Helper trait to convert values into ones compatible with atomic operations.
-pub(crate) trait IntoAtomic {
+pub trait IntoAtomic
+where
+    Self: self::sealed_into_atomic::Sealed,
+{
     type Repr;
     type Atomic: AtomicOps<Self::Repr>;
 
@@ -108,7 +136,17 @@ impl IntoAtomic for u32 {
 }
 
 /// A pointer to an atomic field.
-pub(crate) struct Atomic<T>
+///
+/// This is constructed using the [`atomic!`] macro and wraps a memory location
+/// that supports atomic operations. Since Rust has no insight into the memory
+/// being accessed, all access is `unsafe`.
+///
+/// # Safety
+///
+/// The caller is responsible for ensuring that the memory being accessed is
+/// valid.
+#[repr(transparent)]
+pub struct Atomic<T>
 where
     T: IntoAtomic,
 {
@@ -120,70 +158,81 @@ where
     T: IntoAtomic,
 {
     #[inline]
-    pub(crate) unsafe fn new_unchecked(ptr: *const T) -> Self {
+    pub unsafe fn new_unchecked(ptr: *const T) -> Self {
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.cast_mut().cast()) },
         }
     }
 
     #[inline]
-    pub(crate) fn store(&self, value: T) {
+    pub unsafe fn store(&self, value: T) {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { (*self.ptr.as_ptr()).store(T::into_repr(value)) }
     }
 
     #[inline]
-    pub(crate) fn swap(&self, value: T) -> T {
+    pub unsafe fn swap(&self, value: T) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).swap(T::into_repr(value))) }
     }
 
     #[inline]
-    pub(crate) fn sub(&self, value: T) -> T {
+    pub unsafe fn sub(&self, value: T) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).sub(T::into_repr(value))) }
     }
 
     #[inline]
-    pub(crate) fn load(&self) -> T {
+    pub unsafe fn load(&self) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).load()) }
     }
 
     #[inline]
-    pub(crate) fn compare_exchange(&self, current: T, new: T) -> bool {
+    pub unsafe fn compare_exchange(&self, current: T, new: T) -> bool {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { (*self.ptr.as_ptr()).compare_exchange(T::into_repr(current), T::into_repr(new)) }
     }
 }
 
-/// A field that can be volatilely read.
-pub(crate) struct Volatile<T> {
+/// A field that can be volatilely read or written to.
+///
+/// This is a best effort wrapper around a pointer to try and avoid having the
+/// compiler make assumptions about the memory being accessed, particularly how
+/// it's being cached. Since Rust has no insight into the memory being accessed,
+/// all access is `unsafe`.
+///
+/// # Safety
+///
+/// The caller is responsible for ensuring that the memory being accessed is
+/// valid.
+#[repr(transparent)]
+pub struct Volatile<T> {
     ptr: NonNull<T>,
 }
 
 impl<T> Volatile<T> {
     #[inline]
-    pub(crate) unsafe fn new_unchecked(ptr: *const T) -> Self {
+    pub unsafe fn new_unchecked(ptr: *const T) -> Self {
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.cast_mut()) },
         }
     }
 
     /// Read the value.
-    pub(crate) fn read(&self) -> T {
+    pub unsafe fn read(&self) -> T {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe { self.ptr.as_ptr().read_volatile() }
     }
 
     /// Write a value.
-    pub(crate) fn write(&self, value: T) {
+    pub fn write(&self, value: T) {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe { self.ptr.as_ptr().write_volatile(value) };
     }
 
     /// Replace a value and return the old one.
-    pub(crate) fn replace(&self, value: T) -> T {
+    pub fn replace(&self, value: T) -> T {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe {
             let old = self.ptr.as_ptr().read_volatile();
@@ -193,21 +242,23 @@ impl<T> Volatile<T> {
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
 macro_rules! __volatile {
     ($this:expr, $($tt:tt)*) => {
-        unsafe {
-            $crate::ptr::Volatile::new_unchecked(core::ptr::addr_of!((*$this.as_ptr()).$($tt)*))
-        }
+        $crate::ptr::Volatile::new_unchecked(core::ptr::addr_of!((*$this.as_ptr()).$($tt)*))
     };
 }
 
-pub(crate) use __volatile as volatile;
+pub use __volatile as volatile;
 
+#[doc(hidden)]
+#[macro_export]
 macro_rules! __atomic {
     ($this:expr, $($tt:tt)*) => {
         // SAFETY: We assume that the pointer is valid and aligned.
-        unsafe { $crate::ptr::Atomic::new_unchecked(core::ptr::addr_of!((*$this.as_ptr()).$($tt)*)) }
+        $crate::ptr::Atomic::new_unchecked(core::ptr::addr_of!((*$this.as_ptr()).$($tt)*))
     };
 }
 
-pub(crate) use __atomic as atomic;
+pub use __atomic as atomic;

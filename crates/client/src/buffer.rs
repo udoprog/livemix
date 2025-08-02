@@ -8,35 +8,39 @@ use protocol::id;
 use crate::memory::Region;
 
 #[derive(Debug)]
-pub(crate) struct Meta {
-    pub(crate) ty: id::Meta,
-    pub(crate) size: u32,
-    pub(crate) region: Region<()>,
+#[non_exhaustive]
+pub struct Meta {
+    pub ty: id::Meta,
+    pub size: u32,
+    pub region: Region<()>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Data {
-    pub(crate) ty: id::DataType,
-    pub(crate) region: Region<[u8]>,
-    pub(crate) flags: flags::DataFlag,
-    pub(crate) max_size: usize,
-    pub(crate) chunk: Region<ffi::Chunk>,
+#[non_exhaustive]
+pub struct Data {
+    pub ty: id::DataType,
+    pub region: Region<[u8]>,
+    pub flags: flags::DataFlag,
+    pub max_size: usize,
+    pub chunk: Region<ffi::Chunk>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Buffer {
-    pub(crate) id: u32,
-    pub(crate) mem_id: u32,
-    pub(crate) offset: i32,
-    pub(crate) size: u32,
-    pub(crate) metas: Vec<Meta>,
-    pub(crate) datas: Vec<Data>,
+#[non_exhaustive]
+pub struct Buffer {
+    pub id: u32,
+    pub mem_id: u32,
+    pub offset: i32,
+    pub size: u32,
+    pub metas: Vec<Meta>,
+    pub datas: Vec<Data>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Buffers {
-    pub(crate) direction: consts::Direction,
-    pub(crate) mix_id: Option<u32>,
-    pub(crate) flags: u32,
-    pub(crate) buffers: Vec<Buffer>,
+#[non_exhaustive]
+pub struct Buffers {
+    pub direction: consts::Direction,
+    pub mix_id: Option<u32>,
+    pub flags: u32,
+    pub buffers: Vec<Buffer>,
 }
