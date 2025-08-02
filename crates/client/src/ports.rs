@@ -10,11 +10,12 @@ use anyhow::{Result, bail};
 use pod::AsSlice;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::consts::{self, Direction};
-use protocol::ffi;
+use protocol::flags::ParamFlag;
 use protocol::id::{
     self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
     ParamMeta,
 };
+use protocol::{ffi, flags};
 use tracing::Level;
 
 use crate::{Buffers, Region};
@@ -65,7 +66,8 @@ pub struct Port {
     /// The IO buffers region for the port.
     pub io_buffers: Option<Region<ffi::IoBuffers>>,
     modified: bool,
-    params: BTreeMap<Param, Vec<PortParam<DynamicBuf>>>,
+    param_values: BTreeMap<Param, Vec<PortParam<DynamicBuf>>>,
+    param_flags: BTreeMap<Param, ParamFlag>,
 }
 
 impl Port {
@@ -79,6 +81,18 @@ impl Port {
     #[inline]
     pub(crate) fn take_modified(&mut self) -> bool {
         mem::take(&mut self.modified)
+    }
+
+    /// Set a parameter flag.
+    pub fn set_read(&mut self, id: Param) {
+        self.param_flags.insert(id, flags::ParamFlag::READ);
+        self.modified = true;
+    }
+
+    /// Set that a parameter is writable.
+    pub fn set_write(&mut self, id: Param) {
+        self.param_flags.insert(id, flags::ParamFlag::WRITE);
+        self.modified = true;
     }
 
     /// Set a parameter on the port.
@@ -98,7 +112,13 @@ impl Port {
             ));
         }
 
-        self.params.insert(id, params);
+        self.param_values.insert(id, params);
+
+        // If we are setting some value, make sure it's readable.
+        if let Some(flag) = self.param_flags.get_mut(&id) {
+            *flag |= flags::ParamFlag::READ;
+        }
+
         self.modified = true;
         Ok(())
     }
@@ -106,7 +126,7 @@ impl Port {
     /// Set a parameter on the port.
     #[inline]
     pub fn add_param(&mut self, id: Param, value: PortParam<impl AsSlice>) -> Result<()> {
-        self.params
+        self.param_values
             .entry(id)
             .or_default()
             .push(PortParam::with_flags(
@@ -121,14 +141,25 @@ impl Port {
     /// parameter if it exists.
     #[inline]
     pub fn remove_param(&mut self, id: Param) -> Option<Vec<PortParam>> {
-        let param = self.params.remove(&id)?;
+        let param = self.param_values.remove(&id)?;
+
+        // If we remove a parameter it is no longer readable.
+        if let Some(flag) = self.param_flags.get_mut(&id) {
+            *flag ^= flags::ParamFlag::READ;
+        }
+
         self.modified = true;
         Some(param)
     }
 
     /// Get parameters from the port.
-    pub(crate) fn params(&self) -> &BTreeMap<Param, Vec<PortParam<impl AsSlice>>> {
-        &self.params
+    pub(crate) fn param_values(&self) -> &BTreeMap<Param, Vec<PortParam<impl AsSlice>>> {
+        &self.param_values
+    }
+
+    /// Get parameters from the port.
+    pub(crate) fn param_flags(&self) -> &BTreeMap<Param, flags::ParamFlag> {
+        &self.param_flags
     }
 
     /// Replace the current set of buffers for this port.
@@ -191,7 +222,8 @@ impl Ports {
             io_clock: None,
             io_position: None,
             io_buffers: None,
-            params: BTreeMap::new(),
+            param_values: BTreeMap::new(),
+            param_flags: BTreeMap::new(),
         };
 
         ports.push(port);

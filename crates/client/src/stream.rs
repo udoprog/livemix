@@ -253,7 +253,8 @@ impl Stream {
                             consts::Direction::INPUT,
                             port.id(),
                             &port.name,
-                            port.params(),
+                            port.param_values(),
+                            port.param_flags(),
                         )?;
                     }
 
@@ -267,7 +268,8 @@ impl Stream {
                             consts::Direction::OUTPUT,
                             port.id(),
                             &port.name,
-                            port.params(),
+                            port.param_values(),
+                            port.param_flags(),
                         )?;
                     }
                 }

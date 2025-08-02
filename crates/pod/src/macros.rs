@@ -603,6 +603,25 @@ macro_rules! __flags {
                 }
             }
 
+            /// Unset value to the flags with a bitwise or assign operation.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
+            ///
+            #[doc = concat!(" let mut flags = ", stringify!($ty), "::", stringify!($example0), ";")]
+            #[doc = concat!(" assert!(flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
+            #[doc = concat!(" flags ^= ", stringify!($ty), "::", stringify!($example0), ";")]
+            #[doc = concat!(" assert!(!flags.contains(", stringify!($ty), "::", stringify!($example0), "));")]
+            /// ```
+            impl core::ops::BitXorAssign for $ty {
+                #[inline]
+                fn bitxor_assign(&mut self, rhs: Self) {
+                    self.0 &= !rhs.0;
+                }
+            }
+
             #[doc = concat!(" Debug implkementation for `", stringify!($ty), "`.")]
             ///
             /// # Examples

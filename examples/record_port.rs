@@ -17,7 +17,6 @@ use protocol::id::{
 };
 use protocol::poll::{Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd, ffi, flags};
-use rand::Rng;
 
 const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
@@ -41,8 +40,6 @@ impl ExampleApplication {
         if self.tick % 100 == 0 {
             start = Some(SystemTime::now());
         }
-
-        let mut rng = rand::rng();
 
         if let Some(activation) = &node.activation {
             let previous_status =
@@ -76,7 +73,7 @@ impl ExampleApplication {
                 bail!("Input no buffer with id {id} for port {}", port.id);
             };
 
-            let meta = &buffer.metas[0];
+            let _ = &buffer.metas[0];
             let data = &buffer.datas[0];
 
             let samples;
@@ -120,7 +117,7 @@ impl ExampleApplication {
                     bail!("Output no buffer for port {}", port.id);
                 };
 
-                let meta = &buffer.metas[0];
+                let _ = &buffer.metas[0];
                 let data = &mut buffer.datas[0];
 
                 let samples;
@@ -239,6 +236,7 @@ fn main() -> Result<()> {
 
                     let mut pod = pod::array();
 
+                    /*
                     let value = pod.clear_mut().embed_object(
                         ObjectType::FORMAT,
                         Param::ENUM_FORMAT,
@@ -255,6 +253,7 @@ fn main() -> Result<()> {
                     )?;
 
                     node.set_param(Param::ENUM_FORMAT, [value])?;
+                    */
 
                     let value =
                         pod.clear_mut()
@@ -312,15 +311,24 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
             obj.property(Format::MEDIA_SUB_TYPE)
                 .write(MediaSubType::DSP)?;
-            obj.property(Format::AUDIO_FORMAT)
-                .write(AudioFormat::F32P)?;
+            obj.property(Format::AUDIO_FORMAT).write_choice(
+                ChoiceType::ENUM,
+                Type::ID,
+                |choice| {
+                    choice.write(AudioFormat::F32)?;
+                    choice.write(AudioFormat::S16)?;
+                    Ok(())
+                },
+            )?;
             obj.property(Format::AUDIO_CHANNELS).write(1)?;
             obj.property(Format::AUDIO_RATE).write(48000)?;
             Ok(())
         })?;
 
     port.set_param(Param::ENUM_FORMAT, [PortParam::new(value)])?;
+    port.set_read(Param::ENUM_FORMAT);
 
+    /*
     let value = pod
         .clear_mut()
         .embed_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
@@ -335,6 +343,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.set_param(Param::FORMAT, [PortParam::new(value)])?;
+    */
 
     let value = pod
         .clear_mut()
@@ -346,6 +355,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.set_param(Param::META, [PortParam::new(value)])?;
+    port.set_read(Param::META);
 
     let value = pod
         .clear_mut()
@@ -379,6 +389,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.add_param(Param::IO, PortParam::new(value))?;
+    port.set_read(Param::IO);
 
     let value = pod
         .clear_mut()
@@ -405,6 +416,8 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.set_param(Param::BUFFERS, [PortParam::new(value)])?;
+    port.set_read(Param::BUFFERS);
 
+    port.set_write(Param::FORMAT);
     Ok(())
 }

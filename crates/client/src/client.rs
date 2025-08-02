@@ -298,34 +298,33 @@ impl Client {
     }
 
     /// Update client node port.
-    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self, param_values), fields(param_values = ?param_values.keys()), ret(level = Level::TRACE))]
     pub fn client_node_port_update(
         &mut self,
         id: u32,
         direction: consts::Direction,
         port_id: u32,
         name: &str,
-        params: &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>>,
+        param_values: &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>>,
+        param_flags: &BTreeMap<id::Param, flags::ParamFlag>,
     ) -> Result<()> {
-        const PARAMS: &[(id::Param, flags::ParamFlag)] = &[
-            (id::Param::ENUM_FORMAT, flags::ParamFlag::READWRITE),
-            (id::Param::META, flags::ParamFlag::WRITE),
-            (id::Param::IO, flags::ParamFlag::WRITE),
-            (id::Param::FORMAT, flags::ParamFlag::READWRITE),
-            (id::Param::BUFFERS, flags::ParamFlag::WRITE),
-            (id::Param::LATENCY, flags::ParamFlag::WRITE),
-        ];
-
         let mut pod = pod::dynamic();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
-        change_mask |= flags::ClientNodePortUpdate::PARAMS;
+
+        if !param_values.is_empty() {
+            change_mask |= flags::ClientNodePortUpdate::PARAMS;
+        }
+
         change_mask |= flags::ClientNodePortUpdate::INFO;
 
         let mut port_change_mask = flags::PortChangeMask::NONE;
         port_change_mask |= flags::PortChangeMask::FLAGS;
         port_change_mask |= flags::PortChangeMask::PROPS;
-        port_change_mask |= flags::PortChangeMask::PARAMS;
+
+        if !param_flags.is_empty() {
+            port_change_mask |= flags::PortChangeMask::PARAMS;
+        }
 
         let port_flags = flags::Port::NONE;
 
@@ -334,9 +333,9 @@ impl Client {
 
             // Parameters.
             st.field()
-                .write_sized(params.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
+                .write_sized(param_values.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
 
-            for (_, params) in params {
+            for (_, params) in param_values {
                 for param in params {
                     st.field().write(param.value.as_ref())?;
                 }
@@ -360,8 +359,12 @@ impl Client {
                     st.field().write_unsized("32 bit float mono audio")?;
 
                     // Parameters.
-                    st.field().write_sized(PARAMS.len() as u32)?;
-                    st.write(PARAMS)?;
+                    st.field().write_sized(param_flags.len() as u32)?;
+
+                    for (id, flag) in param_flags {
+                        st.write((id, *flag))?;
+                    }
+
                     Ok(())
                 })?;
             } else {
