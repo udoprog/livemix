@@ -65,7 +65,7 @@ pub mod buf;
 #[doc(inline)]
 pub use self::buf::DynamicBuf;
 #[doc(inline)]
-pub use self::buf::{ArrayBuf, Slice};
+pub use self::buf::{ArrayBuf, Slice, WriterSlice};
 
 mod writer;
 pub use self::writer::Writer;

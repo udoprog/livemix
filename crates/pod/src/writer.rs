@@ -13,6 +13,26 @@ mod sealed {
     impl<W> Sealed for &mut W where W: ?Sized + Writer {}
 }
 
+mod sealed_pos {
+    use crate::buf::ArrayBufPos;
+    #[cfg(feature = "alloc")]
+    use crate::buf::DynamicBufPos;
+
+    pub trait Sealed {}
+    impl Sealed for ArrayBufPos {}
+    #[cfg(feature = "alloc")]
+    impl Sealed for DynamicBufPos {}
+}
+
+/// A trait defining the position in a writer.
+pub trait Pos
+where
+    Self: Copy + self::sealed_pos::Sealed,
+{
+    /// Advance the position by the given number of bytes.
+    fn saturating_add(self, other: usize) -> Self;
+}
+
 /// A type that can have PODs written to it.
 pub trait Writer
 where
@@ -24,7 +44,7 @@ where
         Self: 'this;
 
     /// A position in the writer.
-    type Pos: Copy;
+    type Pos: Pos;
 
     /// Borrow the current writer mutably.
     fn borrow_mut(&mut self) -> Self::Mut<'_>;

@@ -11,6 +11,7 @@ use crate::Slice;
 use crate::SplitReader;
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
+use crate::writer::Pos;
 use crate::{AsSlice, Error, Writer};
 
 use super::CapacityError;
@@ -323,10 +324,21 @@ impl SplitReader for DynamicBuf {
     }
 }
 
+/// A stored position in a dynamic buffer.
 #[derive(Clone, Copy)]
-pub struct Pos {
+pub struct DynamicBufPos {
     at: usize,
     len: usize,
+}
+
+impl Pos for DynamicBufPos {
+    #[inline]
+    fn saturating_add(self, other: usize) -> Self {
+        DynamicBufPos {
+            at: self.at.saturating_add(other),
+            len: self.len.saturating_sub(other),
+        }
+    }
 }
 
 impl Writer for DynamicBuf {
@@ -335,7 +347,7 @@ impl Writer for DynamicBuf {
     where
         Self: 'this;
 
-    type Pos = Pos;
+    type Pos = DynamicBufPos;
 
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
@@ -360,7 +372,7 @@ impl Writer for DynamicBuf {
                 .copy_from_nonoverlapping(words.as_ptr().cast::<u8>(), words_len);
         }
 
-        let pos = Pos {
+        let pos = DynamicBufPos {
             at: self.len,
             len: words_len,
         };
@@ -388,7 +400,7 @@ impl Writer for DynamicBuf {
     where
         T: BytesInhabited,
     {
-        let Pos { at, len } = pos;
+        let DynamicBufPos { at, len } = pos;
 
         let words_len = words.len().wrapping_mul(mem::size_of::<T>());
 
@@ -489,7 +501,7 @@ impl Writer for DynamicBuf {
 
     #[inline]
     fn slice_from(&self, pos: Self::Pos) -> Slice<'_> {
-        let Pos { at, .. } = pos;
+        let DynamicBufPos { at, .. } = pos;
         let ptr = self.data.as_ptr().wrapping_add(at.min(self.len));
         let len = self.len.saturating_sub(at);
         // SAFETY: We are ensuring that the slice returned is always validly in

@@ -1,5 +1,6 @@
 mod array_buf;
-pub use self::array_buf::ArrayBuf;
+
+pub use self::array_buf::{ArrayBuf, ArrayBufPos};
 
 mod array_vec;
 pub use self::array_vec::ArrayVec;
@@ -7,10 +8,13 @@ pub use self::array_vec::ArrayVec;
 #[cfg(feature = "alloc")]
 mod dynamic_buf;
 #[cfg(feature = "alloc")]
-pub use self::dynamic_buf::{AllocError, DynamicBuf};
+pub use self::dynamic_buf::{AllocError, DynamicBuf, DynamicBufPos};
 
 mod slice;
 pub use self::slice::Slice;
+
+mod writer_slice;
+pub use self::writer_slice::WriterSlice;
 
 use core::error;
 use core::fmt;

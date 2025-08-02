@@ -4,6 +4,7 @@ use core::slice;
 
 use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
+use crate::writer::Pos;
 use crate::{AsSlice, Error, Slice, SplitReader, Writer};
 
 use super::CapacityError;
@@ -398,9 +399,19 @@ impl<const N: usize> Drop for ArrayBuf<N> {
 }
 
 #[derive(Clone, Copy)]
-pub struct Pos {
+pub struct ArrayBufPos {
     at: usize,
     len: usize,
+}
+
+impl Pos for ArrayBufPos {
+    #[inline]
+    fn saturating_add(self, other: usize) -> Self {
+        Self {
+            at: self.at.saturating_add(other),
+            len: self.len.saturating_sub(other),
+        }
+    }
 }
 
 impl<const N: usize> Writer for ArrayBuf<N> {
@@ -409,7 +420,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     where
         Self: 'this;
 
-    type Pos = Pos;
+    type Pos = ArrayBufPos;
 
     #[inline]
     fn borrow_mut(&mut self) -> Self::Mut<'_> {
@@ -437,7 +448,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
                 .copy_from_nonoverlapping(words.as_ptr().cast(), words_len);
         }
 
-        let pos = Pos {
+        let pos = ArrayBufPos {
             at: self.len,
             len: words_len,
         };
@@ -465,7 +476,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
     where
         T: BytesInhabited,
     {
-        let Pos { at, len } = pos;
+        let ArrayBufPos { at, len } = pos;
 
         let words_len = words.len().wrapping_mul(mem::size_of::<T>());
 
@@ -562,7 +573,7 @@ impl<const N: usize> Writer for ArrayBuf<N> {
 
     #[inline]
     fn slice_from(&self, pos: Self::Pos) -> Slice<'_> {
-        let Pos { at, .. } = pos;
+        let ArrayBufPos { at, .. } = pos;
         let ptr = self.data.as_ptr().wrapping_add(at.min(self.len)).cast();
         let len = self.len.saturating_sub(at);
         // SAFETY: We are ensuring that the slice returned is always validly in

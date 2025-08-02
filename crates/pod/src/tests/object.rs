@@ -1,10 +1,10 @@
-use crate::{Error, Pod, Type};
+use crate::Error;
 
 #[test]
-fn read_written() -> Result<(), Error> {
+fn embed_object() -> Result<(), Error> {
     let mut pod = crate::array();
 
-    let obj = pod.as_mut().write_object(10, 20, |obj| {
+    let obj = pod.as_mut().embed_object(10, 20, |obj| {
         obj.property(1).write(1i32)?;
         obj.property(2).write(2i32)?;
         obj.property(3).write(3i32)?;
@@ -13,8 +13,12 @@ fn read_written() -> Result<(), Error> {
 
     let mut obj = obj.as_ref();
 
+    std::dbg!(&obj);
+
     assert_eq!(obj.object_type(), 10);
     assert_eq!(obj.object_id(), 20);
-    let mut p = obj.property()?;
+    let p = obj.property()?;
+    assert_eq!(p.key(), 1);
+    assert_eq!(p.value().read_sized::<i32>()?, 1);
     Ok(())
 }

@@ -188,7 +188,9 @@ impl Client {
                 }
 
                 Ok(())
-            })
+            })?;
+
+            Ok(())
         })?;
 
         self.connection.request(

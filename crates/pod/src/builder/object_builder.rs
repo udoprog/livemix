@@ -1,6 +1,6 @@
 use core::mem;
 
-use crate::{BuildPod, Builder, Error, PropertyPod, RawId, Type, Writer};
+use crate::{AsSlice, BuildPod, Builder, Error, PropertyPod, RawId, Type, Writer, WriterSlice};
 
 /// An encoder for an object.
 pub struct ObjectBuilder<W, P>
@@ -80,7 +80,7 @@ where
     }
 
     #[inline]
-    pub(crate) fn close(mut self) -> Result<(W, W::Pos), Error> {
+    pub(crate) fn close(mut self) -> Result<impl AsSlice, Error> {
         let size = self
             .kind
             .check_size(Type::OBJECT, &self.writer, self.header)?;
@@ -88,6 +88,6 @@ where
         self.writer
             .write_at(self.header, &[size, Type::OBJECT.into_u32()])?;
 
-        Ok((self.writer, self.header))
+        Ok(WriterSlice::<_, [u32; 4]>::new(self.writer, self.header))
     }
 }

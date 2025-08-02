@@ -8,6 +8,7 @@ use crate::PodSink;
 use crate::ReadPod;
 use crate::Slice;
 use crate::SplitReader;
+use crate::Struct;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
@@ -26,10 +27,7 @@ pub struct Builder<B, P = PaddedPod> {
     kind: P,
 }
 
-impl<B, P> Builder<B, P>
-where
-    P: BuildPod,
-{
+impl<B, P> Builder<B, P> {
     #[inline]
     pub(crate) fn with_kind(buf: B, kind: P) -> Self {
         Builder { buf, kind }
@@ -57,10 +55,11 @@ impl Builder<DynamicBuf> {
     pub const fn dynamic() -> Self {
         Self::new(DynamicBuf::new())
     }
+}
 
-    /// Clear the current builder and return a mutable reference to it.
-    ///
-    /// This will clear the buffer and reset the pod to an empty state.
+#[cfg(feature = "alloc")]
+impl<P> Builder<DynamicBuf, P> {
+    /// Clear the current builder.
     ///
     /// # Examples
     ///
@@ -73,9 +72,33 @@ impl Builder<DynamicBuf> {
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn clear(&mut self) -> &mut Self {
+    pub fn clear(&mut self) {
         self.buf.clear();
-        self
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<P> Builder<DynamicBuf, P>
+where
+    P: Copy,
+{
+    /// Clear the current builder and return a mutable reference to it.
+    ///
+    /// This will clear the buffer and reset the pod to an empty state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut pod = pod::dynamic();
+    /// pod.as_mut().write(10i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
+    /// pod.clear_mut().write(20i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn clear_mut(&mut self) -> Builder<&mut DynamicBuf, P> {
+        self.buf.clear();
+        self.as_mut()
     }
 }
 
@@ -96,7 +119,12 @@ impl Builder<ArrayBuf> {
     pub const fn array() -> Self {
         Self::new(ArrayBuf::new())
     }
+}
 
+impl<const N: usize, P> Builder<ArrayBuf<N>, P>
+where
+    P: Copy,
+{
     /// Clear the current builder and return a mutable reference to it.
     ///
     /// This will clear the buffer and reset the pod to an empty state.
@@ -112,9 +140,27 @@ impl Builder<ArrayBuf> {
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn clear(&mut self) -> &mut Self {
+    pub fn clear(&mut self) {
         self.buf.clear();
-        self
+    }
+
+    /// Clear the current builder and return a mutable reference to it.
+    ///
+    /// This will clear the buffer and reset the pod to an empty state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut pod = pod::array();
+    /// pod.as_mut().write(10i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
+    /// pod.clear_mut().write(20i32)?;
+    /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn clear_mut(&mut self) -> Builder<&mut ArrayBuf<N>, P> {
+        self.buf.clear();
+        self.as_mut()
     }
 }
 
@@ -148,7 +194,7 @@ impl<B> Builder<B> {
 impl<B, P> Builder<B, P>
 where
     B: Writer,
-    P: Copy + BuildPod,
+    P: Copy,
 {
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
     /// into it or the pod immediately re-used.
@@ -513,14 +559,45 @@ where
     /// ```
     #[inline]
     pub fn write_struct(
-        mut self,
+        self,
         f: impl FnOnce(&mut StructBuilder<B, P>) -> Result<(), Error>,
     ) -> Result<(), Error> {
+        _ = self.embed_struct(f)?;
+        Ok(())
+    }
+
+    /// Write a struct and return a reference to it for immediate use.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = pod::array();
+    /// let st = pod.as_mut().embed_struct(|st| {
+    ///     st.field().write(1i32)?;
+    ///     st.field().write(2i32)?;
+    ///     st.field().write(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let mut st = st.as_ref();
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 1);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 2);
+    /// assert_eq!(st.field()?.read_sized::<i32>()?, 3);
+    /// assert!(st.is_empty());
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn embed_struct(
+        mut self,
+        f: impl FnOnce(&mut StructBuilder<B, P>) -> Result<(), Error>,
+    ) -> Result<Struct<impl AsSlice>, Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = StructBuilder::to_writer(self.buf, self.kind)?;
         f(&mut encoder)?;
-        encoder.close()?;
-        Ok(())
+        let slice = encoder.close()?;
+        Ok(Struct::new(slice))
     }
 
     /// Write an object.
@@ -546,10 +623,39 @@ where
     /// use pod::{Pod, Type};
     ///
     /// let mut pod = pod::array();
+    ///
     /// let mut obj = pod.as_mut().write_object(10, 20, |obj| {
-    ///     obj.property(1).write(1i32)?;
-    ///     obj.property(2).write(2i32)?;
-    ///     obj.property(3).write(3i32)?;
+    ///     obj.property(1).write(2)?;
+    ///     obj.property(3).write(4)?;
+    ///     obj.property(5).write(6)?;
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    #[inline]
+    pub fn write_object(
+        self,
+        object_type: impl RawId,
+        object_id: impl RawId,
+        f: impl FnOnce(&mut ObjectBuilder<B, P>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        _ = self.embed_object(object_type, object_id, f)?;
+        Ok(())
+    }
+
+    /// Write an object and return a reference to it for immediate use.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = pod::array();
+    ///
+    /// let obj = pod.as_mut().embed_object(10, 20, |obj| {
+    ///     obj.property(1).write(2)?;
+    ///     obj.property(3).write(4)?;
+    ///     obj.property(5).write(6)?;
     ///     Ok(())
     /// })?;
     ///
@@ -557,11 +663,27 @@ where
     ///
     /// assert_eq!(obj.object_type(), 10);
     /// assert_eq!(obj.object_id(), 20);
+    ///
     /// let mut p = obj.property()?;
+    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.flags(), 0);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 2);
+    ///
+    /// let mut p = obj.property()?;
+    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.flags(), 0);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 4);
+    ///
+    /// let mut p = obj.property()?;
+    /// assert_eq!(p.key(), 5);
+    /// assert_eq!(p.flags(), 0);
+    /// assert_eq!(p.value().read_sized::<i32>()?, 6);
+    ///
+    /// assert!(obj.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn write_object(
+    pub fn embed_object(
         mut self,
         object_type: impl RawId,
         object_id: impl RawId,
@@ -576,10 +698,10 @@ where
         )?;
         f(&mut encoder)?;
 
-        let (buf, pos) = encoder.close()?;
+        let as_slice = encoder.close()?;
 
         Ok(Object::new(
-            (buf, pos),
+            as_slice,
             object_type.into_id(),
             object_id.into_id(),
         ))

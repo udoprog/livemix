@@ -236,33 +236,37 @@ fn main() -> Result<()> {
 
                     let mut pod = pod::array();
 
-                    pod.as_mut()
-                        .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+                    let value = pod.clear_mut().embed_object(
+                        ObjectType::FORMAT,
+                        Param::ENUM_FORMAT,
+                        |obj| {
                             obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
                             obj.property(Format::MEDIA_SUB_TYPE)
                                 .write(MediaSubType::DSP)?;
                             obj.property(Format::AUDIO_FORMAT)
                                 .write(AudioFormat::F32P)?;
-                            obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                            obj.property(Format::AUDIO_RATE).write(44100u32)?;
+                            obj.property(Format::AUDIO_CHANNELS).write(1)?;
+                            obj.property(Format::AUDIO_RATE).write(44100)?;
                             Ok(())
-                        })?;
+                        },
+                    )?;
 
-                    node.set_param(Param::ENUM_FORMAT, [pod.take().read_object()?])?;
+                    node.set_param(Param::ENUM_FORMAT, [value])?;
 
-                    pod.as_mut()
-                        .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-                            obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-                            obj.property(Format::MEDIA_SUB_TYPE)
-                                .write(MediaSubType::DSP)?;
-                            obj.property(Format::AUDIO_FORMAT)
-                                .write(AudioFormat::F32P)?;
-                            obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-                            obj.property(Format::AUDIO_RATE).write(44100u32)?;
-                            Ok(())
-                        })?;
+                    let value =
+                        pod.clear_mut()
+                            .embed_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+                                obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
+                                obj.property(Format::MEDIA_SUB_TYPE)
+                                    .write(MediaSubType::DSP)?;
+                                obj.property(Format::AUDIO_FORMAT)
+                                    .write(AudioFormat::F32P)?;
+                                obj.property(Format::AUDIO_CHANNELS).write(1)?;
+                                obj.property(Format::AUDIO_RATE).write(44100)?;
+                                Ok(())
+                            })?;
 
-                    node.set_param(Param::FORMAT, [pod.take().read_object()?])?;
+                    node.set_param(Param::FORMAT, [value])?;
 
                     let port = node.ports.insert(Direction::INPUT)?;
                     port.name = String::from("input");
@@ -299,101 +303,94 @@ fn main() -> Result<()> {
 fn add_port_params(port: &mut Port) -> Result<()> {
     let mut pod = pod::array();
 
-    pod.as_mut()
-        .write_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
             obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
             obj.property(Format::MEDIA_SUB_TYPE)
                 .write(MediaSubType::DSP)?;
             obj.property(Format::AUDIO_FORMAT)
                 .write(AudioFormat::F32P)?;
-            obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-            obj.property(Format::AUDIO_RATE).write(44100u32)?;
+            obj.property(Format::AUDIO_CHANNELS).write(1)?;
+            obj.property(Format::AUDIO_RATE).write(44100)?;
             Ok(())
         })?;
 
-    port.set_param(
-        Param::ENUM_FORMAT,
-        [PortParam::new(pod.take().read_object()?)],
-    )?;
+    port.set_param(Param::ENUM_FORMAT, [PortParam::new(value)])?;
 
-    pod.as_mut()
-        .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
             obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
             obj.property(Format::MEDIA_SUB_TYPE)
                 .write(MediaSubType::DSP)?;
             obj.property(Format::AUDIO_FORMAT)
                 .write(AudioFormat::F32P)?;
-            obj.property(Format::AUDIO_CHANNELS).write(1u32)?;
-            obj.property(Format::AUDIO_RATE).write(44100u32)?;
+            obj.property(Format::AUDIO_CHANNELS).write(1)?;
+            obj.property(Format::AUDIO_RATE).write(44100)?;
             Ok(())
         })?;
 
-    port.set_param(Param::FORMAT, [PortParam::new(pod.take().read_object()?)])?;
+    port.set_param(Param::FORMAT, [PortParam::new(value)])?;
 
-    pod.as_mut()
-        .write_object(ObjectType::PARAM_META, Param::META, |obj| {
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::PARAM_META, Param::META, |obj| {
             obj.property(ParamMeta::TYPE).write(Meta::HEADER)?;
             obj.property(ParamMeta::SIZE)
                 .write(mem::size_of::<ffi::MetaHeader>())?;
             Ok(())
         })?;
 
-    port.set_param(Param::META, [PortParam::new(pod.take().read_object()?)])?;
+    port.set_param(Param::META, [PortParam::new(value)])?;
 
-    pod.as_mut()
-        .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
             obj.property(ParamIo::ID).write(IoType::CLOCK)?;
             obj.property(ParamIo::SIZE)
                 .write(mem::size_of::<ffi::IoClock>())?;
             Ok(())
         })?;
 
-    port.add_param(Param::IO, PortParam::new(pod.take().read_object()?))?;
+    port.add_param(Param::IO, PortParam::new(value))?;
 
-    pod.as_mut()
-        .write_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-            obj.property(ParamIo::ID).write_sized(IoType::POSITION)?;
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+            obj.property(ParamIo::ID).write(IoType::POSITION)?;
             obj.property(ParamIo::SIZE)
-                .write_sized(mem::size_of::<ffi::IoPosition>())?;
+                .write(mem::size_of::<ffi::IoPosition>())?;
             Ok(())
         })?;
 
-    port.add_param(Param::IO, PortParam::new(pod.take().read_object()?))?;
+    port.add_param(Param::IO, PortParam::new(value))?;
 
-    pod.as_mut()
-        .write_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
             obj.property(ParamBuffers::BUFFERS).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
-                |choice| {
-                    choice.child().write_sized(1u32)?;
-                    choice.child().write_sized(1u32)?;
-                    choice.child().write_sized(32u32)?;
-                    Ok(())
-                },
+                |choice| choice.write((1, 1, 32)),
             )?;
 
-            obj.property(ParamBuffers::BLOCKS).write_sized(1i32)?;
+            obj.property(ParamBuffers::BLOCKS).write(1i32)?;
 
             obj.property(ParamBuffers::SIZE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| {
-                    choice
-                        .child()
-                        .write_sized(BUFFER_SAMPLES * mem::size_of::<f32>() as u32)?;
-                    choice.child().write_sized(32)?;
-                    choice.child().write_sized(i32::MAX)?;
-                    Ok(())
+                    choice.write((BUFFER_SAMPLES * mem::size_of::<f32>() as u32, 32, i32::MAX))
                 },
             )?;
 
             obj.property(ParamBuffers::STRIDE)
-                .write_sized(mem::size_of::<f32>())?;
+                .write(mem::size_of::<f32>())?;
             Ok(())
         })?;
 
-    port.set_param(Param::BUFFERS, [PortParam::new(pod.take().read_object()?)])?;
+    port.set_param(Param::BUFFERS, [PortParam::new(value)])?;
 
     Ok(())
 }

@@ -23,15 +23,17 @@ impl<B> Struct<B> {
     }
 }
 
-impl<'de, B> Struct<B>
-where
-    B: Reader<'de>,
-{
+impl<B> Struct<B> {
     #[inline]
     pub(crate) fn new(buf: B) -> Self {
         Self { buf }
     }
+}
 
+impl<'de, B> Struct<B>
+where
+    B: Reader<'de>,
+{
     /// Test if the decoder is empty.
     ///
     /// # Examples
