@@ -222,7 +222,7 @@ impl Client {
     }
 
     /// Update client node.
-    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
     pub fn client_node_update(
         &mut self,
         id: u32,
@@ -230,16 +230,16 @@ impl Client {
         max_output_ports: u32,
         params: &BTreeMap<id::Param, Vec<Object<impl AsSlice>>>,
     ) -> Result<()> {
-        const PARAMS: &[(id::Param, flags::Param)] = &[
-            (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
-            (id::Param::FORMAT, flags::Param::READWRITE),
-            (id::Param::PROP_INFO, flags::Param::WRITE),
-            (id::Param::PROPS, flags::Param::WRITE),
-            (id::Param::ENUM_PORT_CONFIG, flags::Param::WRITE),
-            (id::Param::PORT_CONFIG, flags::Param::WRITE),
-            (id::Param::LATENCY, flags::Param::WRITE),
-            (id::Param::PROCESS_LATENCY, flags::Param::WRITE),
-            (id::Param::TAG, flags::Param::WRITE),
+        const PARAMS: &[(id::Param, flags::ParamFlag)] = &[
+            (id::Param::ENUM_FORMAT, flags::ParamFlag::READWRITE),
+            (id::Param::FORMAT, flags::ParamFlag::READWRITE),
+            (id::Param::PROP_INFO, flags::ParamFlag::WRITE),
+            (id::Param::PROPS, flags::ParamFlag::WRITE),
+            (id::Param::ENUM_PORT_CONFIG, flags::ParamFlag::WRITE),
+            (id::Param::PORT_CONFIG, flags::ParamFlag::WRITE),
+            (id::Param::LATENCY, flags::ParamFlag::WRITE),
+            (id::Param::PROCESS_LATENCY, flags::ParamFlag::WRITE),
+            (id::Param::TAG, flags::ParamFlag::WRITE),
         ];
 
         const PROPS: &[(&str, &str)] = &[("node.name", "livemix_node")];
@@ -298,7 +298,7 @@ impl Client {
     }
 
     /// Update client node port.
-    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
     pub fn client_node_port_update(
         &mut self,
         id: u32,
@@ -307,13 +307,13 @@ impl Client {
         name: &str,
         params: &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>>,
     ) -> Result<()> {
-        const PARAMS: &[(id::Param, flags::Param)] = &[
-            (id::Param::ENUM_FORMAT, flags::Param::READWRITE),
-            (id::Param::META, flags::Param::WRITE),
-            (id::Param::IO, flags::Param::WRITE),
-            (id::Param::FORMAT, flags::Param::READWRITE),
-            (id::Param::BUFFERS, flags::Param::WRITE),
-            (id::Param::LATENCY, flags::Param::WRITE),
+        const PARAMS: &[(id::Param, flags::ParamFlag)] = &[
+            (id::Param::ENUM_FORMAT, flags::ParamFlag::READWRITE),
+            (id::Param::META, flags::ParamFlag::WRITE),
+            (id::Param::IO, flags::ParamFlag::WRITE),
+            (id::Param::FORMAT, flags::ParamFlag::READWRITE),
+            (id::Param::BUFFERS, flags::ParamFlag::WRITE),
+            (id::Param::LATENCY, flags::ParamFlag::WRITE),
         ];
 
         let mut pod = pod::dynamic();

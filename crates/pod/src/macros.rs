@@ -616,48 +616,49 @@ macro_rules! __flags {
             $(#[doc = concat!(" assert!(!flags.contains(", stringify!($ty), "::", stringify!($not_set), "));")])*
             ///
             /// let string = format!("{flags:?}");
-            #[doc = concat!(" let expected = ", stringify!(concat!(stringify!($ty), "(", stringify!($example0) $(, " | ", stringify!($example))*, ")")), ";")]
+            #[doc = concat!(" let expected = ", stringify!(concat!("{", stringify!($example0) $(, ", ", stringify!($example))*, "}")), ";")]
             /// assert_eq!(string, expected);
             /// ```
             impl core::fmt::Debug for $ty {
                 #[inline]
                 fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                    if self.0 == 0 {
-                        return write!(f, "{}({})", stringify!($ty), stringify!($none));
+                    struct Ident(&'static str);
+
+                    impl core::fmt::Debug for Ident {
+                        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                            write!(f, "{}", self.0)
+                        }
                     }
 
-                    write!(f, "{}(", stringify!($ty))?;
+                    struct Extra($repr);
+
+                    impl core::fmt::Debug for Extra {
+                        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                            write!(f, "0x{:x}", self.0)
+                        }
+                    }
+
+                    if self.0 == 0 {
+                        return write!(f, "{}", stringify!($none));
+                    }
+
+                    let mut f = f.debug_set();
 
                     let mut first = true;
                     let mut value = self.0;
 
-                    let mut write = |flag: &'static str| {
-                        if !first {
-                            write!(f, " | ")?;
-                        }
-
-                        write!(f, "{flag}")?;
-                        first = false;
-                        Ok(())
-                    };
-
                     $(
                         if value & $value != 0 {
-                            write(stringify!($flag))?;
+                            f.entry(&Ident(stringify!($flag)));
                             value &= !$value;
                         }
                     )*
 
                     if value > 0 {
-                        if !first {
-                            write!(f, " | ")?;
-                        }
-
-                        write!(f, "0x{:x}", value)?;
+                        f.entry(&Extra(value));
                     }
 
-                    write!(f, ")")?;
-                    Ok(())
+                    f.finish()
                 }
             }
         )*

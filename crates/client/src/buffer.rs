@@ -11,8 +11,7 @@ use crate::memory::Region;
 #[non_exhaustive]
 pub struct Meta {
     pub ty: id::Meta,
-    pub size: u32,
-    pub region: Region<()>,
+    pub region: Region<[u8]>,
 }
 
 #[derive(Debug)]
@@ -29,9 +28,8 @@ pub struct Data {
 #[non_exhaustive]
 pub struct Buffer {
     pub id: u32,
-    pub mem_id: u32,
-    pub offset: i32,
-    pub size: u32,
+    pub offset: usize,
+    pub size: usize,
     pub metas: Vec<Meta>,
     pub datas: Vec<Data>,
 }

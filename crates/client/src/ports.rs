@@ -133,7 +133,7 @@ impl Port {
 
     /// Replace the current set of buffers for this port.
     #[inline]
-    #[tracing::instrument(skip(self), fields(port_id = self.id), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self), fields(port_id = self.id), ret(level = Level::TRACE))]
     pub(crate) fn replace_buffers(&mut self, buffers: Buffers) -> Option<Buffers> {
         self.buffers.replace(buffers)
     }

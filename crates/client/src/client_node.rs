@@ -30,7 +30,7 @@ pub struct ClientNode {
     pub(super) read_token: Token,
     pub(super) params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
     pub(super) io_clock: Option<Region<ffi::IoClock>>,
-    pub(super) io_control: Option<Region<()>>,
+    pub(super) io_control: Option<Region<[u8]>>,
     pub(super) io_position: Option<Region<ffi::IoPosition>>,
     pub(super) modified: bool,
 }

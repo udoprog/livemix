@@ -44,6 +44,12 @@ impl ExampleApplication {
             if previous_status != ActivationStatus::TRIGGERED {
                 tracing::warn!(?previous_status, "Expected TRIGGERED");
             }
+
+            if self.tick % 100 == 0 {
+                let xrun_count = unsafe { volatile!(activation, xrun_count).read() };
+                let signal_time = unsafe { volatile!(activation, signal_time).read() };
+                tracing::warn!(xrun_count, signal_time);
+            }
         }
 
         for port in node.ports.inputs_mut() {
@@ -55,7 +61,7 @@ impl ExampleApplication {
             let status = unsafe { volatile!(io_buffers, status).read() };
 
             if status != Status::HAVE_DATA {
-                tracing::trace!("Input io status is not HAVE_DATA: {status:?}");
+                tracing::error!("Input io status is not HAVE_DATA: {status:?}");
                 continue;
             };
 
@@ -77,6 +83,10 @@ impl ExampleApplication {
                 let chunk = data.chunk.as_ref();
                 let offset = chunk.offset as usize % data.max_size;
                 let size = (chunk.size as usize - offset).min(data.max_size);
+
+                if self.tick % 100 == 0 {
+                    tracing::warn!(?chunk, data.max_size);
+                }
 
                 samples = size / mem::size_of::<f32>();
 
@@ -101,53 +111,10 @@ impl ExampleApplication {
             }
         }
 
-        for port in node.ports.outputs_mut() {
-            let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &port.io_buffers) else {
-                tracing::trace!("Output missing buffers");
-                continue;
-            };
-
-            let status = unsafe { volatile!(io_buffers, status).read() };
-
-            if status != flags::Status::NEED_DATA {
-                tracing::trace!("Output status is not NEED_DATA: {status:?}");
-                continue;
-            };
-
-            let id = unsafe { volatile!(io_buffers, buffer_id).read() };
-
-            let Some(buffer) = buffers.buffers.get_mut(1) else {
-                bail!("Output no buffer with id {id} for port {}", port.id);
-            };
-
-            let meta = &buffer.metas[0];
-            let data = &mut buffer.datas[0];
-
-            let header;
-            let old_write;
-
+        for (_, a) in &node.peer_activations {
+            // Signal peers that we are done.
             unsafe {
-                let chunk = data.chunk.as_mut();
-
-                header = meta.region.cast::<ffi::MetaHeader>()?.read();
-
-                let size = (chunk.size as usize).min(data.max_size);
-                let len = size.min(self.buf.len().wrapping_mul(mem::size_of::<f32>()));
-
-                data.region
-                    .as_mut_ptr()
-                    .cast::<u8>()
-                    .copy_from_nonoverlapping(self.buf.as_ptr().cast::<u8>(), len);
-
-                chunk.offset = 0;
-                chunk.size = len as u32;
-                chunk.stride = 4;
-                volatile!(io_buffers, buffer_id).write(buffer.id);
-                old_write = volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
-            }
-
-            if self.tick % 100 == 0 {
-                tracing::warn!(?data.flags, ?header, ?id, ?old_write);
+                a.signal()?;
             }
         }
 
@@ -157,13 +124,6 @@ impl ExampleApplication {
 
             if previous_status != ActivationStatus::AWAKE {
                 tracing::warn!(?previous_status, "Expected AWAKE");
-            }
-        }
-
-        for (_, a) in &node.peer_activations {
-            // Signal peers that we are done.
-            unsafe {
-                a.signal()?;
             }
         }
 
@@ -229,7 +189,7 @@ fn main() -> Result<()> {
     };
 
     loop {
-        if let Some(ev) = stream.run(&mut poll, &mut recv)? {
+        while let Some(ev) = stream.run(&mut poll, &mut recv)? {
             match ev {
                 StreamEvent::NodeCreated(node) => {
                     let node = stream.node_mut(node)?;
@@ -344,6 +304,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
 
     port.set_param(Param::META, [PortParam::new(value)])?;
 
+    /*
     let value = pod
         .clear_mut()
         .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
@@ -354,6 +315,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.add_param(Param::IO, PortParam::new(value))?;
+    */
 
     let value = pod
         .clear_mut()

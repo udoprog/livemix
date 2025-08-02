@@ -188,21 +188,36 @@ pod::macros::flags! {
     #[examples = [SERIAL, READ]]
     #[not_set = [WRITE]]
     #[module = protocol::flags]
-    pub struct Param(u32) {
+    pub struct ParamFlag(u32) {
         NONE;
         /// Flag to signal update even when the read/write flags don't change.
+        #[constant = libspa_sys::SPA_PARAM_INFO_SERIAL]
         SERIAL = 1 << 0;
+        #[constant = libspa_sys::SPA_PARAM_INFO_READ]
         READ = 1 << 1;
+        #[constant = libspa_sys::SPA_PARAM_INFO_WRITE]
         WRITE = 1 << 2;
     }
 
-    #[examples = [OUT]]
-    #[not_set = [MAPPED]]
+    /// Describes `SPA_DATA_FLAG_*`.
+    #[examples = [READABLE]]
+    #[not_set = [DYNAMIC]]
     #[module = protocol::flags]
     pub struct DataFlag(u32) {
         NONE;
-        OUT = 1 << 0;
-        MAPPED = 1 << 1;
+        /// Data is readable.
+        #[constant = libspa_sys::SPA_DATA_FLAG_READABLE]
+        READABLE = 1 << 0;
+        /// Data is writable.
+        #[constant = libspa_sys::SPA_DATA_FLAG_WRITABLE]
+        WRITABLE = 1 << 1;
+        /// Data pointer can be changed.
+        #[constant = libspa_sys::SPA_DATA_FLAG_DYNAMIC]
+        DYNAMIC = 1 << 2;
+        /// Data is mappable with simple mmap/munmap. Some memory types are not
+        /// simply mappable (DmaBuf) unless explicitly specified with this flag.
+        #[constant = libspa_sys::SPA_DATA_FLAG_MAPPABLE]
+        MAPPABLE = 1 << 3;
     }
 
     /// Describes `enum pw_memblock_flags`.
@@ -212,36 +227,48 @@ pod::macros::flags! {
     pub struct MemBlock(u32) {
         NONE;
         /// memory is readable.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_READABLE]
         READABLE = 1 << 0;
         /// memory is writable.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_WRITABLE]
         WRITABLE = 1 << 1;
         /// seal the fd.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_SEAL]
         SEAL = 1 << 2;
         /// mmap the fd.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_MAP]
         MAP = 1 << 3;
         /// don't close fd.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_DONT_CLOSE]
         DONT_CLOSE = 1 << 4;
         /// don't notify events.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_DONT_NOTIFY]
         DONT_NOTIFY = 1 << 5;
         /// the fd can not be mmapped.
+        #[constant = pipewire_sys::pw_memblock_flags_PW_MEMBLOCK_FLAG_UNMAPPABLE]
         UNMAPPABLE = 1 << 6;
     }
 
-    /// Describes `enum pw_memblock_flags`.
+    /// Describes `enum pw_memmap_flag`.
     #[examples = [WRITE]]
     #[not_set = [PRIVATE]]
     #[module = protocol::flags]
     pub struct MemMap(u32) {
         NONE;
         /// map in read mode.
+        #[constant = pipewire_sys::pw_memmap_flags_PW_MEMMAP_FLAG_READ]
         READ = 1 << 0;
         /// map in write mode.
+        #[constant = pipewire_sys::pw_memmap_flags_PW_MEMMAP_FLAG_WRITE]
         WRITE = 1 << 1;
         /// map the same area twice after each other, creating a circular ringbuffer.
+        #[constant = pipewire_sys::pw_memmap_flags_PW_MEMMAP_FLAG_TWICE]
         TWICE = 1 << 2;
         /// writes will be private.
+        #[constant = pipewire_sys::pw_memmap_flags_PW_MEMMAP_FLAG_PRIVATE]
         PRIVATE = 1 << 3;
         /// lock the memory into RAM.
+        #[constant = pipewire_sys::pw_memmap_flags_PW_MEMMAP_FLAG_LOCKED]
         LOCKED = 1 << 4;
     }
 
@@ -252,12 +279,16 @@ pod::macros::flags! {
     pub struct IoClockFlag(u32) {
         NONE;
         /// Graph is freewheeling.
+        #[constant = libspa_sys::SPA_IO_CLOCK_FLAG_FREEWHEEL]
         FREEWHEEL = 1 << 0;
         /// Recovering from xrun.
+        #[constant = libspa_sys::SPA_IO_CLOCK_FLAG_XRUN_RECOVER]
         XRUN_RECOVER = 1 << 1;
         /// Lazy scheduling.
+        #[constant = libspa_sys::SPA_IO_CLOCK_FLAG_LAZY]
         LAZY = 1 << 2;
         /// The rate of the clock is only approximate.
+        #[constant = libspa_sys::SPA_IO_CLOCK_FLAG_NO_RATE]
         NO_RATE = 1 << 3;
     }
 
@@ -271,32 +302,42 @@ pod::macros::flags! {
         /// Equivalent of `SPA_STATUS_NEED_OK`.
         OK;
         /// Equivalent of `SPA_STATUS_NEED_DATA`.
+        #[constant = libspa_sys::SPA_STATUS_NEED_DATA]
         NEED_DATA = 1 << 0;
         /// Equivalent of `SPA_STATUS_HAVE_DATA`.
+        #[constant = libspa_sys::SPA_STATUS_HAVE_DATA]
         HAVE_DATA = 1 << 1;
         /// Equivalent of `SPA_STATUS_STOPPED`.
+        #[constant = libspa_sys::SPA_STATUS_STOPPED]
         STOPPED = 1 << 2;
         /// Equivalent of `SPA_STATUS_DRAINED`.
+        #[constant = libspa_sys::SPA_STATUS_DRAINED]
         DRAINED = 1 << 3;
     }
 
-    /// Describes `SPA_HEADER_FLAG_*`.
+    /// Describes `SPA_META_HEADER_FLAG_*`.
     #[examples = [CORRUPTED]]
     #[not_set = [HEADER]]
     #[module = protocol::flags]
     pub struct MetaHeaderFlags(u32) {
         NONE;
-        /// data is not continuous with previous buffer.
+        /// Data is not continuous with previous buffer.
+        #[constant = libspa_sys::SPA_META_HEADER_FLAG_DISCONT]
         DISCONT = 1 << 0;
-        /// data might be corrupted.
+        /// Data might be corrupted.
+        #[constant = libspa_sys::SPA_META_HEADER_FLAG_CORRUPTED]
         CORRUPTED = 1 << 1;
-        /// media specific marker.
+        /// Media specific marker.
+        #[constant = libspa_sys::SPA_META_HEADER_FLAG_MARKER]
         MARKER = 1 << 2;
-        /// data contains a codec specific header.
+        /// Data contains a codec specific header.
+        #[constant = libspa_sys::SPA_META_HEADER_FLAG_HEADER]
         HEADER = 1 << 3;
-        /// data contains media neutral data.
+        /// Data contains media neutral data.
+        #[constant = libspa_sys::SPA_META_HEADER_FLAG_GAP]
         GAP = 1 << 4;
-        /// cannot be decoded independently.
+        /// Cannot be decoded independently.
+        #[constant = libspa_sys::SPA_META_HEADER_FLAG_DELTA_UNIT]
         DELTA_UNIT = 1 << 5;
     }
 
@@ -309,13 +350,15 @@ pod::macros::flags! {
     pub struct ChunkFlags(u32) {
         NONE;
         /// Chunk data is corrupted in some way.
+        #[constant = libspa_sys::SPA_CHUNK_FLAG_CORRUPTED]
         CORRUPTED = 1 << 0;
         /// Chunk data is empty with media specific neutral data such as silence or black. This could be used to optimize processing.
+        #[constant = libspa_sys::SPA_CHUNK_FLAG_EMPTY]
         EMPTY = 1 << 1;
     }
 }
 
-impl Param {
+impl ParamFlag {
     /// Read and write flags combined.
     pub const READWRITE: Self = Self(Self::WRITE.0 | Self::READ.0);
 }
@@ -326,4 +369,8 @@ impl MemBlock {
 
 impl MemMap {
     pub const READWRITE: Self = Self(Self::READ.0 | Self::WRITE.0);
+}
+
+impl DataFlag {
+    pub const READWRITE: Self = Self(Self::READABLE.0 | Self::WRITABLE.0);
 }

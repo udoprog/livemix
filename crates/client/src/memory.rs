@@ -28,7 +28,7 @@ pub(crate) struct File {
     fd: OwnedFd,
     flags: flags::MemBlock,
     users: u32,
-    region: Option<Region<()>>,
+    region: Option<Region<[u8]>>,
 }
 
 /// A region of memory which is mapped to a file descriptor.
@@ -52,7 +52,6 @@ pub(crate) struct File {
 /// # Ok::<_, anyhow::Error>(())
 /// ```
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
-#[derive(Clone)]
 pub struct Region<T>
 where
     T: ?Sized,
@@ -63,92 +62,9 @@ where
     _marker: PhantomData<*mut T>,
 }
 
-impl Region<()> {
-    /// Cast the region to a different type.
-    #[inline]
-    pub fn cast<T>(&self) -> Result<Region<T>> {
-        ensure!(
-            mem::size_of::<T>() > 0,
-            "Region<{}> must be cast to non-zero size",
-            any::type_name::<T>()
-        );
-
-        ensure!(
-            self.ptr.as_ptr().addr() % mem::align_of::<T>() == 0,
-            "Region<{}> pointer must be aligned to {}",
-            any::type_name::<T>(),
-            mem::align_of::<T>()
-        );
-
-        ensure!(
-            self.size == mem::size_of::<T>(),
-            "Region<{}> cast size {} must match {}",
-            any::type_name::<T>(),
-            mem::size_of::<T>(),
-            self.size
-        );
-
-        Ok(Region {
-            file: self.file,
-            size: self.size,
-            ptr: self.ptr.cast(),
-            _marker: PhantomData,
-        })
-    }
-
-    /// Cast the region to a different type.
-    #[inline]
-    pub fn cast_array<T>(&self) -> Result<Region<[T]>> {
-        ensure!(
-            mem::size_of::<T>() > 0,
-            "Region<{}> array must be cast to non-zero size",
-            any::type_name::<T>()
-        );
-
-        ensure!(
-            self.ptr.as_ptr().addr() % mem::align_of::<T>() == 0,
-            "Region<[{}]> pointer must be aligned to {}",
-            any::type_name::<T>(),
-            mem::align_of::<T>()
-        );
-
-        ensure!(
-            self.size % mem::size_of::<T>() == 0,
-            "Region<[{}]> cast array size {} must evenly divide {}",
-            any::type_name::<T>(),
-            mem::size_of::<T>(),
-            self.size
-        );
-
-        let size = self.size / mem::size_of::<T>();
-
-        Ok(Region {
-            file: self.file,
-            size,
-            ptr: self.ptr.cast(),
-            _marker: PhantomData,
-        })
-    }
-
-    /// Limit the size of the region.
-    pub fn size(&self, size: usize) -> Result<Region<()>> {
-        if size > self.size {
-            bail!(
-                "Requested size {size} is larger than region size {}",
-                self.size
-            );
-        }
-
-        Ok(Region {
-            file: self.file,
-            size,
-            ptr: self.ptr,
-            _marker: PhantomData,
-        })
-    }
-
+impl Region<[u8]> {
     /// Add the given size aligned to the specified alignment to the region.
-    pub fn offset(&self, offset: usize, align: usize) -> Result<Region<()>> {
+    pub fn offset(&self, offset: usize, align: usize) -> Result<Self> {
         let offset = offset.next_multiple_of(align);
 
         if offset > self.size {
@@ -156,59 +72,15 @@ impl Region<()> {
         }
 
         let ptr = unsafe {
-            let ptr = self
-                .ptr
-                .as_ptr()
-                .cast::<u8>()
-                .wrapping_add(offset)
-                .cast::<()>();
-            NonNull::new_unchecked(ptr)
+            let ptr = self.as_ptr().wrapping_add(offset);
+
+            NonNull::new_unchecked(ptr.cast_mut())
         };
 
         Ok(Region {
             file: self.file,
             size: self.size - offset,
-            ptr,
-            _marker: PhantomData,
-        })
-    }
-
-    /// Slice up the region to a smaller size.
-    pub fn slice<T>(&self, offset: isize, size: usize) -> Result<Region<T>> {
-        let Ok(offset) = usize::try_from(offset) else {
-            bail!(
-                "Region<{}> offset {offset} is not a valid memory offset",
-                any::type_name::<T>()
-            );
-        };
-
-        let Some(offset_size) = offset.checked_add(size) else {
-            bail!(
-                "Region<{}> offset size {offset} + {size} overflows pointer size",
-                any::type_name::<T>()
-            );
-        };
-
-        ensure!(
-            offset_size <= self.size,
-            "Region<{}> offset size {offset_size} is larger than region size {}",
-            any::type_name::<T>(),
-            self.size,
-        );
-
-        if mem::size_of::<T>() > 0 {
-            ensure!(
-                mem::size_of::<T>() == size,
-                "Region<{}> is non-zero size {} and must must match {size}",
-                any::type_name::<T>(),
-                mem::size_of::<T>(),
-            );
-        }
-
-        Ok(Region {
-            file: self.file,
-            size,
-            ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset).cast()) },
+            ptr: ptr.cast(),
             _marker: PhantomData,
         })
     }
@@ -227,6 +99,92 @@ impl<T> Region<[T]> {
             ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()).cast() },
             _marker: PhantomData,
         }
+    }
+
+    /// Cast the region to a different type.
+    #[inline]
+    pub fn cast<U>(&self) -> Result<Region<U>> {
+        const {
+            assert!(mem::size_of::<U>() > 0);
+        }
+
+        ensure!(
+            self.ptr.as_ptr().addr() % mem::align_of::<U>() == 0,
+            "Region<{}> pointer {:p} must be aligned to 0x{:x}",
+            any::type_name::<U>(),
+            self.ptr.as_ptr(),
+            mem::align_of::<T>()
+        );
+
+        let size = self.size.wrapping_mul(mem::size_of::<T>());
+
+        ensure!(
+            size == mem::size_of::<U>(),
+            "Region<{}> cast size {} must match {}",
+            any::type_name::<U>(),
+            mem::size_of::<U>(),
+            size
+        );
+
+        Ok(Region {
+            file: self.file,
+            size: mem::size_of::<U>(),
+            ptr: self.ptr.cast(),
+            _marker: PhantomData,
+        })
+    }
+
+    /// Cast the region to a different type.
+    #[inline]
+    pub fn cast_array<U>(&self) -> Result<Region<[U]>> {
+        ensure!(
+            mem::size_of::<U>() > 0,
+            "Region<{}> array must be cast to non-zero size",
+            any::type_name::<U>()
+        );
+
+        ensure!(
+            self.ptr.as_ptr().addr() % mem::align_of::<U>() == 0,
+            "Region<[{}]> pointer must be aligned to {}",
+            any::type_name::<U>(),
+            mem::align_of::<U>()
+        );
+
+        let size = self.size.wrapping_mul(mem::size_of::<T>());
+
+        ensure!(
+            size % mem::size_of::<U>() == 0,
+            "Region<[{}]> cast array size {} must evenly divide {}",
+            any::type_name::<U>(),
+            mem::size_of::<U>(),
+            size
+        );
+
+        let size = size / mem::size_of::<U>();
+
+        Ok(Region {
+            file: self.file,
+            size,
+            ptr: self.ptr.cast(),
+            _marker: PhantomData,
+        })
+    }
+
+    /// Limit the size of the region.
+    pub fn size(&self, size: usize) -> Result<Region<[T]>> {
+        if size > self.size {
+            bail!(
+                "Requested size {size} is larger than region size {}",
+                self.size
+            );
+        }
+
+        Ok(Region {
+            file: self.file,
+            size,
+            ptr: self.ptr,
+            _marker: PhantomData,
+        })
     }
 
     /// Get the length of the region in count of `mem::size_of::<T>()` elements.
@@ -310,14 +268,14 @@ impl<T> Region<T> {
 
     /// Get a pointer to the memory region.
     #[inline]
-    pub unsafe fn as_ptr(&self) -> *const T {
-        unsafe { self.ptr.cast::<T>().as_ptr().cast_const() }
+    pub fn as_ptr(&self) -> *const T {
+        self.ptr.cast::<T>().as_ptr().cast_const()
     }
 
     /// Get a mutable pointer to the memory region.
     #[inline]
-    pub unsafe fn as_mut_ptr(&self) -> *mut T {
-        unsafe { self.ptr.cast::<T>().as_ptr() }
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.ptr.cast::<T>().as_ptr()
     }
 
     /// Coerce the memory region into a reference.
@@ -342,6 +300,21 @@ impl<T> Region<T> {
     #[inline]
     pub unsafe fn as_mut(&mut self) -> &mut T {
         unsafe { self.ptr.cast().as_mut() }
+    }
+}
+
+impl<T> Clone for Region<T>
+where
+    T: ?Sized,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            file: self.file.clone(),
+            size: self.size.clone(),
+            ptr: self.ptr.clone(),
+            _marker: self._marker.clone(),
+        }
     }
 }
 
@@ -375,7 +348,7 @@ impl Memory {
     }
 
     /// Insert memory.
-    #[tracing::instrument(skip(self), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     pub(crate) fn insert(
         &mut self,
         mem_id: u32,
@@ -479,23 +452,17 @@ impl Memory {
     }
 
     /// Add a user to a memory region.
-    pub(crate) fn track<T>(&mut self, region: &Region<T>) {
+    pub(crate) fn track<T>(&mut self, region: &Region<T>)
+    where
+        T: ?Sized,
+    {
         if let Some(file) = self.files.get_mut(region.file) {
             file.users += 1;
         }
     }
 
     /// Map a memory to a region with accessible memory.
-    pub(crate) fn map<T>(&mut self, mem_id: u32, offset: isize, size: usize) -> Result<Region<T>> {
-        if mem::size_of::<T>() > 0 {
-            assert_eq!(
-                mem::size_of::<T>(),
-                size,
-                "Size of `{}` must match",
-                any::type_name::<T>()
-            );
-        }
-
+    pub(crate) fn map(&mut self, mem_id: u32, offset: usize, size: usize) -> Result<Region<[u8]>> {
         let Some(file) = self
             .map
             .get_mut(&mem_id)
@@ -512,12 +479,12 @@ impl Memory {
             bail!("Memory {mem_id} is not a memfd type, found {:?}", file.ty);
         }
 
-        let region = region.slice(offset, size)?;
+        let region = region.offset(offset, 1)?.size(size)?;
         file.users += 1;
         Ok(region)
     }
 
-    #[tracing::instrument(skip(self), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     fn free_file(&mut self, file: usize) -> bool {
         let Some(fd) = self.files.get_mut(file) else {
             return false;

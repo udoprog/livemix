@@ -477,7 +477,7 @@ impl Stream {
         Ok(Some(fd))
     }
 
-    #[tracing::instrument(skip_all, ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
     fn op_construct_node(&mut self) -> Result<()> {
         let Some(registry) = self
             .factories
@@ -903,7 +903,7 @@ impl Stream {
         let read_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
         let write_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
         let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<isize>()?;
+        let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
         let Some(node) = self.client_nodes.get_mut(index) else {
@@ -918,7 +918,7 @@ impl Stream {
             return Ok(());
         };
 
-        let region = self.memory.map(mem_id, offset, size)?;
+        let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
         if let Some(a) = node.activation.replace(region) {
             self.memory.free(a);
@@ -980,7 +980,7 @@ impl Stream {
         let mut st = pod.read_struct()?;
         let id = st.field()?.read_sized::<id::IoType>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<isize>()?;
+        let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
         match id {
@@ -1008,7 +1008,7 @@ impl Stream {
                     return Ok(());
                 };
 
-                let region = self.memory.map(mem_id, offset, size)?;
+                let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
                 if let Some(region) = node.io_clock.replace(region) {
                     self.memory.free(region);
@@ -1023,7 +1023,7 @@ impl Stream {
                     return Ok(());
                 };
 
-                let region = self.memory.map(mem_id, offset, size)?;
+                let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
                 if let Some(region) = node.io_position.replace(region) {
                     self.memory.free(region);
@@ -1082,10 +1082,10 @@ impl Stream {
         let port = node.ports.get_mut(direction, port_id)?;
 
         if let Some(param) = st.field()?.read_option()? {
-            tracing::trace!(?id, "set");
+            tracing::trace!(?id, flags, object = ?param.as_ref().read_object()?, "set");
             port.set_param(id, [PortParam::with_flags(param.read_object()?, flags)])?;
         } else {
-            tracing::trace!(?id, "remove");
+            tracing::trace!(?id, flags, "remove");
             _ = port.remove_param(id);
         }
 
@@ -1103,7 +1103,7 @@ impl Stream {
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
             .read::<(consts::Direction, u32, i32, u32, u32)>()
-            .with_context(|| anyhow!("reading header"))?;
+            .context("reading header")?;
 
         let mix_id = u32::try_from(mix_id).ok();
 
@@ -1111,12 +1111,12 @@ impl Stream {
 
         for id in 0..n_buffers {
             let (mem_id, offset, size, n_metas) = st
-                .read::<(u32, i32, u32, u32)>()
+                .read::<(u32, usize, usize, u32)>()
                 .with_context(|| anyhow!("reading buffer {id}"))?;
 
             let mm = self
                 .memory
-                .map(mem_id, offset as isize, size as usize)
+                .map(mem_id, offset, size)
                 .context("mapping buffer")?;
 
             let mut metas = Vec::new();
@@ -1124,16 +1124,15 @@ impl Stream {
             let mut region = mm.clone();
 
             for _ in 0..n_metas {
-                let (ty, size) = st.read::<(id::Meta, u32)>()?;
+                let (ty, size) = st.read::<(id::Meta, usize)>()?;
                 self.memory.track(&region);
 
                 metas.push(buffer::Meta {
                     ty,
-                    size,
-                    region: region.size(size as usize)?,
+                    region: region.size(size)?,
                 });
 
-                region = region.offset(size as usize, 8)?;
+                region = region.offset(size, 8)?;
             }
 
             let mut datas = Vec::new();
@@ -1146,12 +1145,8 @@ impl Stream {
                 self.memory.track(&chunk);
 
                 let (ty, data, flags, offset, max_size) = st
-                    .read::<(id::DataType, u32, flags::DataFlag, i32, u32)>()
+                    .read::<(id::DataType, u32, flags::DataFlag, usize, usize)>()
                     .with_context(|| anyhow!("reading data for buffer {id}"))?;
-
-                let Ok(max_size) = usize::try_from(max_size) else {
-                    bail!("Invalid max size {max_size} for data type {ty:?}");
-                };
 
                 let region = match ty {
                     id::DataType::MEM_PTR => {
@@ -1160,18 +1155,13 @@ impl Stream {
                         };
 
                         let region = mm.offset(data, 1)?.size(max_size)?;
+
                         ensure!(offset == 0);
 
                         self.memory.track(&region);
                         region
                     }
-                    id::DataType::MEM_FD => {
-                        let Ok(offset) = isize::try_from(offset) else {
-                            bail!("Invalid offset {offset} for data type {ty:?}");
-                        };
-
-                        self.memory.map(data, offset, max_size)?
-                    }
+                    id::DataType::MEM_FD => self.memory.map(data, offset, max_size)?,
                     ty => {
                         bail!("Unsupported data type {ty:?} in use buffers");
                     }
@@ -1179,7 +1169,7 @@ impl Stream {
 
                 datas.push(buffer::Data {
                     ty,
-                    region: region.cast_array()?,
+                    region,
                     flags,
                     max_size,
                     chunk,
@@ -1190,7 +1180,6 @@ impl Stream {
 
             buffers.push(Buffer {
                 id,
-                mem_id,
                 offset,
                 size,
                 metas,
@@ -1237,7 +1226,7 @@ impl Stream {
         let _mix_id = st.field()?.read_sized::<u32>()?;
         let id = st.field()?.read_sized::<id::IoType>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<isize>()?;
+        let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
         let port = node.ports.get_mut(direction, port_id)?;
 
@@ -1254,7 +1243,7 @@ impl Stream {
                     return Ok(());
                 };
 
-                let region = self.memory.map(mem_id, offset, size)?;
+                let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
                 if let Some(region) = port.io_clock.replace(region) {
                     self.memory.free(region);
@@ -1269,7 +1258,7 @@ impl Stream {
                     return Ok(());
                 };
 
-                let region = self.memory.map(mem_id, offset, size)?;
+                let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
                 if let Some(region) = port.io_position.replace(region) {
                     self.memory.free(region);
@@ -1284,7 +1273,7 @@ impl Stream {
                     return Ok(());
                 };
 
-                let region = self.memory.map(mem_id, offset, size)?;
+                let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
                 if let Some(region) = port.io_buffers.replace(region) {
                     self.memory.free(region);
@@ -1306,7 +1295,7 @@ impl Stream {
         let peer_id = st.field()?.read_sized::<u32>()?;
         let fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
         let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<isize>()?;
+        let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
         let Some(node) = self.client_nodes.get_mut(index) else {
@@ -1322,7 +1311,7 @@ impl Stream {
             bail!("Missing fd for peer {peer_id} in node {index}");
         };
 
-        let region = self.memory.map(mem_id, offset, size)?;
+        let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
         let activation = unsafe { Activation::new(peer_id, EventFd::from(fd), region) };
 

@@ -262,7 +262,7 @@ impl Connection {
     /// Send an outgoing request.
     ///
     /// This will write the request to the outgoing buffer.
-    #[tracing::instrument(skip(self, pod), fields(remaining = outgoing.len()), ret(level = Level::DEBUG))]
+    #[tracing::instrument(skip(self, pod), fields(remaining = outgoing.len()), ret(level = Level::TRACE))]
     pub fn request(
         &mut self,
         outgoing: &mut SendBuf,
