@@ -304,7 +304,7 @@ pod::macros::flags! {
     ///
     /// Describes `SPA_CHUNK_FLAG_*`.
     #[examples = [CORRUPTED]]
-    #[not_set = [HEADER]]
+    #[not_set = [EMPTY]]
     #[module = protocol::flags]
     pub struct ChunkFlags(u32) {
         NONE;

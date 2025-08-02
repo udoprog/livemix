@@ -196,7 +196,7 @@ impl<T> Volatile<T> {
 macro_rules! __volatile {
     ($this:expr, $($tt:tt)*) => {
         unsafe {
-            $crate::ptr::Volatile::new_unchecked(core::ptr::addr_of!((*$this.ptr.as_ptr()).$($tt)*))
+            $crate::ptr::Volatile::new_unchecked(core::ptr::addr_of!((*$this.as_ptr()).$($tt)*))
         }
     };
 }
@@ -206,7 +206,7 @@ pub(crate) use __volatile as volatile;
 macro_rules! __atomic {
     ($this:expr, $($tt:tt)*) => {
         // SAFETY: We assume that the pointer is valid and aligned.
-        unsafe { $crate::ptr::Atomic::new_unchecked(core::ptr::addr_of!((*$this.ptr.as_ptr()).$($tt)*)) }
+        unsafe { $crate::ptr::Atomic::new_unchecked(core::ptr::addr_of!((*$this.as_ptr()).$($tt)*)) }
     };
 }
 

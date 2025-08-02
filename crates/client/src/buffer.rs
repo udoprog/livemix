@@ -17,7 +17,7 @@ pub(crate) struct Meta {
 #[derive(Debug)]
 pub(crate) struct Data {
     pub(crate) ty: id::DataType,
-    pub(crate) region: Region<()>,
+    pub(crate) region: Region<[u8]>,
     pub(crate) flags: flags::DataFlag,
     pub(crate) max_size: usize,
     pub(crate) chunk: Region<ffi::Chunk>,

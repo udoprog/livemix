@@ -196,6 +196,7 @@ enum Op {
     GetRegistry,
     Pong { id: u32, seq: u32 },
     ConstructNode,
+    NodeActive { client: usize },
     NodeUpdate { client: usize },
     NodeStart { client: usize },
     NodeReadInterest { client: usize },
@@ -368,11 +369,15 @@ impl State {
                             tracing_error!(error, "Failed to construct client node");
                         }
                     }
+                    Op::NodeActive { client } => {
+                        if let Some(node) = self.client_nodes.get(client) {
+                            self.c.client_node_set_active(node.id, true)?;
+                        }
+                    }
                     Op::NodeUpdate { client } => {
                         if let Some(node) = self.client_nodes.get_mut(client) {
                             if node.take_modified() {
                                 self.c.client_node_update(node.id, 4, 4, &node.params)?;
-                                self.c.client_node_set_active(node.id, true)?;
                             }
 
                             for port in node.ports.inputs_mut() {
@@ -477,6 +482,20 @@ impl State {
 
     /// Process client.
     pub fn tick(&mut self) -> Result<()> {
+        let mut samples = 0;
+        let mut sum = 0.0;
+
+        for (_, node) in self.client_nodes.iter_mut() {
+            for sample in node.buf.drain(..) {
+                self.writer.write_sample(sample)?;
+                sum += sample;
+                samples += 1;
+            }
+        }
+
+        tracing::warn!(samples, sum, len = self.writer.len());
+        self.writer.flush()?;
+
         for (_, node) in &mut self.client_nodes {
             if let Some(a) = &node.activation {
                 tracing::info!(
@@ -650,6 +669,7 @@ impl State {
     #[tracing::instrument(skip(self))]
     fn process(&mut self) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
+        let start = SystemTime::now();
 
         for (_, node) in &mut self.client_nodes {
             if let Some(activation) = &node.activation {
@@ -663,8 +683,6 @@ impl State {
             let Some(activation) = &node.activation else {
                 continue;
             };
-
-            node.buf.clear();
 
             for port in node.ports.inputs_mut() {
                 let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
@@ -689,27 +707,30 @@ impl State {
                 let data = &buffer.datas[0];
 
                 let header;
+                let samples;
 
                 unsafe {
                     header = meta.region.cast::<ffi::MetaHeader>()?.read();
-
-                    tracing::warn!(?header);
 
                     let chunk = data.chunk.as_ref();
                     let offset = chunk.offset as usize % data.max_size;
                     let size = (chunk.size as usize - offset).min(data.max_size);
 
-                    tracing::warn!(?offset, ?size);
+                    samples = size / mem::size_of::<f32>();
 
-                    let samples = size / mem::size_of::<f32>();
-
-                    node.buf.resize(samples, 0.0);
-                    node.buf.as_mut_ptr().cast::<u8>().copy_from_nonoverlapping(
-                        data.region.ptr.as_ptr().cast::<u8>().wrapping_add(offset),
-                        size,
-                    );
-                    node.buf.set_len(samples);
+                    node.buf.reserve(samples);
+                    node.buf
+                        .as_mut_ptr()
+                        .add(samples)
+                        .cast::<f32>()
+                        .copy_from_nonoverlapping(
+                            data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
+                            samples,
+                        );
+                    node.buf.set_len(node.buf.len() + samples);
                 }
+
+                tracing::warn!(samples, len = node.buf.len());
 
                 let old_read = volatile!(io_buffers, status).replace(flags::Status::NEED_DATA);
 
@@ -717,18 +738,6 @@ impl State {
                     tracing::warn!(?data.flags, ?header, ?id, ?old_read);
                 }
             }
-
-            let mut samples = 0;
-            let mut sum = 0.0;
-
-            for &sample in &node.buf {
-                self.writer.write_sample(sample)?;
-                sum += sample;
-                samples += 1;
-            }
-
-            tracing::warn!(samples, sum, len = self.writer.len());
-            self.writer.flush()?;
 
             for port in node.ports.outputs_mut() {
                 let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &port.io_buffers)
@@ -764,8 +773,7 @@ impl State {
                     let len = size.min(node.buf.len().wrapping_mul(mem::size_of::<f32>()));
 
                     data.region
-                        .ptr
-                        .as_ptr()
+                        .as_mut_ptr()
                         .cast::<u8>()
                         .copy_from_nonoverlapping(node.buf.as_ptr().cast::<u8>(), len);
 
@@ -796,6 +804,8 @@ impl State {
             }
         }
 
+        let elapsed = start.elapsed().context("Failed to get elapsed time")?;
+        tracing::warn!(?elapsed);
         Ok(())
     }
 
@@ -1103,6 +1113,7 @@ impl State {
             match *kind {
                 Kind::Registry => {}
                 Kind::ClientNode(index) => {
+                    self.ops.push_back(Op::NodeActive { client: index });
                     self.ops.push_back(Op::NodeUpdate { client: index });
                 }
             }
@@ -1410,8 +1421,6 @@ impl State {
                         };
 
                         let region = mm.offset(data, 1)?.size(max_size)?;
-
-                        ensure!(region.size <= max_size);
                         ensure!(offset == 0);
 
                         self.memory.track(&region);
@@ -1431,7 +1440,7 @@ impl State {
 
                 datas.push(buffer::Data {
                     ty,
-                    region,
+                    region: region.cast_array()?,
                     flags,
                     max_size,
                     chunk,

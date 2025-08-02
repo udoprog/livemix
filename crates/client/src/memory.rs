@@ -2,10 +2,12 @@
 
 use core::any;
 use core::fmt;
+use core::marker::PhantomData;
 use core::mem;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 
+use core::slice;
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::AsRawFd;
@@ -51,16 +53,26 @@ pub(crate) struct File {
 /// ```
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
 #[derive(Clone)]
-pub struct Region<T> {
+pub struct Region<T>
+where
+    T: ?Sized,
+{
     file: usize,
-    pub size: usize,
-    pub ptr: NonNull<T>,
+    size: usize,
+    ptr: NonNull<()>,
+    _marker: PhantomData<*mut T>,
 }
 
 impl Region<()> {
     /// Cast the region to a different type.
     #[inline]
     pub fn cast<T>(&self) -> Result<Region<T>> {
+        ensure!(
+            mem::size_of::<T>() > 0,
+            "Region<{}> must be cast to non-zero size",
+            any::type_name::<T>()
+        );
+
         ensure!(
             self.ptr.as_ptr().addr() % mem::align_of::<T>() == 0,
             "Region<{}> pointer must be aligned to {}",
@@ -80,6 +92,41 @@ impl Region<()> {
             file: self.file,
             size: self.size,
             ptr: self.ptr.cast(),
+            _marker: PhantomData,
+        })
+    }
+
+    /// Cast the region to a different type.
+    #[inline]
+    pub fn cast_array<T>(&self) -> Result<Region<[T]>> {
+        ensure!(
+            mem::size_of::<T>() > 0,
+            "Region<{}> array must be cast to non-zero size",
+            any::type_name::<T>()
+        );
+
+        ensure!(
+            self.ptr.as_ptr().addr() % mem::align_of::<T>() == 0,
+            "Region<[{}]> pointer must be aligned to {}",
+            any::type_name::<T>(),
+            mem::align_of::<T>()
+        );
+
+        ensure!(
+            self.size % mem::size_of::<T>() == 0,
+            "Region<[{}]> cast array size {} must evenly divide {}",
+            any::type_name::<T>(),
+            mem::size_of::<T>(),
+            self.size
+        );
+
+        let size = self.size / mem::size_of::<T>();
+
+        Ok(Region {
+            file: self.file,
+            size,
+            ptr: self.ptr.cast(),
+            _marker: PhantomData,
         })
     }
 
@@ -95,7 +142,8 @@ impl Region<()> {
         Ok(Region {
             file: self.file,
             size,
-            ptr: self.ptr.cast(),
+            ptr: self.ptr,
+            _marker: PhantomData,
         })
     }
 
@@ -121,6 +169,7 @@ impl Region<()> {
             file: self.file,
             size: self.size - offset,
             ptr,
+            _marker: PhantomData,
         })
     }
 
@@ -160,11 +209,12 @@ impl Region<()> {
             file: self.file,
             size,
             ptr: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().add(offset).cast()) },
+            _marker: PhantomData,
         })
     }
 }
 
-impl<T> Region<T> {
+impl<T> Region<[T]> {
     /// Construct a new region from a slice.
     ///
     /// We require mutable access, all though it won't make a difference for
@@ -175,12 +225,62 @@ impl<T> Region<T> {
             file,
             size: data.len(),
             ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()).cast() },
+            _marker: PhantomData,
         }
     }
 
+    /// Get the length of the region in count of `mem::size_of::<T>()` elements.
+    pub fn len(&self) -> usize {
+        self.size
+    }
+
+    /// Get a pointer to the memory region.
+    #[inline]
+    pub unsafe fn as_ptr(&self) -> *const T {
+        unsafe { self.ptr.cast::<T>().as_ptr().cast_const() }
+    }
+
+    /// Get a mutable pointer to the memory region.
+    #[inline]
+    pub unsafe fn as_mut_ptr(&self) -> *mut T {
+        unsafe { self.ptr.cast::<T>().as_ptr() }
+    }
+
+    /// Coerce the memory region into a reference.
+    ///
+    /// # Safety
+    ///
+    /// This is basically never sound, so don't use it for other things than
+    /// debugging. The correct way to read the struct is field-wise using the
+    /// [`volatile!`] macro.
+    #[inline]
+    pub unsafe fn as_slice(&self) -> &[T] {
+        unsafe { slice::from_raw_parts(self.as_ptr(), self.size) }
+    }
+
+    /// Coerce the memory region into a mutable reference.
+    ///
+    /// # Safety
+    ///
+    /// This is basically never sound, so don't use it for other things than
+    /// debugging. The correct way to read the struct is field-wise using the
+    /// [`volatile!`] macro.
+    #[inline]
+    pub unsafe fn as_slice_mut(&mut self) -> &mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.size) }
+    }
+}
+
+impl<T> Region<T> {
     /// Construct a new region.
+    #[inline]
     pub fn new(file: usize, size: usize, ptr: NonNull<T>) -> Self {
-        Self { file, size, ptr }
+        Self {
+            file,
+            size,
+            ptr: ptr.cast(),
+            _marker: PhantomData,
+        }
     }
 
     /// Read the whole region.
@@ -194,7 +294,7 @@ impl<T> Region<T> {
     where
         T: Copy,
     {
-        unsafe { self.ptr.as_ptr().read_volatile() }
+        unsafe { self.ptr.cast::<T>().as_ptr().read_volatile() }
     }
 
     /// Erase the type signature of the region.
@@ -204,7 +304,20 @@ impl<T> Region<T> {
             file: self.file,
             size: self.size,
             ptr: self.ptr.cast(),
+            _marker: PhantomData,
         }
+    }
+
+    /// Get a pointer to the memory region.
+    #[inline]
+    pub unsafe fn as_ptr(&self) -> *const T {
+        unsafe { self.ptr.cast::<T>().as_ptr().cast_const() }
+    }
+
+    /// Get a mutable pointer to the memory region.
+    #[inline]
+    pub unsafe fn as_mut_ptr(&self) -> *mut T {
+        unsafe { self.ptr.cast::<T>().as_ptr() }
     }
 
     /// Coerce the memory region into a reference.
@@ -214,8 +327,9 @@ impl<T> Region<T> {
     /// This is basically never sound, so don't use it for other things than
     /// debugging. The correct way to read the struct is field-wise using the
     /// [`volatile!`] macro.
+    #[inline]
     pub unsafe fn as_ref(&self) -> &T {
-        unsafe { self.ptr.as_ref() }
+        unsafe { self.ptr.cast().as_ref() }
     }
 
     /// Coerce the memory region into a mutable reference.
@@ -225,12 +339,16 @@ impl<T> Region<T> {
     /// This is basically never sound, so don't use it for other things than
     /// debugging. The correct way to read the struct is field-wise using the
     /// [`volatile!`] macro.
+    #[inline]
     pub unsafe fn as_mut(&mut self) -> &mut T {
-        unsafe { self.ptr.as_mut() }
+        unsafe { self.ptr.cast().as_mut() }
     }
 }
 
-impl<T> fmt::Debug for Region<T> {
+impl<T> fmt::Debug for Region<T>
+where
+    T: ?Sized,
+{
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Region")
@@ -312,6 +430,7 @@ impl Memory {
                 file,
                 ptr: NonNull::new_unchecked(ptr.cast()),
                 size,
+                _marker: PhantomData,
             }
         };
 
@@ -352,7 +471,10 @@ impl Memory {
 
     /// Drop a mapped memory region.
     #[tracing::instrument(skip(self))]
-    pub(crate) fn free<T>(&mut self, region: Region<T>) {
+    pub(crate) fn free<T>(&mut self, region: Region<T>)
+    where
+        T: ?Sized,
+    {
         self.free_file(region.file);
     }
 

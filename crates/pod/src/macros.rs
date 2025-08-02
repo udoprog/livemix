@@ -521,10 +521,10 @@ macro_rules! __flags {
             #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = pod::array();
-            #[doc = concat!(" pod.as_mut().write(1 | (1 as ", stringify!($repr), ").rotate_right(1))?;")]
+            #[doc = concat!(" pod.as_mut().write(1 | (1 as ", stringify!($repr), ").rotate_right(2))?;")]
             ///
             #[doc = concat!(" let flags = pod.as_ref().read_sized::<", stringify!($ty), ">()?;")]
-            #[doc = concat!(" assert_eq!(flags.unknown_bits(), (1 as ", stringify!($repr), ").rotate_right(1));")]
+            #[doc = concat!(" assert_eq!(flags.unknown_bits(), (1 as ", stringify!($repr), ").rotate_right(2));")]
             /// # Ok::<_, pod::Error>(())
             /// ```
             impl<'de> $crate::SizedReadable<'de> for $ty {
