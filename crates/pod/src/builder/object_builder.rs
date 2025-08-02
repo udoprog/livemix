@@ -9,11 +9,7 @@ where
 {
     writer: W,
     kind: P,
-    header: W::Pos,
-    #[allow(unused)]
-    object_type: u32,
-    #[allow(unused)]
-    object_id: u32,
+    pub(crate) header: W::Pos,
 }
 
 impl<W, P> ObjectBuilder<W, P>
@@ -41,8 +37,6 @@ where
             writer,
             kind,
             header,
-            object_type,
-            object_id,
         })
     }
 
@@ -86,7 +80,7 @@ where
     }
 
     #[inline]
-    pub(crate) fn close(mut self) -> Result<(), Error> {
+    pub(crate) fn close(mut self) -> Result<(W, W::Pos), Error> {
         let size = self
             .kind
             .check_size(Type::OBJECT, &self.writer, self.header)?;
@@ -94,6 +88,6 @@ where
         self.writer
             .write_at(self.header, &[size, Type::OBJECT.into_u32()])?;
 
-        Ok(())
+        Ok((self.writer, self.header))
     }
 }

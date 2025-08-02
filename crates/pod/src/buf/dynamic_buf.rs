@@ -486,6 +486,16 @@ impl Writer for DynamicBuf {
         self.len = new_len;
         Ok(())
     }
+
+    #[inline]
+    fn slice_from(&self, pos: Self::Pos) -> Slice<'_> {
+        let Pos { at, .. } = pos;
+        let ptr = self.data.as_ptr().wrapping_add(at.min(self.len));
+        let len = self.len.saturating_sub(at);
+        // SAFETY: We are ensuring that the slice returned is always validly in
+        // bounds, even if empty.
+        unsafe { Slice::new(slice::from_raw_parts(ptr, len)) }
+    }
 }
 
 impl Default for DynamicBuf {

@@ -16,6 +16,15 @@ pub struct Object<B> {
 }
 
 impl<B> Object<B> {
+    #[inline]
+    pub(crate) fn new(buf: B, object_type: u32, object_id: u32) -> Self {
+        Self {
+            buf,
+            object_type,
+            object_id,
+        }
+    }
+
     /// Get the type of the object.
     #[inline]
     pub const fn object_type(&self) -> u32 {
@@ -39,15 +48,6 @@ impl<'de, B> Object<B>
 where
     B: Reader<'de>,
 {
-    #[inline]
-    fn new(buf: B, object_type: u32, object_id: u32) -> Self {
-        Self {
-            buf,
-            object_type,
-            object_id,
-        }
-    }
-
     #[inline]
     pub(crate) fn from_reader(mut buf: B) -> Result<Self, Error> {
         let [object_type, object_id] = buf.read::<[u32; 2]>()?;

@@ -3,6 +3,7 @@ use core::mem;
 
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
+use crate::Object;
 use crate::PodSink;
 use crate::ReadPod;
 use crate::Slice;
@@ -57,7 +58,7 @@ impl Builder<DynamicBuf> {
         Self::new(DynamicBuf::new())
     }
 
-    /// Clear the current builder.
+    /// Clear the current builder and return a mutable reference to it.
     ///
     /// This will clear the buffer and reset the pod to an empty state.
     ///
@@ -72,8 +73,9 @@ impl Builder<DynamicBuf> {
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> &mut Self {
         self.buf.clear();
+        self
     }
 }
 
@@ -95,7 +97,7 @@ impl Builder<ArrayBuf> {
         Self::new(ArrayBuf::new())
     }
 
-    /// Clear the current builder.
+    /// Clear the current builder and return a mutable reference to it.
     ///
     /// This will clear the buffer and reset the pod to an empty state.
     ///
@@ -110,8 +112,9 @@ impl Builder<ArrayBuf> {
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 20i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> &mut Self {
         self.buf.clear();
+        self
     }
 }
 
@@ -536,13 +539,34 @@ where
     /// })?;
     /// # Ok::<_, pod::Error>(())
     /// ```
+    ///
+    /// Using the return value to immediately read the object back:
+    ///
+    /// ```
+    /// use pod::{Pod, Type};
+    ///
+    /// let mut pod = pod::array();
+    /// let mut obj = pod.as_mut().write_object(10, 20, |obj| {
+    ///     obj.property(1).write(1i32)?;
+    ///     obj.property(2).write(2i32)?;
+    ///     obj.property(3).write(3i32)?;
+    ///     Ok(())
+    /// })?;
+    ///
+    /// let mut obj = obj.as_ref();
+    ///
+    /// assert_eq!(obj.object_type(), 10);
+    /// assert_eq!(obj.object_id(), 20);
+    /// let mut p = obj.property()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
     #[inline]
     pub fn write_object(
         mut self,
         object_type: impl RawId,
         object_id: impl RawId,
         f: impl FnOnce(&mut ObjectBuilder<B, P>) -> Result<(), Error>,
-    ) -> Result<(), Error> {
+    ) -> Result<Object<impl AsSlice>, Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = ObjectBuilder::to_writer(
             self.buf,
@@ -551,8 +575,14 @@ where
             object_id.into_id(),
         )?;
         f(&mut encoder)?;
-        encoder.close()?;
-        Ok(())
+
+        let (buf, pos) = encoder.close()?;
+
+        Ok(Object::new(
+            (buf, pos),
+            object_type.into_id(),
+            object_id.into_id(),
+        ))
     }
 
     /// Write a sequence.

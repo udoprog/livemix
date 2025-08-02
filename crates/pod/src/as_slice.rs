@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use crate::Slice;
+use crate::{Slice, Writer};
 
 mod sealed {
     #[cfg(feature = "alloc")]
@@ -13,7 +13,7 @@ mod sealed {
 
     #[cfg(feature = "alloc")]
     use crate::DynamicBuf;
-    use crate::{ArrayBuf, AsSlice, Slice};
+    use crate::{ArrayBuf, AsSlice, Slice, Writer};
 
     pub trait Sealed {}
 
@@ -28,6 +28,7 @@ mod sealed {
     impl Sealed for DynamicBuf {}
     impl<R> Sealed for &mut R where R: ?Sized + AsSlice {}
     impl<R> Sealed for &R where R: ?Sized + AsSlice {}
+    impl<B> Sealed for (B, B::Pos) where B: Writer {}
 }
 
 /// Base trait to convert something into a reader which borrows from `&self`.
@@ -37,6 +38,16 @@ where
 {
     /// Borrow the value as a reader.
     fn as_slice(&self) -> Slice<'_>;
+}
+
+impl<B> AsSlice for (B, B::Pos)
+where
+    B: Writer,
+{
+    #[inline]
+    fn as_slice(&self) -> Slice<'_> {
+        self.0.slice_from(self.1)
+    }
 }
 
 #[cfg(feature = "alloc")]

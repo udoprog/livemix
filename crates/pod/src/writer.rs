@@ -1,5 +1,5 @@
-use crate::Error;
 use crate::utils::BytesInhabited;
+use crate::{Error, Slice};
 
 mod sealed {
     #[cfg(feature = "alloc")]
@@ -59,6 +59,9 @@ where
 
     /// Pad the writer to the given alignment.
     fn pad(&mut self, align: usize) -> Result<(), Error>;
+
+    /// Get a slice from the writer starting at the given position.
+    fn slice_from(&self, pos: Self::Pos) -> Slice<'_>;
 }
 
 impl<W> Writer for &mut W
@@ -114,5 +117,10 @@ where
     #[inline]
     fn pad(&mut self, align: usize) -> Result<(), Error> {
         (**self).pad(align)
+    }
+
+    #[inline]
+    fn slice_from(&self, pos: Self::Pos) -> Slice<'_> {
+        (**self).slice_from(pos)
     }
 }

@@ -393,10 +393,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             Ok(())
         })?;
 
-    port.set_param(
-        Param::BUFFERS,
-        [PortParam::new(pod.take().read_object()?.to_owned()?)],
-    )?;
+    port.set_param(Param::BUFFERS, [PortParam::new(pod.take().read_object()?)])?;
 
     Ok(())
 }
