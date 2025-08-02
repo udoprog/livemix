@@ -12,6 +12,7 @@ anyhow = "1.0.98"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["fmt"] }
 hound = "3.5.1"
+rand = "0.9.2"
 
 [workspace]
 members = [

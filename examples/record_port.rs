@@ -17,13 +17,18 @@ use protocol::id::{
 };
 use protocol::poll::{Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd, ffi, flags};
+use rand::Rng;
 
 const BUFFER_SAMPLES: u32 = 128;
+const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
+const DEFAULT_RATE: f32 = 48000.0;
+const DEFAULT_VOLUME: f32 = 0.5;
 
 struct ExampleApplication {
     tick: usize,
     buf: Vec<f32>,
     writer: hound::WavWriter<File>,
+    accumulator: f32,
 }
 
 impl ExampleApplication {
@@ -36,6 +41,8 @@ impl ExampleApplication {
         if self.tick % 100 == 0 {
             start = Some(SystemTime::now());
         }
+
+        let mut rng = rand::rng();
 
         if let Some(activation) = &node.activation {
             let previous_status =
@@ -54,14 +61,12 @@ impl ExampleApplication {
 
         for port in node.ports.inputs_mut() {
             let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
-                tracing::warn!("Input missing buffers");
                 continue;
             };
 
             let status = unsafe { volatile!(io_buffers, status).read() };
 
             if status != Status::HAVE_DATA {
-                tracing::error!("Input io status is not HAVE_DATA: {status:?}");
                 continue;
             };
 
@@ -74,19 +79,12 @@ impl ExampleApplication {
             let meta = &buffer.metas[0];
             let data = &buffer.datas[0];
 
-            let header;
             let samples;
 
             unsafe {
-                header = meta.region.cast::<ffi::MetaHeader>()?.read();
-
                 let chunk = data.chunk.as_ref();
                 let offset = chunk.offset as usize % data.max_size;
                 let size = (chunk.size as usize - offset).min(data.max_size);
-
-                if self.tick % 100 == 0 {
-                    tracing::warn!(?chunk, data.max_size);
-                }
 
                 samples = size / mem::size_of::<f32>();
 
@@ -107,7 +105,51 @@ impl ExampleApplication {
                 unsafe { volatile!(io_buffers, status).replace(flags::Status::NEED_DATA) };
 
             if self.tick % 100 == 0 {
-                tracing::warn!(?data.flags, ?header, ?id, ?old_read);
+                tracing::warn!(?data.flags, ?id, ?old_read, samples);
+            }
+        }
+
+        if true {
+            for port in node.ports.outputs_mut() {
+                let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &mut port.io_buffers)
+                else {
+                    continue;
+                };
+
+                let Some(buffer) = buffers.buffers.get_mut(self.tick % 2) else {
+                    bail!("Output no buffer for port {}", port.id);
+                };
+
+                let meta = &buffer.metas[0];
+                let data = &mut buffer.datas[0];
+
+                let samples;
+
+                unsafe {
+                    let chunk = data.chunk.as_mut();
+                    samples = data.max_size / mem::size_of::<f32>();
+
+                    let mut ptr = data.region.as_mut_ptr().cast::<f32>();
+
+                    for _ in 0..samples {
+                        ptr.write(self.accumulator.sin() * DEFAULT_VOLUME);
+                        self.accumulator += M_PI_M2 * 440.0 / DEFAULT_RATE;
+                        ptr = ptr.wrapping_add(1);
+                    }
+
+                    chunk.size = (samples * mem::size_of::<f32>()) as u32;
+                    chunk.offset = 0;
+                    chunk.stride = 0;
+                }
+
+                unsafe {
+                    volatile!(io_buffers, buffer_id).replace(buffer.id);
+                    volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
+                };
+
+                if self.tick % 100 == 0 {
+                    tracing::warn!(?data.flags, samples);
+                }
             }
         }
 
@@ -175,17 +217,18 @@ fn main() -> Result<()> {
 
     let spec = hound::WavSpec {
         channels: 1,
-        sample_rate: 44100,
+        sample_rate: 48000,
         bits_per_sample: 32,
         sample_format: hound::SampleFormat::Float,
     };
 
-    let writer = hound::WavWriter::new(File::create("output.wav")?, spec)?;
+    let writer = hound::WavWriter::new(File::create("capture.wav")?, spec)?;
 
     let mut app = ExampleApplication {
         tick: 0,
         buf: Vec::with_capacity(1024 * 1024),
         writer,
+        accumulator: 0.0,
     };
 
     loop {
@@ -206,7 +249,7 @@ fn main() -> Result<()> {
                             obj.property(Format::AUDIO_FORMAT)
                                 .write(AudioFormat::F32P)?;
                             obj.property(Format::AUDIO_CHANNELS).write(1)?;
-                            obj.property(Format::AUDIO_RATE).write(44100)?;
+                            obj.property(Format::AUDIO_RATE).write(48000)?;
                             Ok(())
                         },
                     )?;
@@ -222,7 +265,7 @@ fn main() -> Result<()> {
                                 obj.property(Format::AUDIO_FORMAT)
                                     .write(AudioFormat::F32P)?;
                                 obj.property(Format::AUDIO_CHANNELS).write(1)?;
-                                obj.property(Format::AUDIO_RATE).write(44100)?;
+                                obj.property(Format::AUDIO_RATE).write(48000)?;
                                 Ok(())
                             })?;
 
@@ -272,7 +315,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             obj.property(Format::AUDIO_FORMAT)
                 .write(AudioFormat::F32P)?;
             obj.property(Format::AUDIO_CHANNELS).write(1)?;
-            obj.property(Format::AUDIO_RATE).write(44100)?;
+            obj.property(Format::AUDIO_RATE).write(48000)?;
             Ok(())
         })?;
 
@@ -287,7 +330,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             obj.property(Format::AUDIO_FORMAT)
                 .write(AudioFormat::F32P)?;
             obj.property(Format::AUDIO_CHANNELS).write(1)?;
-            obj.property(Format::AUDIO_RATE).write(44100)?;
+            obj.property(Format::AUDIO_RATE).write(48000)?;
             Ok(())
         })?;
 
@@ -304,7 +347,17 @@ fn add_port_params(port: &mut Port) -> Result<()> {
 
     port.set_param(Param::META, [PortParam::new(value)])?;
 
-    /*
+    let value = pod
+        .clear_mut()
+        .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
+            obj.property(ParamIo::ID).write(IoType::BUFFERS)?;
+            obj.property(ParamIo::SIZE)
+                .write(mem::size_of::<ffi::IoBuffers>())?;
+            Ok(())
+        })?;
+
+    port.add_param(Param::IO, PortParam::new(value))?;
+
     let value = pod
         .clear_mut()
         .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
@@ -315,7 +368,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.add_param(Param::IO, PortParam::new(value))?;
-    */
 
     let value = pod
         .clear_mut()
