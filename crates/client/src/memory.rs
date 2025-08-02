@@ -100,11 +100,11 @@ impl Region<()> {
     }
 
     /// Add the given size aligned to the specified alignment to the region.
-    pub fn add(&self, size: usize, align: usize) -> Result<Region<()>> {
-        let size = size.next_multiple_of(align);
+    pub fn offset(&self, offset: usize, align: usize) -> Result<Region<()>> {
+        let offset = offset.next_multiple_of(align);
 
-        if size > self.size {
-            bail!("Offset {size} is larger than region size {}", self.size);
+        if offset > self.size {
+            bail!("Offset {offset} is larger than region size {}", self.size);
         }
 
         let ptr = unsafe {
@@ -112,14 +112,14 @@ impl Region<()> {
                 .ptr
                 .as_ptr()
                 .cast::<u8>()
-                .wrapping_add(size)
+                .wrapping_add(offset)
                 .cast::<()>();
             NonNull::new_unchecked(ptr)
         };
 
         Ok(Region {
             file: self.file,
-            size: self.size - size,
+            size: self.size - offset,
             ptr,
         })
     }

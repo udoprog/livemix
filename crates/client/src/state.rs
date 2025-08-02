@@ -5,6 +5,7 @@ use core::slice;
 use core::time::Duration;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ffi::CString;
+use std::fs::File;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::time::SystemTime;
 
@@ -13,7 +14,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use pod::{ChoiceType, DynamicBuf, Fd, Object, Pod, Slice, Struct, Type};
 use protocol::EventFd;
 use protocol::Prop;
@@ -95,7 +96,7 @@ struct ClientNodeState {
     io_control: Option<Region<()>>,
     io_position: Option<Region<ffi::IoPosition>>,
     modified: bool,
-    buf: Vec<u8>,
+    buf: Vec<f32>,
 }
 
 impl ClientNodeState {
@@ -232,9 +233,9 @@ impl GlobalMap {
 }
 
 /// The local connection state.
-#[derive(Debug)]
 pub struct State {
     tick: usize,
+    writer: hound::WavWriter<File>,
     c: Client,
     core: CoreState,
     client: ClientState,
@@ -258,7 +259,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(connection: Connection) -> Self {
+    pub fn new(connection: Connection) -> Result<Self> {
         let mut ids = Ids::new();
 
         // Well-known identifiers.
@@ -274,8 +275,16 @@ impl State {
             .properties
             .insert(prop::NODE_NAME, String::from("livemix_node"));
 
-        Self {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 44100,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+
+        Ok(Self {
             tick: 0,
+            writer: hound::WavWriter::new(File::create("output.wav")?, spec)?,
             c: Client::new(connection),
             core: CoreState::default(),
             client,
@@ -296,7 +305,7 @@ impl State {
             memory: Memory::new(),
             add_interest: VecDeque::new(),
             modify_interest: VecDeque::new(),
-        }
+        })
     }
 
     /// Allocate a unique token.
@@ -682,18 +691,24 @@ impl State {
                 let header;
 
                 unsafe {
-                    let chunk = data.chunk.as_ref();
-
                     header = meta.region.cast::<ffi::MetaHeader>()?.read();
-                    let offset = chunk.offset as usize % data.max_size;
 
-                    node.buf.set_len(0);
-                    node.buf.reserve(chunk.size as usize);
-                    node.buf.as_mut_ptr().copy_from_nonoverlapping(
+                    tracing::warn!(?header);
+
+                    let chunk = data.chunk.as_ref();
+                    let offset = chunk.offset as usize % data.max_size;
+                    let size = (chunk.size as usize - offset).min(data.max_size);
+
+                    tracing::warn!(?offset, ?size);
+
+                    let samples = size / mem::size_of::<f32>();
+
+                    node.buf.resize(samples, 0.0);
+                    node.buf.as_mut_ptr().cast::<u8>().copy_from_nonoverlapping(
                         data.region.ptr.as_ptr().cast::<u8>().wrapping_add(offset),
-                        chunk.size as usize,
+                        size,
                     );
-                    node.buf.set_len(chunk.size as usize);
+                    node.buf.set_len(samples);
                 }
 
                 let old_read = volatile!(io_buffers, status).replace(flags::Status::NEED_DATA);
@@ -702,6 +717,18 @@ impl State {
                     tracing::warn!(?data.flags, ?header, ?id, ?old_read);
                 }
             }
+
+            let mut samples = 0;
+            let mut sum = 0.0;
+
+            for &sample in &node.buf {
+                self.writer.write_sample(sample)?;
+                sum += sample;
+                samples += 1;
+            }
+
+            tracing::warn!(samples, sum, len = self.writer.len());
+            self.writer.flush()?;
 
             for port in node.ports.outputs_mut() {
                 let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &port.io_buffers)
@@ -719,7 +746,7 @@ impl State {
 
                 let id = volatile!(io_buffers, buffer_id).read();
 
-                let Some(buffer) = buffers.buffers.get_mut(id as usize) else {
+                let Some(buffer) = buffers.buffers.get_mut(1) else {
                     bail!("Output no buffer with id {id} for port {}", port.id);
                 };
 
@@ -733,20 +760,21 @@ impl State {
 
                     header = meta.region.cast::<ffi::MetaHeader>()?.read();
 
-                    std::dbg!(chunk.offset, chunk.stride);
-
-                    assert!(data.region.size >= node.buf.len());
+                    let size = (chunk.size as usize).min(data.max_size);
+                    let len = size.min(node.buf.len().wrapping_mul(mem::size_of::<f32>()));
 
                     data.region
                         .ptr
                         .as_ptr()
                         .cast::<u8>()
-                        .copy_from_nonoverlapping(node.buf.as_ptr(), node.buf.len());
+                        .copy_from_nonoverlapping(node.buf.as_ptr().cast::<u8>(), len);
 
-                    chunk.size = node.buf.len() as u32;
+                    chunk.offset = 0;
+                    chunk.size = len as u32;
                     chunk.stride = 4;
                 }
 
+                volatile!(io_buffers, buffer_id).write(buffer.id);
                 let old_write = volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
 
                 if self.tick % 100 == 0 {
@@ -765,12 +793,6 @@ impl State {
 
             for (_, a) in &node.peer_activations {
                 a.signal()?;
-
-                let activation = unsafe { a.region.read() };
-
-                if self.tick % 100 == 0 {
-                    tracing::warn!(?activation, "ACTIVATION");
-                }
             }
         }
 
@@ -1327,13 +1349,20 @@ impl State {
 
         let mut st = pod.read_struct()?;
 
-        let (direction, port_id, mix_id, flags, n_buffers) =
-            st.read::<(consts::Direction, u32, u32, u32, u32)>()?;
+        tracing::warn!(?st);
+
+        let (direction, port_id, mix_id, flags, n_buffers) = st
+            .read::<(consts::Direction, u32, i32, u32, u32)>()
+            .with_context(|| anyhow!("reading header"))?;
+
+        let mix_id = u32::try_from(mix_id).ok();
 
         let mut buffers = Vec::new();
 
-        for _ in 0..n_buffers {
-            let (mem_id, offset, size, n_metas) = st.read::<(u32, i32, u32, u32)>()?;
+        for id in 0..n_buffers {
+            let (mem_id, offset, size, n_metas) = st
+                .read::<(u32, i32, u32, u32)>()
+                .with_context(|| anyhow!("reading buffer {id}"))?;
 
             let mm = self
                 .memory
@@ -1354,20 +1383,21 @@ impl State {
                     region: region.size(size as usize)?,
                 });
 
-                region = region.add(size as usize, 8)?;
+                region = region.offset(size as usize, 8)?;
             }
 
             let mut datas = Vec::new();
 
             let n_datas = st.read::<usize>()?;
 
-            for _ in 0..n_datas {
+            for id in 0..n_datas {
                 let chunk = region.clone().size(mem::size_of::<ffi::Chunk>())?.cast()?;
-                region = region.add(mem::size_of::<ffi::Chunk>(), 8)?;
+                region = region.offset(mem::size_of::<ffi::Chunk>(), 8)?;
                 self.memory.track(&chunk);
 
-                let (ty, data, flags, offset, max_size) =
-                    st.read::<(id::DataType, u32, flags::DataFlag, i32, u32)>()?;
+                let (ty, data, flags, offset, max_size) = st
+                    .read::<(id::DataType, u32, flags::DataFlag, i32, u32)>()
+                    .with_context(|| anyhow!("reading data for buffer {id}"))?;
 
                 let Ok(max_size) = usize::try_from(max_size) else {
                     bail!("Invalid max size {max_size} for data type {ty:?}");
@@ -1379,7 +1409,7 @@ impl State {
                             bail!("Invalid data offset {data} for data type {ty:?}");
                         };
 
-                        let region = mm.add(data, 1)?;
+                        let region = mm.offset(data, 1)?.size(max_size)?;
 
                         ensure!(region.size <= max_size);
                         ensure!(offset == 0);
@@ -1411,6 +1441,7 @@ impl State {
             self.memory.free(mm);
 
             buffers.push(Buffer {
+                id,
                 mem_id,
                 offset,
                 size,

@@ -25,6 +25,7 @@ pub(crate) struct Data {
 
 #[derive(Debug)]
 pub(crate) struct Buffer {
+    pub(crate) id: u32,
     pub(crate) mem_id: u32,
     pub(crate) offset: i32,
     pub(crate) size: u32,
@@ -35,7 +36,7 @@ pub(crate) struct Buffer {
 #[derive(Debug)]
 pub(crate) struct Buffers {
     pub(crate) direction: consts::Direction,
-    pub(crate) mix_id: u32,
+    pub(crate) mix_id: Option<u32>,
     pub(crate) flags: u32,
     pub(crate) buffers: Vec<Buffer>,
 }
