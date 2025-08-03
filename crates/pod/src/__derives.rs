@@ -5,6 +5,8 @@
 //! Using lifetimes:
 //!
 //! ```
+//! use pod::{Readable, Writable};
+//!
 //! #[derive(Debug, PartialEq, Readable, Writable)]
 //! struct Struct<'de> {
 //!     a: &'de [u8],
@@ -14,7 +16,7 @@
 //! let mut pod = pod::array();
 //! pod.as_mut().write(Struct {
 //!     a: &b"hello"[..],
-//!     b: &b"world"[..],
+//!     b: "world",
 //! })?;
 //!
 //! let read = pod.as_ref().read::<Struct>()?;
@@ -33,9 +35,9 @@
 //! type.
 //!
 //! ```
-//! use pod::Pod;
+//! use pod::{Readable, Writable};
 //!
-//! #[derive(Pod)]
+//! #[derive(Readable, Writable)]
 //! #[pod(crate = pod)]
 //! struct AudioMeta {
 //!     pub channels: u32,

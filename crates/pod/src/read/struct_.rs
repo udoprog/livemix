@@ -6,8 +6,8 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Error, PADDING, PackedPod, Pod, PodStream, Readable, Reader, Slice, Type, TypedPod,
-    UnsizedWritable, Writer,
+    AsSlice, Error, PADDING, PackedPod, Pod, PodItem, PodStream, Readable, Reader, Slice, Type,
+    TypedPod, UnsizedWritable, Writer,
 };
 
 /// A decoder for a struct.

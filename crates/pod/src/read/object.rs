@@ -1,12 +1,19 @@
 use core::fmt;
 use core::mem;
 
+use crate::PodItem;
+use crate::PodStream;
+use crate::SizedReadable;
+use crate::UnsizedReadable;
 #[cfg(feature = "alloc")]
 use crate::buf::{AllocError, DynamicBuf};
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Error, PADDING, Property, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer,
+    AsSlice, Error, PADDING, Property, Readable, Reader, Slice, Type, TypedPod, UnsizedWritable,
+    Writer,
 };
+
+use super::Struct;
 
 /// A decoder for a struct.
 pub struct Object<B> {
@@ -57,6 +64,35 @@ where
             object_type,
             object_id,
         })
+    }
+
+    /// Conveniently read a value from the object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::Readable;
+    ///
+    /// #[derive(Readable)]
+    /// #[pod(object(type = 10u32, id = 20u32))]
+    /// struct Contents {
+    ///     #[pod(property = 100u32)]
+    ///     media_type: MediaType,
+    /// }
+    ///
+    /// let mut pod = pod::array();
+    /// let mut obj = pod.as_mut().embed_object(10u32, 20u32, |obj| {
+    ///     obj.property(100u32).write(200)
+    /// })?;
+    ///
+    /// let c = obj.as_ref().read::<Contents>()?;
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn read<T>(mut self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        T::read_from(&mut self)
     }
 
     /// Test if the decoder is empty.
@@ -316,6 +352,67 @@ where
 }
 
 crate::macros::encode_into_unsized!(impl [B] Object<B> where B: AsSlice);
+
+impl<'de> PodItem<'de> for Object<Slice<'de>> {
+    #[inline]
+    fn read<T>(self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        Err(Error::new(ErrorKind::ReadNotSupported { ty: Type::OBJECT }))
+    }
+
+    #[inline]
+    fn read_sized<T>(self) -> Result<T, Error>
+    where
+        T: SizedReadable<'de>,
+    {
+        Err(Error::new(ErrorKind::ReadSizedNotSupported {
+            ty: Type::OBJECT,
+        }))
+    }
+
+    #[inline]
+    fn read_unsized<T>(self) -> Result<&'de T, Error>
+    where
+        T: ?Sized + UnsizedReadable<'de>,
+    {
+        Err(Error::new(ErrorKind::ReadUnsizedNotSupported {
+            ty: Type::OBJECT,
+        }))
+    }
+
+    #[inline]
+    fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
+        Err(Error::expected(Type::STRUCT, Type::OBJECT, self.buf.len()))
+    }
+
+    #[inline]
+    fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
+        Ok(self)
+    }
+
+    #[inline]
+    fn read_option(self) -> Result<Option<Self>, Error> {
+        Ok(Some(self))
+    }
+}
+
+impl<'de, B> PodStream<'de> for Object<B>
+where
+    B: Reader<'de>,
+{
+    type Item = Object<Slice<'de>>;
+
+    #[inline]
+    fn next(&mut self) -> Result<Self::Item, Error> {
+        let Some(buf) = self.buf.split(self.buf.len()) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        Ok(Object::new(buf, self.object_type, self.object_id))
+    }
+}
 
 impl<'de, B> fmt::Debug for Object<B>
 where

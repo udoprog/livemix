@@ -15,9 +15,9 @@ pub(crate) struct Toks<'base> {
     pub(crate) property: P<'base>,
     pub(crate) struct_builder: Nested<'base>,
     pub(crate) object_builder: Nested<'base>,
-    pub(crate) typed_pod: P<'base>,
     pub(crate) writable_t: P<'base>,
     pub(crate) raw_id_t: P<'base>,
+    pub(crate) pod_item_t: P<'base>,
     pub(crate) default_t: Nested<'base>,
 }
 
@@ -63,9 +63,9 @@ impl<'base> Toks<'base> {
             property: p!(Property),
             struct_builder: p!(builder::StructBuilder),
             object_builder: p!(builder::ObjectBuilder),
-            typed_pod: p!(TypedPod),
             writable_t: p!(Writable),
             raw_id_t: p!(RawId),
+            pod_item_t: p!(PodItem),
             default_t: core!(default::Default),
         }
     }

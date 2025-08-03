@@ -731,8 +731,10 @@ where
     B: Reader<'de>,
     P: ReadPod,
 {
+    type Item = TypedPod<Slice<'de>, PackedPod>;
+
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+    fn next(&mut self) -> Result<Self::Item, Error> {
         let (size, ty) = self.buf.header()?;
 
         let Some(buf) = self.buf.split(size) else {

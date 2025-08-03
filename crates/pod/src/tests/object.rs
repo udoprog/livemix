@@ -1,4 +1,4 @@
-use crate::{ChoiceType, Error, Id, Type};
+use crate::{ChoiceType, Error, Id, Readable, Type};
 
 #[test]
 fn embed_object() -> Result<(), Error> {
@@ -39,5 +39,25 @@ fn stream_decode_choice() -> Result<(), Error> {
     let p = obj.property()?;
     assert_eq!(p.key(), 3);
     std::dbg!(p.value().read::<Id<u32>>()?);
+    Ok(())
+}
+
+#[test]
+fn contents_decode() -> Result<(), Error> {
+    #[derive(Readable)]
+    #[pod(crate, object(type = 10u32, id = 20u32))]
+    struct Contents {
+        #[pod(property = 100u32)]
+        value: u32,
+    }
+
+    let mut pod = crate::array();
+    let obj = pod
+        .as_mut()
+        .embed_object(10u32, 20u32, |obj| obj.property(100u32).write(200))?;
+
+    let c = obj.as_ref().read::<Contents>()?;
+
+    assert_eq!(c.value, 200);
     Ok(())
 }

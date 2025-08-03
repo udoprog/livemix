@@ -1,6 +1,6 @@
 use crate::buf::ArrayVec;
 use crate::error::ErrorKind;
-use crate::{Error, PodStream};
+use crate::{Error, PodItem, PodStream};
 
 /// Helper trait to more easily read values from a [`Pod`].
 ///

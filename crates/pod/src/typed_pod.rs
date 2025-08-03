@@ -13,8 +13,9 @@ use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::read::{Array, Choice, Object, Sequence, Struct};
 use crate::{
-    AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, Pointer, ReadPod, Reader,
-    Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
+    AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, PodItem, Pointer, ReadPod,
+    Reader, Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor,
+    Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -626,6 +627,8 @@ where
     B: Reader<'de>,
     P: ReadPod,
 {
+    type Item = TypedPod<Slice<'de>, PackedPod>;
+
     #[inline]
     fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
         let Some(buf) = self.buf.split(self.size) else {
@@ -702,6 +705,47 @@ where
 }
 
 crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsSlice, P: ReadPod);
+
+impl<'de> PodItem<'de> for TypedPod<Slice<'de>, PackedPod> {
+    #[inline]
+    fn read<T>(self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        TypedPod::read(self)
+    }
+
+    #[inline]
+    fn read_sized<T>(self) -> Result<T, Error>
+    where
+        T: SizedReadable<'de>,
+    {
+        TypedPod::read_sized(self)
+    }
+
+    #[inline]
+    fn read_unsized<T>(self) -> Result<&'de T, Error>
+    where
+        T: ?Sized + UnsizedReadable<'de>,
+    {
+        TypedPod::read_unsized(self)
+    }
+
+    #[inline]
+    fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
+        TypedPod::read_struct(self)
+    }
+
+    #[inline]
+    fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
+        TypedPod::read_object(self)
+    }
+
+    #[inline]
+    fn read_option(self) -> Result<Option<Self>, Error> {
+        TypedPod::read_option(self)
+    }
+}
 
 impl<B, P> fmt::Debug for TypedPod<B, P>
 where

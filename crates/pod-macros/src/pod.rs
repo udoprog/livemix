@@ -135,12 +135,12 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         readable_t,
         error,
         pod_stream_t,
-        typed_pod,
         struct_,
         object,
         property,
         raw_id_t,
         default_t,
+        pod_item_t,
         ..
     } = &toks;
 
@@ -183,7 +183,7 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
             let accessor = fields.iter().map(|f| &f.accessor);
 
             inner = quote! {
-                let mut st = #typed_pod::read_struct(#pod_stream_t::next(pod)?)?;
+                let mut st = #pod_item_t::read_struct(#pod_stream_t::next(pod)?)?;
 
                 #result::Ok(Self {
                     #(#accessor: #struct_::read(&mut st)?,)*
@@ -220,7 +220,7 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                 match_fields = quote! {
                     match #raw_id_t::from_id(#property::key(&prop)) {
                         #(#keys => {
-                            #vars = #option::Some(#typed_pod::read(#property::value(prop))?);
+                            #vars = #option::Some(#pod_item_t::read(#property::value(prop))?);
                         },)*
                         _ => {},
                     }
@@ -232,14 +232,14 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
             let accessor = fields.iter().map(|f| &f.accessor);
 
             inner = quote! {
-                let mut obj = #typed_pod::read_object(#pod_stream_t::next(pod)?)?;
+                let mut obj = #pod_item_t::read_object(#pod_stream_t::next(pod)?)?;
 
                 if #ty != #object::object_type(&obj) {
-                    return #result::Err(#error::__invalid_object_type(obj.object_type(), #ty));
+                    return #result::Err(#error::__invalid_object_type(#ty, obj.object_type()));
                 }
 
                 if #id != #object::object_id(&obj) {
-                    return #result::Err(#error::__invalid_object_id(obj.object_id(), #id));
+                    return #result::Err(#error::__invalid_object_id(#id, obj.object_id()));
                 }
 
                 #(

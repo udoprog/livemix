@@ -403,6 +403,8 @@ impl<'de, B> PodStream<'de> for Choice<B>
 where
     B: Reader<'de>,
 {
+    type Item = TypedPod<Slice<'de>, PackedPod>;
+
     #[inline]
     fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
         let Some(pod) = self.next() else {

@@ -126,7 +126,7 @@ pub use self::builder::Builder;
 
 mod pod_stream;
 #[doc(inline)]
-pub use self::pod_stream::PodStream;
+pub use self::pod_stream::{PodItem, PodStream};
 
 mod pod_sink;
 #[doc(inline)]

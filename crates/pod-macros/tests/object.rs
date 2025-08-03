@@ -26,7 +26,7 @@ fn object() -> Result<(), Error> {
         audio_format: AudioFormat,
         #[pod(property(key = Format::AUDIO_CHANNELS))]
         channels: u32,
-        #[pod(property(key = Format::AUDIO_RATE))]
+        #[pod(property = Format::AUDIO_RATE)]
         audio_rate: u32,
     }
 

@@ -156,6 +156,15 @@ pub(crate) enum ErrorKind {
         expected: ChoiceType,
         actual: ChoiceType,
     },
+    ReadNotSupported {
+        ty: Type,
+    },
+    ReadSizedNotSupported {
+        ty: Type,
+    },
+    ReadUnsizedNotSupported {
+        ty: Type,
+    },
     CapacityError(CapacityError),
     #[cfg(feature = "alloc")]
     AllocError(AllocError),
@@ -297,6 +306,15 @@ impl fmt::Display for Error {
                     f,
                     "While decoding type {ty:?}, expected choice type {expected:?}, but found {actual:?}"
                 )
+            }
+            ErrorKind::ReadNotSupported { ty } => {
+                write!(f, "Item reading not supported for type {ty:?}")
+            }
+            ErrorKind::ReadSizedNotSupported { ty } => {
+                write!(f, "Item sized reading not supported for type {ty:?}")
+            }
+            ErrorKind::ReadUnsizedNotSupported { ty } => {
+                write!(f, "Item unsized reading not supported for type {ty:?}")
             }
             ErrorKind::CapacityError(ref e) => e.fmt(f),
             #[cfg(feature = "alloc")]

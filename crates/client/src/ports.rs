@@ -16,7 +16,7 @@ use protocol::id::{
     self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
     ParamMeta,
 };
-use protocol::{ffi, flags};
+use protocol::{ffi, flags, object};
 use tracing::Level;
 
 use crate::{Buffers, Region};
@@ -66,6 +66,8 @@ pub struct Port {
     pub io_position: Option<Region<ffi::IoPosition>>,
     /// The IO buffers region for the port.
     pub io_buffers: Option<Region<ffi::IoBuffers>>,
+    /// The audio format of the port.
+    pub format: Option<object::AudioFormat>,
     modified: bool,
     param_values: BTreeMap<Param, Vec<PortParam<DynamicBuf>>>,
     param_flags: BTreeMap<Param, ParamFlag>,
@@ -132,6 +134,17 @@ impl Port {
         self.param_values.insert(id, params);
         self.set_flag(id, flags::ParamFlag::READ);
         self.modified = true;
+
+        // Decode a received parameter.
+        match id {
+            id::Param::FORMAT => {
+                if let Some(&[param]) = self.param_values.get(&id).map(Vec::as_slice) {
+                    // param.value.as_ref().read::<object::AudioFormat>()?;
+                }
+            }
+            _ => {}
+        }
+
         Ok(())
     }
 
@@ -238,6 +251,7 @@ impl Ports {
             io_clock: None,
             io_position: None,
             io_buffers: None,
+            format: None,
             param_values: BTreeMap::new(),
             param_flags: BTreeMap::new(),
         };

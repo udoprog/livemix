@@ -63,7 +63,7 @@ macro_rules! __id {
             impl<'de> $crate::Readable<'de> for $ty {
                 #[inline]
                 fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
-                    pod.next()?.read_sized()
+                    $crate::PodItem::read_sized(pod.next()?)
                 }
             }
 
@@ -344,7 +344,7 @@ macro_rules! __consts {
             impl<'de> $crate::Readable<'de> for $ty {
                 #[inline]
                 fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
-                    pod.next()?.read_sized()
+                    $crate::PodItem::read_sized(pod.next()?)
                 }
             }
 
@@ -516,7 +516,7 @@ macro_rules! __flags {
             impl<'de> $crate::Readable<'de> for $ty {
                 #[inline]
                 fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
-                    pod.next()?.read_sized()
+                    $crate::PodItem::read_sized(pod.next()?)
                 }
             }
 
@@ -755,7 +755,7 @@ macro_rules! __decode_from_sized {
         {
             #[inline]
             fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
-                pod.next()?.read_sized()
+                $crate::PodItem::read_sized(pod.next()?)
             }
         }
     };
@@ -764,7 +764,7 @@ macro_rules! __decode_from_sized {
         impl<'de> $crate::Readable<'de> for $ty {
             #[inline]
             fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
-                pod.next()?.read_sized()
+                $crate::PodItem::read_sized(pod.next()?)
             }
         }
     };
@@ -777,7 +777,7 @@ macro_rules! __decode_from_borrowed {
         impl<'de> $crate::Readable<'de> for &'de $ty {
             #[inline]
             fn read_from(pod: &mut impl $crate::PodStream<'de>) -> Result<Self, $crate::Error> {
-                pod.next()?.read_unsized()
+                $crate::PodItem::read_unsized(pod.next()?)
             }
         }
     };

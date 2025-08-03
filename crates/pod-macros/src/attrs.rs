@@ -6,8 +6,8 @@ use syn::spanned::Spanned;
 use crate::Ctxt;
 
 pub(crate) struct Object {
-    pub(crate) ty: syn::Path,
-    pub(crate) id: syn::Path,
+    pub(crate) ty: syn::Expr,
+    pub(crate) id: syn::Expr,
 }
 
 #[derive(Default)]
@@ -119,7 +119,7 @@ pub(crate) fn container(cx: &Ctxt, inputs: &[syn::Attribute]) -> Result<Containe
 
 #[derive(Default)]
 pub(crate) struct FieldAttrs {
-    pub(crate) key: Option<syn::Path>,
+    pub(crate) key: Option<syn::Expr>,
 }
 
 pub(crate) fn field(cx: &Ctxt, inputs: &[syn::Attribute]) -> Result<FieldAttrs, ()> {
@@ -132,6 +132,11 @@ pub(crate) fn field(cx: &Ctxt, inputs: &[syn::Attribute]) -> Result<FieldAttrs, 
 
         let result = a.parse_nested_meta(|meta| {
             if meta.path.is_ident("property") {
+                if meta.input.parse::<Option<Token![=]>>()?.is_some() {
+                    attrs.key = Some(meta.input.parse()?);
+                    return Ok(());
+                }
+
                 let content;
                 syn::parenthesized!(content in meta.input);
 
