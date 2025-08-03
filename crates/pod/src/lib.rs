@@ -11,6 +11,7 @@ pub(crate) const PADDING: usize = core::mem::size_of::<u64>();
 #[cfg(all(test, feature = "alloc"))]
 mod tests;
 
+pub mod __derives;
 pub mod macros;
 
 pub(crate) mod bstr;
@@ -40,10 +41,18 @@ mod id;
 pub use self::id::{Id, RawId};
 
 mod writable;
+#[doc(inline)]
 pub use self::writable::Writable;
+#[doc(inline)]
+/// See [`__derives`] for documentation.
+pub use pod_macros::Writable;
 
 mod readable;
+#[doc(inline)]
 pub use self::readable::Readable;
+#[doc(inline)]
+/// See [`__derives`] for documentation.
+pub use pod_macros::Readable;
 
 mod unsized_writable;
 pub use self::unsized_writable::UnsizedWritable;
