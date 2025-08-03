@@ -156,6 +156,14 @@ macro_rules! __id {
                     }
                 }
             }
+
+            /// Support comparison with a raw identifier.
+            impl PartialEq<u32> for $ty {
+                #[inline]
+                fn eq(&self, other: &u32) -> bool {
+                    self.0 == *other
+                }
+            }
         )*
 
         #[cfg(all(test, feature = "test-pipewire-sys"))]

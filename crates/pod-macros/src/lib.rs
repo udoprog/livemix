@@ -11,9 +11,12 @@ extern crate std;
 use proc_macro::TokenStream;
 
 mod pod;
+use self::pod::Ctxt;
 
 mod toks;
 use self::toks::Toks;
+
+mod attrs;
 
 #[proc_macro_derive(Readable, attributes(pod))]
 pub fn derive_readable(input: TokenStream) -> TokenStream {
@@ -22,7 +25,9 @@ pub fn derive_readable(input: TokenStream) -> TokenStream {
     let cx = pod::Ctxt::new();
 
     if let Ok(stream) = pod::readable(&cx, input) {
-        return stream.into();
+        if !cx.has_errors() {
+            return stream.into();
+        }
     }
 
     cx.into_errors().into()
@@ -35,7 +40,9 @@ pub fn derive_writable(input: TokenStream) -> TokenStream {
     let cx = pod::Ctxt::new();
 
     if let Ok(stream) = pod::writable(&cx, input) {
-        return stream.into();
+        if !cx.has_errors() {
+            return stream.into();
+        }
     }
 
     cx.into_errors().into()

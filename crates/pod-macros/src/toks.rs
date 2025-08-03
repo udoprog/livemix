@@ -9,10 +9,15 @@ pub(crate) struct Toks<'base> {
     pub(crate) pod_stream_t: P<'base>,
     pub(crate) readable_t: P<'base>,
     pub(crate) result: Nested<'base>,
+    pub(crate) option: Nested<'base>,
     pub(crate) struct_: P<'base>,
+    pub(crate) object: P<'base>,
+    pub(crate) property: P<'base>,
     pub(crate) struct_builder: Nested<'base>,
+    pub(crate) object_builder: Nested<'base>,
     pub(crate) typed_pod: P<'base>,
     pub(crate) writable_t: P<'base>,
+    pub(crate) raw_id_t: P<'base>,
 }
 
 impl<'base> Toks<'base> {
@@ -51,10 +56,15 @@ impl<'base> Toks<'base> {
             pod_stream_t: p!(PodStream),
             readable_t: p!(Readable),
             result: core!(result::Result),
+            option: core!(option::Option),
             struct_: p!(Struct),
+            object: p!(Object),
+            property: p!(Property),
             struct_builder: p!(builder::StructBuilder),
+            object_builder: p!(builder::ObjectBuilder),
             typed_pod: p!(TypedPod),
             writable_t: p!(Writable),
+            raw_id_t: p!(RawId),
         }
     }
 }

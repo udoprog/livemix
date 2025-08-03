@@ -1,33 +1,43 @@
 use core::cell::RefCell;
 
+use alloc::format;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::Token;
 use syn::spanned::Spanned;
 
 use crate::Toks;
+use crate::attrs;
 
-pub(super) struct Ctxt {
+pub(crate) struct Ctxt {
     errors: RefCell<Vec<syn::Error>>,
 }
 
 impl Ctxt {
     /// Construct a new context.
-    pub(super) fn new() -> Self {
+    #[inline]
+    pub(crate) fn new() -> Self {
         Ctxt {
             errors: RefCell::new(Vec::new()),
         }
     }
 
     /// Report an error to the context.
-    fn error(&self, e: syn::Error) {
+    #[inline]
+    pub(crate) fn error(&self, e: syn::Error) {
         self.errors.borrow_mut().push(e);
     }
 
+    /// Test if context contains errors.
+    #[inline]
+    pub(crate) fn has_errors(&self) -> bool {
+        !self.errors.borrow().is_empty()
+    }
+
     /// Coerce the context into a `TokenStream` of errors.
-    pub(super) fn into_errors(self) -> TokenStream {
+    pub(crate) fn into_errors(self) -> TokenStream {
         let errors = self.errors.borrow();
 
         if errors.is_empty() {
@@ -48,85 +58,44 @@ impl Ctxt {
     }
 }
 
-struct ContainerAttrs {
-    path: Option<syn::Path>,
-}
-
-fn container_attrs(cx: &Ctxt, inputs: &[syn::Attribute]) -> Result<ContainerAttrs, ()> {
-    let mut attrs = ContainerAttrs { path: None };
-
-    for a in inputs {
-        if !a.path().is_ident("pod") {
-            continue;
-        }
-
-        let result = a.parse_nested_meta(|meta| {
-            if meta.path.is_ident("crate") {
-                if meta.input.parse::<Option<Token![=]>>()?.is_some() {
-                    attrs.path = Some(meta.input.parse()?);
-                } else {
-                    attrs.path = Some(syn::parse_quote!(crate));
-                }
-
-                return Ok(());
-            }
-
-            Err(syn::Error::new(meta.path.span(), "Unsupported attribute"))
-        });
-
-        if let Err(e) = result {
-            cx.error(e);
-            continue;
-        }
-    }
-
-    Ok(attrs)
-}
-
-struct FieldAttrs {}
-
-fn field_attrs(cx: &Ctxt, inputs: &[syn::Attribute]) -> Result<FieldAttrs, ()> {
-    let attrs = FieldAttrs {};
-
-    for a in inputs {
-        if !a.path().is_ident("pod") {
-            continue;
-        }
-
-        let result = a.parse_nested_meta(|meta| {
-            Err(syn::Error::new(meta.path.span(), "Unsupported attribute"))
-        });
-
-        if let Err(e) = result {
-            cx.error(e);
-            continue;
-        }
-    }
-
-    Ok(attrs)
-}
-
-struct Field {
+struct Field<'field> {
+    span: Span,
     accessor: syn::Member,
+    attrs: attrs::FieldAttrs,
+    data: &'field syn::Field,
 }
 
-fn fields(cx: &Ctxt, data: &syn::Data) -> Result<Vec<Field>, ()> {
+fn fields<'field>(cx: &Ctxt, data: &'field syn::Data) -> Result<Vec<Field<'field>>, ()> {
     match data {
         syn::Data::Struct(s) => {
             let mut fields = Vec::new();
 
             for (index, f) in s.fields.iter().enumerate() {
-                let _ = field_attrs(cx, &f.attrs)?;
+                let attrs = attrs::field(cx, &f.attrs)?;
 
-                let accessor = match &f.ident {
-                    Some(ident) => syn::Member::Named(ident.clone()),
-                    None => syn::Member::Unnamed(syn::Index {
-                        index: index as u32,
-                        span: f.span(),
-                    }),
+                let span;
+                let accessor;
+
+                match &f.ident {
+                    Some(ident) => {
+                        span = ident.span();
+                        accessor = syn::Member::Named(ident.clone());
+                    }
+                    None => {
+                        span = f.span();
+                        accessor = syn::Member::Unnamed(syn::Index {
+                            index: index as u32,
+                            span: f.span(),
+                        });
+                    }
                 };
 
-                fields.push(Field { accessor });
+                fields.push(Field {
+                    span,
+                    accessor,
+                    attrs,
+                    data: f,
+                });
             }
 
             Ok(fields)
@@ -156,18 +125,22 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         ..
     } = input;
 
-    let attrs = container_attrs(cx, &attrs)?;
+    let attrs = attrs::container(cx, &attrs)?;
     let base = attrs.path.unwrap_or_else(|| syn::parse_quote!(::pod));
     let core = syn::parse_quote!(::core);
     let toks = Toks::new(&core, &base);
 
     let Toks {
         result,
+        option,
         readable_t,
         error,
         pod_stream_t,
         typed_pod,
         struct_,
+        object,
+        property,
+        raw_id_t,
         ..
     } = &toks;
 
@@ -202,18 +175,104 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
 
     let (impl_generics, _, where_generics) = with_lifetime.split_for_impl();
     let (_, ty_generics, _) = generics.split_for_impl();
-    let accessor = fields.iter().map(|f| &f.accessor);
+
+    let inner;
+
+    match attrs.container {
+        attrs::Container::Struct => {
+            let accessor = fields.iter().map(|f| &f.accessor);
+
+            inner = quote! {
+                let mut st = #typed_pod::read_struct(#pod_stream_t::next(pod)?)?;
+
+                #result::Ok(Self {
+                    #(#accessor: #struct_::read(&mut st)?,)*
+                })
+            };
+        }
+        attrs::Container::Object(attrs::Object { ty, id }) => {
+            let mut keys = Vec::new();
+            let mut vars = Vec::new();
+            let mut types = Vec::new();
+            let mut fallback = Vec::new();
+
+            for (n, f) in fields.iter().enumerate() {
+                let Some(key) = &f.attrs.key else {
+                    cx.error(syn::Error::new(
+                        f.span,
+                        "#[pod(key = ..)] Missing for field",
+                    ));
+
+                    continue;
+                };
+
+                keys.push(key);
+                vars.push(syn::Ident::new(&format!("field{n}"), f.span));
+                types.push(&f.data.ty);
+
+                if let Some(ident) = &f.data.ident {
+                    let name = syn::LitStr::new(&ident.to_string(), ident.span());
+
+                    fallback
+                        .push(quote!(return #result::Err(#error::__missing_object_field(#name))));
+                } else {
+                    fallback.push(quote!(return #result::Err(#error::__missing_object_index(#n))));
+                }
+            }
+
+            let match_fields;
+
+            if !keys.is_empty() {
+                match_fields = quote! {
+                    match #raw_id_t::from_id(#property::key(&prop)) {
+                        #(#keys => {
+                            #vars = #option::Some(#typed_pod::read(#property::value(prop))?);
+                        },)*
+                        _ => {},
+                    }
+                }
+            } else {
+                match_fields = quote!();
+            }
+
+            let accessor = fields.iter().map(|f| &f.accessor);
+
+            inner = quote! {
+                let mut obj = #typed_pod::read_object(#pod_stream_t::next(pod)?)?;
+
+                if #ty != #object::object_type(&obj) {
+                    return #result::Err(#error::__invalid_object_type(obj.object_type(), #ty));
+                }
+
+                if #id != #object::object_id(&obj) {
+                    return #result::Err(#error::__invalid_object_id(obj.object_id(), #id));
+                }
+
+                #(
+                    let mut #vars = #option::<#types>::None;
+                )*
+
+                while !#object::is_empty(&obj) {
+                    let prop = #object::property(&mut obj)?;
+                    #match_fields
+                }
+
+                #result::Ok(Self {
+                    #(#accessor: match #vars {
+                        #option::Some(v) => v,
+                        #option::None => #fallback,
+                    },)*
+                })
+            };
+        }
+    }
 
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #readable_t<#lt> for #ident #ty_generics #where_generics {
             #[inline]
             fn read_from(pod: &mut impl #pod_stream_t<#lt>) -> #result<Self, #error> {
-                let mut st = #typed_pod::read_struct(#pod_stream_t::next(pod)?)?;
-
-                #result::Ok(Self {
-                    #(#accessor: #struct_::read(&mut st)?,)*
-                })
+                #inner
             }
         }
     })
@@ -227,7 +286,7 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         ..
     } = input;
 
-    let attrs = container_attrs(cx, &attrs)?;
+    let attrs = attrs::container(cx, &attrs)?;
     let base = attrs.path.unwrap_or_else(|| syn::parse_quote!(::pod));
     let core = syn::parse_quote!(::core);
     let toks = Toks::new(&core, &base);
@@ -239,11 +298,56 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         pod_sink_t,
         builder,
         struct_builder,
+        object_builder,
         ..
     } = &toks;
 
     let fields = fields(&cx, &input.data)?;
     let accessor = fields.iter().map(|f| &f.accessor);
+
+    let inner;
+
+    match attrs.container {
+        attrs::Container::Struct => {
+            inner = quote! {
+                #builder::write_struct(#pod_sink_t::next(pod)?, |pod| {
+                    #(#struct_builder::write(pod, &self.#accessor)?;)*
+                    #result::Ok(())
+                })?;
+
+                #result::Ok(())
+            }
+        }
+        attrs::Container::Object(attrs::Object { ty, id }) => {
+            let mut keys = Vec::new();
+
+            for f in &fields {
+                let Some(key) = &f.attrs.key else {
+                    cx.error(syn::Error::new(
+                        f.span,
+                        "#[pod(key = ..)] Missing for field",
+                    ));
+
+                    continue;
+                };
+
+                keys.push(key);
+            }
+
+            inner = quote! {
+                #builder::write_object(#pod_sink_t::next(pod)?, #ty, #id, |obj| {
+                    #(
+                        let prop = #object_builder::property(obj, #keys);
+                        #builder::write(prop, &self.#accessor)?;
+                    )*
+
+                    #result::Ok(())
+                })?;
+
+                #result::Ok(())
+            }
+        }
+    }
 
     let (impl_generics, ty_generics, where_generics) = generics.split_for_impl();
 
@@ -252,12 +356,7 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         impl #impl_generics #writable_t for #ident #ty_generics #where_generics {
             #[inline]
             fn write_into(&self, pod: &mut impl #pod_sink_t) -> #result<(), #error> {
-                #builder::write_struct(#pod_sink_t::next(pod)?, |pod| {
-                    #(#struct_builder::write(pod, &self.#accessor)?;)*
-                    #result::Ok(())
-                })?;
-
-                #result::Ok(())
+                #inner
             }
         }
     })

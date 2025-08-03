@@ -10,6 +10,7 @@ use crate::bstr::BStr;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::read::{Array, Choice, Object, Sequence, Struct};
+use crate::Readable;
 use crate::{
     AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, Pointer, ReadPod, Reader,
     Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
@@ -153,6 +154,29 @@ where
         self.buf.skip(self.size)?;
         self.kind.unpad(self.buf)?;
         Ok(self.size)
+    }
+
+    /// Conveniently decode a value from the pod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut pod = pod::array();
+    /// pod.as_mut().write((10i32, "hello world", [1u32, 2u32]))?;
+    ///
+    /// let (a, s, [c, d]) = pod.as_ref().into_typed()?.read::<(i32, String, [u32; 2])>()?;
+    ///
+    /// assert_eq!(a, 10i32);
+    /// assert_eq!(s, "hello world");
+    /// assert_eq!(c, 1u32);
+    /// assert_eq!(d, 2u32);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn read<T>(mut self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        T::read_from(&mut self)
     }
 
     /// Read a value.

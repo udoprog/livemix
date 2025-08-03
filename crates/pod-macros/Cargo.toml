@@ -19,3 +19,4 @@ syn = { version = "2.0.104", default-features = false, features = ["parsing", "p
 
 [dev-dependencies]
 pod = { path = "../pod" }
+protocol = { path = "../protocol" }

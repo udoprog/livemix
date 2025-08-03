@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::Type;
+use crate::{RawId, Type};
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::buf::CapacityError;
@@ -36,6 +36,36 @@ impl Error {
             expected,
             actual,
             size,
+        })
+    }
+    
+    #[doc(hidden)]
+    pub fn __invalid_object_type(expected: impl RawId, actual: impl RawId) -> Self {
+        Self::new(ErrorKind::InvalidObjectType {
+            expected: expected.into_id(),
+            actual: actual.into_id(),
+        })
+    }
+    
+    #[doc(hidden)]
+    pub fn __invalid_object_id(expected: impl RawId, actual: impl RawId) -> Self {
+        Self::new(ErrorKind::InvalidObjectId {
+            expected: expected.into_id(),
+            actual: actual.into_id(),
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn __missing_object_field(name: &'static str) -> Self {
+        Self::new(ErrorKind::MissingObjectField {
+            name
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn __missing_object_index(index: usize) -> Self {
+        Self::new(ErrorKind::MissingObjectIndex {
+            index
         })
     }
 }
@@ -110,6 +140,20 @@ pub(crate) enum ErrorKind {
     ArraySizeMismatch {
         size: usize,
         child_size: usize,
+    },
+    InvalidObjectType {
+        expected: u32,
+        actual: u32,
+    },
+    InvalidObjectId {
+        expected: u32,
+        actual: u32,
+    },
+    MissingObjectField {
+        name: &'static str,
+    },
+    MissingObjectIndex {
+        index: usize,
     },
     CapacityError(CapacityError),
     #[cfg(feature = "alloc")]
@@ -222,14 +266,26 @@ impl fmt::Display for Error {
             ErrorKind::InvalidLong { value, ty } => {
                 write!(f, "Long value {value} is not a valid {ty}")
             }
-            ErrorKind::ArraySizeMismatch { size, child_size } => {
-                write!(f, "Array size {size} is not a multiple of {child_size}")
-            }
             ErrorKind::InvalidUsizeInt { ty, value } => {
                 write!(f, "The usize value {value} is not a valid {ty}")
             }
             ErrorKind::InvalidIsizeInt { ty, value } => {
                 write!(f, "The isize value {value} is not a valid {ty}")
+            }
+            ErrorKind::ArraySizeMismatch { size, child_size } => {
+                write!(f, "Array size {size} is not a multiple of {child_size}")
+            }
+            ErrorKind::InvalidObjectType { expected, actual } => {
+                write!(f, "Expected object type {expected}, but found {actual}")
+            }
+            ErrorKind::InvalidObjectId { expected, actual } => {
+                write!(f, "Expected object id {expected}, but found {actual}")
+            }
+            ErrorKind::MissingObjectField { name } => {
+                write!(f, "Missing object field `{name}`")
+            }
+            ErrorKind::MissingObjectIndex { index } => {
+                write!(f, "Missing object index {index}")
             }
             ErrorKind::CapacityError(ref e) => e.fmt(f),
             #[cfg(feature = "alloc")]

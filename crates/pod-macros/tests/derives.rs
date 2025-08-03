@@ -35,3 +35,20 @@ fn with_lifetime() -> Result<(), Error> {
     })?;
     Ok(())
 }
+
+#[test]
+fn object() -> Result<(), Error> {
+    use pod::{Readable, Writable};
+    use protocol::id::{Format, ObjectType, Param};
+
+    #[derive(Debug, PartialEq, Readable, Writable)]
+    #[pod(object(type = ObjectType::FORMAT, id = Param::ENUM_FORMAT))]
+    struct RawFormat {
+        #[pod(property(key = Format::AUDIO_CHANNELS))]
+        channels: u32,
+    }
+
+    roundtrip!(RawFormat { channels: 2 })?;
+
+    Ok(())
+}

@@ -325,6 +325,7 @@ version = "0.0.0"
 dependencies = [
  "pod",
  "proc-macro2",
+ "protocol",
  "quote",
  "syn",
 ]

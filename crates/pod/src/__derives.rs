@@ -48,11 +48,42 @@
 //! Omitting the `<path>` argument loads types from the current crate.
 //!
 //! ```
-//! use pod::Readable;
+//! use pod::{Readable, Writable};
 //!
-//! #[derive(Readable)]
+//! #[derive(Readable, Writable)]
 //! #[pod(crate = ::pod)]
 //! struct AudioMeta {
 //!     pub channels: u32,
 //! }
 //! ```
+//!
+//! #### `#[pod(object(type = <type>, id = <id>))` and `#[pod(property(key = <key>))]`
+//!
+//! Indicates that the struct should be encoded as an object with the specified
+//! type.
+//!
+//! Object pods are special as in they have named properties that can be bound
+//! to fields.
+//!
+//! ```
+//! use pod::{Readable, Writable};
+//! use protocol::id::{Format, ObjectType, Param, MediaSubType, MediaType, AudioFormat};
+//!
+//! #[derive(Debug, PartialEq, Readable, Writable)]
+//! #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
+//! struct RawFormat {
+//!     #[pod(property(key = Format::MEDIA_TYPE))]
+//!     media_type: MediaType,
+//!     #[pod(property(key = Format::MEDIA_SUB_TYPE))]
+//!     media_sub_type: MediaSubType,
+//!     #[pod(property(key = Format::AUDIO_FORMAT))]
+//!     audio_format: AudioFormat,
+//!     #[pod(property(key = Format::AUDIO_CHANNELS))]
+//!     channels: u32,
+//!     #[pod(property(key = Format::AUDIO_RATE))]
+//!     audio_rate: u32,
+//! }
+//! ```
+//!
+//! Note that if a choice is encountered while decoding a pod, the value of the
+//! choice will only be extracted if it has the type `NONE`.
