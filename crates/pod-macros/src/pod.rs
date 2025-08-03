@@ -1,7 +1,6 @@
 use core::cell::RefCell;
 
 use alloc::format;
-use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use proc_macro2::{Span, TokenStream};
@@ -141,6 +140,7 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         object,
         property,
         raw_id_t,
+        default_t,
         ..
     } = &toks;
 
@@ -206,18 +206,12 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                     continue;
                 };
 
+                let ty = &f.data.ty;
+
                 keys.push(key);
                 vars.push(syn::Ident::new(&format!("field{n}"), f.span));
-                types.push(&f.data.ty);
-
-                if let Some(ident) = &f.data.ident {
-                    let name = syn::LitStr::new(&ident.to_string(), ident.span());
-
-                    fallback
-                        .push(quote!(return #result::Err(#error::__missing_object_field(#name))));
-                } else {
-                    fallback.push(quote!(return #result::Err(#error::__missing_object_index(#n))));
-                }
+                types.push(ty);
+                fallback.push(quote!(<#ty as #default_t>::default()));
             }
 
             let match_fields;

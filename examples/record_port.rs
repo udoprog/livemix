@@ -296,23 +296,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
     port.set_param(Param::ENUM_FORMAT, [PortParam::new(value)])?;
     port.set_read(Param::ENUM_FORMAT);
 
-    /*
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-            obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-            obj.property(Format::MEDIA_SUB_TYPE)
-                .write(MediaSubType::DSP)?;
-            obj.property(Format::AUDIO_FORMAT)
-                .write(AudioFormat::F32P)?;
-            obj.property(Format::AUDIO_CHANNELS).write(1)?;
-            obj.property(Format::AUDIO_RATE).write(48000)?;
-            Ok(())
-        })?;
-
-    port.set_param(Param::FORMAT, [PortParam::new(value)])?;
-    */
-
     let value = pod
         .clear_mut()
         .embed_object(ObjectType::PARAM_META, Param::META, |obj| {

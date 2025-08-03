@@ -135,6 +135,14 @@ macro_rules! __id {
                 }
             }
 
+            impl core::default::Default for $ty {
+                #[inline]
+                fn default() -> Self {
+                    Self(0)
+                }
+            }
+
+            /// The default value of an identifier.
             impl $crate::RawId for $ty {
                 #[inline]
                 fn into_id(self) -> u32 {

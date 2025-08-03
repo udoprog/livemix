@@ -3,7 +3,7 @@
 /// This allows identifiers types to be used with the [`Id`] helper type.
 pub trait RawId
 where
-    Self: Copy,
+    Self: Copy + Default,
 {
     /// Convert into a numerical identifier.
     #[doc(hidden)]
