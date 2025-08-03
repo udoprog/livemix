@@ -2,15 +2,16 @@ use core::ffi::CStr;
 use core::fmt;
 use core::mem;
 
+use crate::ChoiceType;
 #[cfg(feature = "alloc")]
 use crate::DynamicBuf;
 use crate::PodStream;
+use crate::Readable;
 use crate::bstr::BStr;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::read::{Array, Choice, Object, Sequence, Struct};
-use crate::Readable;
 use crate::{
     AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, Pointer, ReadPod, Reader,
     Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
@@ -198,7 +199,28 @@ where
     where
         T: SizedReadable<'de>,
     {
-        let value = T::read_content(self.buf.borrow_mut(), self.ty, self.size)?;
+        let value = match self.ty {
+            Type::CHOICE => {
+                let pod = TypedPod::packed(self.buf.borrow_mut(), self.size, self.ty);
+                let mut choice = pod.read_choice()?;
+
+                if choice.choice_type() != ChoiceType::NONE {
+                    return Err(Error::new(ErrorKind::InvalidChoiceType {
+                        ty: Type::INT,
+                        expected: ChoiceType::NONE,
+                        actual: choice.choice_type(),
+                    }));
+                }
+
+                let Some(choice) = choice.next() else {
+                    return Err(Error::new(ErrorKind::BufferUnderflow));
+                };
+
+                choice.read_sized()?
+            }
+            _ => T::read_content(self.buf.borrow_mut(), self.ty, self.size)?,
+        };
+
         self.kind.unpad(self.buf)?;
         Ok(value)
     }

@@ -5,13 +5,12 @@ use syn::spanned::Spanned;
 
 use crate::Ctxt;
 
-#[derive(Debug)]
 pub(crate) struct Object {
     pub(crate) ty: syn::Path,
     pub(crate) id: syn::Path,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub(crate) enum Container {
     #[default]
     Struct,

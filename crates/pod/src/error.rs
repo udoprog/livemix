@@ -1,9 +1,9 @@
 use core::fmt;
 
-use crate::{RawId, Type};
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::buf::CapacityError;
+use crate::{ChoiceType, RawId, Type};
 
 #[derive(PartialEq)]
 #[non_exhaustive]
@@ -38,7 +38,7 @@ impl Error {
             size,
         })
     }
-    
+
     #[doc(hidden)]
     pub fn __invalid_object_type(expected: impl RawId, actual: impl RawId) -> Self {
         Self::new(ErrorKind::InvalidObjectType {
@@ -46,7 +46,7 @@ impl Error {
             actual: actual.into_id(),
         })
     }
-    
+
     #[doc(hidden)]
     pub fn __invalid_object_id(expected: impl RawId, actual: impl RawId) -> Self {
         Self::new(ErrorKind::InvalidObjectId {
@@ -57,16 +57,12 @@ impl Error {
 
     #[doc(hidden)]
     pub fn __missing_object_field(name: &'static str) -> Self {
-        Self::new(ErrorKind::MissingObjectField {
-            name
-        })
+        Self::new(ErrorKind::MissingObjectField { name })
     }
 
     #[doc(hidden)]
     pub fn __missing_object_index(index: usize) -> Self {
-        Self::new(ErrorKind::MissingObjectIndex {
-            index
-        })
+        Self::new(ErrorKind::MissingObjectIndex { index })
     }
 }
 
@@ -154,6 +150,11 @@ pub(crate) enum ErrorKind {
     },
     MissingObjectIndex {
         index: usize,
+    },
+    InvalidChoiceType {
+        ty: Type,
+        expected: ChoiceType,
+        actual: ChoiceType,
     },
     CapacityError(CapacityError),
     #[cfg(feature = "alloc")]
@@ -286,6 +287,16 @@ impl fmt::Display for Error {
             }
             ErrorKind::MissingObjectIndex { index } => {
                 write!(f, "Missing object index {index}")
+            }
+            ErrorKind::InvalidChoiceType {
+                ty,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "While decoding type {ty:?}, expected choice type {expected:?}, but found {actual:?}"
+                )
             }
             ErrorKind::CapacityError(ref e) => e.fmt(f),
             #[cfg(feature = "alloc")]

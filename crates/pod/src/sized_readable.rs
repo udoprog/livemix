@@ -168,7 +168,11 @@ where
     I: RawId,
 {
     #[inline]
-    fn read_content(mut reader: impl Reader<'de>, _: Type, _: usize) -> Result<Self, Error> {
+    fn read_content(mut reader: impl Reader<'de>, ty: Type, size: usize) -> Result<Self, Error> {
+        if Type::ID != ty {
+            return Err(Error::expected(Type::ID, ty, size));
+        }
+
         Ok(Id(I::from_id(reader.read()?)))
     }
 }
