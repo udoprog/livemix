@@ -246,3 +246,24 @@ fn format_l1_struct() -> Result<(), Error> {
     assert_eq!(format!("{pod:?}"), "Struct { fields: [b\"a\", b\"b\"] }");
     Ok(())
 }
+
+#[test]
+fn write_read() -> Result<(), Error> {
+    let mut pod = crate::array();
+    pod.as_mut().write((10i32, "hello world", [1u32, 2]))?;
+
+    let mut pod = pod.as_ref();
+
+    let a = pod.as_typed_mut()?.read::<i32>()?;
+    assert_eq!(a, 10i32);
+
+    let s = pod.as_typed_mut()?.read::<&str>()?;
+    assert_eq!(s, "hello world");
+
+    let a1 = pod.as_typed_mut()?.read::<u32>()?;
+    assert_eq!(a1, 1);
+
+    let a2 = pod.as_typed_mut()?.read::<u32>()?;
+    assert_eq!(a2, 2);
+    Ok(())
+}

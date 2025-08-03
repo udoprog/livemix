@@ -42,13 +42,8 @@ pub(crate) struct File {
 ///
 /// let region = Region::from_slice(0, &mut data[..]);
 ///
-/// assert_eq!(region.size, 1024);
-/// assert_eq!(region.ptr.as_ptr(), data.as_mut_ptr().cast());
-///
-/// let region = region.add(256, 1)?;
-///
-/// assert_eq!(region.size, 768);
-/// assert_eq!(region.ptr.as_ptr(), data.as_mut_ptr().wrapping_add(256).cast());
+/// assert_eq!(region.len(), 1024);
+/// assert_eq!(region.as_ptr(), data.as_ptr());
 /// # Ok::<_, anyhow::Error>(())
 /// ```
 #[must_use = "A region must be dropped to release the underlying file descriptor"]
@@ -194,14 +189,14 @@ impl<T> Region<[T]> {
 
     /// Get a pointer to the memory region.
     #[inline]
-    pub unsafe fn as_ptr(&self) -> *const T {
-        unsafe { self.ptr.cast::<T>().as_ptr().cast_const() }
+    pub fn as_ptr(&self) -> *const T {
+        self.ptr.cast::<T>().as_ptr().cast_const()
     }
 
     /// Get a mutable pointer to the memory region.
     #[inline]
-    pub unsafe fn as_mut_ptr(&self) -> *mut T {
-        unsafe { self.ptr.cast::<T>().as_ptr() }
+    pub fn as_mut_ptr(&self) -> *mut T {
+        self.ptr.cast::<T>().as_ptr()
     }
 
     /// Coerce the memory region into a reference.

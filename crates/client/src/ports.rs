@@ -138,8 +138,8 @@ impl Port {
         // Decode a received parameter.
         match id {
             id::Param::FORMAT => {
-                if let Some(&[param]) = self.param_values.get(&id).map(Vec::as_slice) {
-                    // param.value.as_ref().read::<object::AudioFormat>()?;
+                if let Some([param]) = self.param_values.get(&id).map(Vec::as_slice) {
+                    std::dbg!(param.value.as_ref().read::<object::AudioFormat>()?);
                 }
             }
             _ => {}

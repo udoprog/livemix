@@ -77,7 +77,7 @@ where
     /// #[pod(object(type = 10u32, id = 20u32))]
     /// struct Contents {
     ///     #[pod(property = 100u32)]
-    ///     media_type: MediaType,
+    ///     value: u32,
     /// }
     ///
     /// let mut pod = pod::array();
@@ -86,6 +86,7 @@ where
     /// })?;
     ///
     /// let c = obj.as_ref().read::<Contents>()?;
+    /// assert_eq!(c.value, 200);
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn read<T>(mut self) -> Result<T, Error>

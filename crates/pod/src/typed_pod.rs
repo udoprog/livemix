@@ -121,12 +121,6 @@ where
             kind,
         })
     }
-
-    /// Convert the [`TypedPod`] into a one borrowing from mutably.
-    #[inline]
-    pub fn as_mut(&mut self) -> TypedPod<B::Mut<'_>, P> {
-        TypedPod::with_kind(self.buf.borrow_mut(), self.size, self.ty, self.kind)
-    }
 }
 
 impl<'de, B, P> TypedPod<B, P>
@@ -160,18 +154,42 @@ where
 
     /// Conveniently decode a value from the pod.
     ///
+    /// Note that typed pods in contrast to [`Pod`] only every contain a single
+    /// value, the type and size of which is known. Attempting to convert into a
+    /// typed pod and read multiple values will cause all subsequent values read
+    /// to be the equivalent of [`Type::None`].
+    ///
+    /// ```
+    /// let mut pod = pod::array();
+    /// pod.as_mut().write((10i32, 20u32))?;
+    ///
+    /// let mut pod = pod.as_ref();
+    ///
+    /// assert_eq!(pod.into_typed()?.read::<(i32, Option<i32>)>()?, (10, None));
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    ///
+    /// [`Type::None`]: crate::Type::NONE
+    ///
     /// # Examples
     ///
     /// ```
     /// let mut pod = pod::array();
-    /// pod.as_mut().write((10i32, "hello world", [1u32, 2u32]))?;
+    /// pod.as_mut().write((10i32, "hello world", [1u32, 2]))?;
     ///
-    /// let (a, s, [c, d]) = pod.as_ref().into_typed()?.read::<(i32, String, [u32; 2])>()?;
+    /// let mut pod = pod.as_ref();
     ///
+    /// let a = pod.as_typed_mut()?.read::<i32>()?;
     /// assert_eq!(a, 10i32);
+    ///
+    /// let s = pod.as_typed_mut()?.read::<&str>()?;
     /// assert_eq!(s, "hello world");
-    /// assert_eq!(c, 1u32);
-    /// assert_eq!(d, 2u32);
+    ///
+    /// let a1 = pod.as_typed_mut()?.read::<u32>()?;
+    /// assert_eq!(a1, 1);
+    ///
+    /// let a2 = pod.as_typed_mut()?.read::<u32>()?;
+    /// assert_eq!(a2, 2);
     /// # Ok::<_, pod::Error>(())
     /// ```
     pub fn read<T>(mut self) -> Result<T, Error>
@@ -548,31 +566,6 @@ where
 impl<B, P> TypedPod<B, P>
 where
     B: AsSlice,
-{
-    /// Test if the typed pod is empty.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pod::{Pod, Type};
-    /// let mut pod = pod::array();
-    ///
-    /// pod.as_mut().write(1);
-    ///
-    /// let mut pod = pod.as_ref().into_typed()?;
-    /// assert!(!pod.is_empty());
-    /// assert_eq!(pod.as_mut().read_sized::<i32>()?, 1);
-    /// assert!(pod.is_empty());
-    /// # Ok::<_, pod::Error>(())
-    /// ```
-    pub fn is_empty(&self) -> bool {
-        self.buf.as_slice().is_empty()
-    }
-}
-
-impl<B, P> TypedPod<B, P>
-where
-    B: AsSlice,
     P: Copy,
 {
     /// Coerce any pod into an owned pod.
@@ -622,6 +615,47 @@ where
     }
 }
 
+impl<'de> PodItem<'de> for TypedPod<Slice<'de>, PackedPod> {
+    #[inline]
+    fn read<T>(self) -> Result<T, Error>
+    where
+        T: Readable<'de>,
+    {
+        TypedPod::read(self)
+    }
+
+    #[inline]
+    fn read_sized<T>(self) -> Result<T, Error>
+    where
+        T: SizedReadable<'de>,
+    {
+        TypedPod::read_sized(self)
+    }
+
+    #[inline]
+    fn read_unsized<T>(self) -> Result<&'de T, Error>
+    where
+        T: ?Sized + UnsizedReadable<'de>,
+    {
+        TypedPod::read_unsized(self)
+    }
+
+    #[inline]
+    fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
+        TypedPod::read_struct(self)
+    }
+
+    #[inline]
+    fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
+        TypedPod::read_object(self)
+    }
+
+    #[inline]
+    fn read_option(self) -> Result<Option<Self>, Error> {
+        TypedPod::read_option(self)
+    }
+}
+
 impl<'de, B, P> PodStream<'de> for TypedPod<B, P>
 where
     B: Reader<'de>,
@@ -636,7 +670,13 @@ where
         };
 
         self.kind.unpad(self.buf.borrow_mut())?;
-        Ok(TypedPod::packed(buf, self.size, self.ty))
+        let pod = TypedPod::packed(buf, self.size, self.ty);
+
+        // Since the typed pod is consumed now, it no longer has a size, nor
+        // does it produce values. It effective contains `Type::NONE`.
+        self.size = 0;
+        self.ty = Type::NONE;
+        Ok(pod)
     }
 }
 
@@ -705,47 +745,6 @@ where
 }
 
 crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsSlice, P: ReadPod);
-
-impl<'de> PodItem<'de> for TypedPod<Slice<'de>, PackedPod> {
-    #[inline]
-    fn read<T>(self) -> Result<T, Error>
-    where
-        T: Readable<'de>,
-    {
-        TypedPod::read(self)
-    }
-
-    #[inline]
-    fn read_sized<T>(self) -> Result<T, Error>
-    where
-        T: SizedReadable<'de>,
-    {
-        TypedPod::read_sized(self)
-    }
-
-    #[inline]
-    fn read_unsized<T>(self) -> Result<&'de T, Error>
-    where
-        T: ?Sized + UnsizedReadable<'de>,
-    {
-        TypedPod::read_unsized(self)
-    }
-
-    #[inline]
-    fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
-        TypedPod::read_struct(self)
-    }
-
-    #[inline]
-    fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
-        TypedPod::read_object(self)
-    }
-
-    #[inline]
-    fn read_option(self) -> Result<Option<Self>, Error> {
-        TypedPod::read_option(self)
-    }
-}
 
 impl<B, P> fmt::Debug for TypedPod<B, P>
 where
