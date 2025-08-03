@@ -317,7 +317,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             Ok(())
         })?;
 
-    port.add_param(Param::IO, PortParam::new(value))?;
+    port.push_param(Param::IO, PortParam::new(value))?;
 
     let value = pod
         .clear_mut()
@@ -328,7 +328,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             Ok(())
         })?;
 
-    port.add_param(Param::IO, PortParam::new(value))?;
+    port.push_param(Param::IO, PortParam::new(value))?;
 
     let value = pod
         .clear_mut()
@@ -339,7 +339,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             Ok(())
         })?;
 
-    port.add_param(Param::IO, PortParam::new(value))?;
+    port.push_param(Param::IO, PortParam::new(value))?;
     port.set_read(Param::IO);
 
     let value = pod

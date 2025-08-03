@@ -1,6 +1,7 @@
 use core::mem;
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use alloc::string::String;
 use alloc::vec;
@@ -84,18 +85,34 @@ impl Port {
     }
 
     /// Set a parameter flag.
-    pub fn set_read(&mut self, id: Param) {
-        self.param_flags.insert(id, flags::ParamFlag::READ);
+    fn set_flag(&mut self, id: Param, flag: flags::ParamFlag) {
+        match self.param_flags.entry(id) {
+            Entry::Vacant(e) => {
+                e.insert(flag);
+            }
+            Entry::Occupied(e) => {
+                if e.get().contains(flag) {
+                    return;
+                }
+
+                *e.into_mut() |= flag;
+            }
+        }
+
         self.modified = true;
+    }
+
+    /// Set a parameter flag.
+    pub fn set_read(&mut self, id: Param) {
+        self.set_flag(id, flags::ParamFlag::READ);
     }
 
     /// Set that a parameter is writable.
     pub fn set_write(&mut self, id: Param) {
-        self.param_flags.insert(id, flags::ParamFlag::WRITE);
-        self.modified = true;
+        self.set_flag(id, flags::ParamFlag::WRITE);
     }
 
-    /// Set a parameter on the port.
+    /// Set a parameter on the port to the given values.
     #[inline]
     pub fn set_param(
         &mut self,
@@ -113,19 +130,17 @@ impl Port {
         }
 
         self.param_values.insert(id, params);
-
-        // If we are setting some value, make sure it's readable.
-        if let Some(flag) = self.param_flags.get_mut(&id) {
-            *flag |= flags::ParamFlag::READ;
-        }
-
+        self.set_flag(id, flags::ParamFlag::READ);
         self.modified = true;
         Ok(())
     }
 
-    /// Set a parameter on the port.
+    /// Push a parameter.
+    ///
+    /// This will append the value to the existing set of parameters of the
+    /// given type.
     #[inline]
-    pub fn add_param(&mut self, id: Param, value: PortParam<impl AsSlice>) -> Result<()> {
+    pub fn push_param(&mut self, id: Param, value: PortParam<impl AsSlice>) -> Result<()> {
         self.param_values
             .entry(id)
             .or_default()
@@ -133,6 +148,8 @@ impl Port {
                 value.value.as_ref().to_owned()?,
                 value.flags,
             ));
+
+        self.set_flag(id, flags::ParamFlag::READ);
         self.modified = true;
         Ok(())
     }
@@ -144,9 +161,8 @@ impl Port {
         let param = self.param_values.remove(&id)?;
 
         // If we remove a parameter it is no longer readable.
-        if let Some(flag) = self.param_flags.get_mut(&id) {
-            *flag ^= flags::ParamFlag::READ;
-        }
+        let flag = self.param_flags.entry(id).or_default();
+        *flag ^= flags::ParamFlag::READ;
 
         self.modified = true;
         Some(param)

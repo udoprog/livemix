@@ -478,6 +478,13 @@ macro_rules! __flags {
                 }
             }
 
+            impl Default for $ty {
+                #[inline]
+                fn default() -> Self {
+                    Self(0)
+                }
+            }
+
             #[doc = concat!(" `SizedWritable` implementation for [`", stringify!($ty), "`].")]
             ///
             /// # Examples
