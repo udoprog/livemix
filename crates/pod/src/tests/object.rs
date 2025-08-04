@@ -13,8 +13,6 @@ fn embed_object() -> Result<(), Error> {
 
     let mut obj = obj.as_ref();
 
-    std::dbg!(&obj);
-
     assert_eq!(obj.object_type(), 10);
     assert_eq!(obj.object_id(), 20);
     let p = obj.property()?;
@@ -38,7 +36,7 @@ fn stream_decode_choice() -> Result<(), Error> {
 
     let p = obj.property()?;
     assert_eq!(p.key(), 3);
-    std::dbg!(p.value().read::<Id<u32>>()?);
+    assert_eq!(p.value().read::<Id<u32>>()?, Id(77));
     Ok(())
 }
 

@@ -171,7 +171,6 @@ unsafe extern "C" fn capture_param_changed(
                     spa_sys::spa_format_audio_raw_parse(param, info.as_mut_ptr());
                     let info = info.assume_init();
                     let format = spa::AudioFormat::from_raw(info.format);
-                    dbg!(format, info.channels);
                     tracing::info!("raw audio format");
                 }
                 _ => {

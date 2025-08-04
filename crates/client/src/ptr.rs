@@ -27,7 +27,7 @@ where
 
     fn compare_exchange(&self, current: T, new: T) -> bool;
 
-    fn sub(&self, value: T) -> T;
+    fn fetch_sub(&self, value: T) -> T;
 }
 
 macro_rules! atomic {
@@ -54,7 +54,7 @@ macro_rules! atomic {
             }
 
             #[inline]
-            fn sub(&self, value: $repr) -> $repr {
+            fn fetch_sub(&self, value: $repr) -> $repr {
                 $atomic::fetch_sub(self, value, Ordering::SeqCst)
             }
         })*
@@ -177,9 +177,9 @@ where
     }
 
     #[inline]
-    pub unsafe fn sub(&self, value: T) -> T {
+    pub unsafe fn fetch_sub(&self, value: T) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
-        unsafe { T::from_repr((*self.ptr.as_ptr()).sub(T::into_repr(value))) }
+        unsafe { T::from_repr((*self.ptr.as_ptr()).fetch_sub(T::into_repr(value))) }
     }
 
     #[inline]

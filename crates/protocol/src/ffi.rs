@@ -1,3 +1,4 @@
+use core::ffi::CStr;
 use core::ffi::c_char;
 use core::fmt;
 
@@ -318,6 +319,13 @@ pub struct IoClock {
     pub cycle: u32,
     /// Estimated accumulated xrun duration.
     pub xrun: u64,
+}
+
+impl IoClock {
+    /// Get the clock name as a C string.
+    pub fn name_c_str(&self) -> &CStr {
+        unsafe { CStr::from_ptr(self.name.as_ptr()) }
+    }
 }
 
 /// IO area to exchange buffers.

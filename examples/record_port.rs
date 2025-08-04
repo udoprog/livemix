@@ -24,7 +24,7 @@ const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
 const DEFAULT_RATE: u32 = 48000;
 const DEFAULT_VOLUME: f32 = 0.5;
-const SINE_TONE: f32 = 440.0;
+const TONE: f32 = 440.0;
 
 struct ExampleApplication {
     tick: usize,
@@ -53,11 +53,22 @@ impl ExampleApplication {
                 tracing::warn!(?previous_status, "Expected TRIGGERED");
             }
 
-            if self.tick % 1000 == 0 {
+            if self.tick % 50 == 0 {
                 let xrun_count = unsafe { volatile!(activation, xrun_count).read() };
                 let signal_time = unsafe { volatile!(activation, signal_time).read() };
                 tracing::warn!(xrun_count, signal_time);
             }
+        }
+
+        let Some(io_position) = &node.io_position else {
+            return Ok(());
+        };
+
+        let clock = unsafe { volatile!(io_position, clock).read() };
+        let duration = clock.duration;
+
+        if self.tick % 1000 == 0 {
+            tracing::warn!(?clock, name = ?clock.name_c_str());
         }
 
         for port in node.ports.inputs_mut() {
@@ -125,22 +136,16 @@ impl ExampleApplication {
                 continue;
             };
 
-            std::dbg!(port.io_clock.is_some());
-
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
             };
 
             if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
-                tracing::warn!(?format, "Unsupported channel count on output port");
+                tracing::warn!(?format, "Unsupported format on output port");
                 continue;
             }
 
             let status = unsafe { volatile!(io_buffers, status).read() };
-
-            if !matches!(status, Status::OK | Status::NEED_DATA) {
-                continue;
-            };
 
             // The way we are currently implemented, all buffers are consumed
             // immediately so to the best of my knowledge they are available for
@@ -151,28 +156,34 @@ impl ExampleApplication {
                 bail!("Output no buffer for port {}", port.id);
             };
 
-            let meta = &buffer.metas[0];
+            let _ = &buffer.metas[0];
             let data = &mut buffer.datas[0];
 
-            // 128 seems to be the number of samples expected by the peer (YMMV)
-            // but for now I'm not sure why.
-            let samples = (data.region.len() / mem::size_of::<f32>()).min(128);
-
-            unsafe {
-                let meta_header = meta.region.cast::<ffi::MetaHeader>()?.read();
-
-                tracing::info!("{meta_header:?}");
-
-                let chunk = data.chunk.as_mut();
-
-                let mut ptr = data.region.cast_array::<f32>()?;
-
-                for d in ptr.as_slice_mut().iter_mut().take(samples) {
-                    *d = self.accumulator.sin() * DEFAULT_VOLUME;
-                    self.accumulator += M_PI_M2 * SINE_TONE / format.rate as f32;
+            if !matches!(status, Status::OK | Status::NEED_DATA) {
+                unsafe {
+                    let _ = data.chunk.as_mut();
                 }
 
-                self.accumulator %= M_PI_M2;
+                continue;
+            };
+
+            // 128 seems to be the number of samples expected by the peer I'm
+            // using so YMMV.
+            let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
+
+            unsafe {
+                let chunk = data.chunk.as_mut();
+
+                let mut region = data.region.cast_array::<f32>()?;
+
+                for d in region.as_slice_mut().iter_mut().take(samples) {
+                    *d = self.accumulator.sin() * DEFAULT_VOLUME;
+                    self.accumulator += M_PI_M2 * TONE / format.rate as f32;
+
+                    if self.accumulator >= M_PI_M2 {
+                        self.accumulator -= M_PI_M2;
+                    }
+                }
 
                 chunk.size = (samples * mem::size_of::<f32>()) as u32;
                 chunk.offset = 0;
@@ -194,6 +205,8 @@ impl ExampleApplication {
             }
         }
 
+        // Set activation to NOT_TRIGGERED indicating we are ready to be
+        // scheduled again.
         if let Some(activation) = &node.activation {
             let previous_status =
                 unsafe { atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED) };
