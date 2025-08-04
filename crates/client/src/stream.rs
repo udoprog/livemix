@@ -137,20 +137,12 @@ impl Stream {
 
     /// Get a node.
     pub fn node(&self, node_id: ClientNodeId) -> Result<&ClientNode> {
-        let Some(node) = self.client_nodes.get(node_id) else {
-            bail!("No client node found for index {}", node_id);
-        };
-
-        Ok(node)
+        self.client_nodes.get(node_id)
     }
 
     /// Get a mutable node.
     pub fn node_mut(&mut self, node_id: ClientNodeId) -> Result<&mut ClientNode> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("No client node found for index {}", node_id);
-        };
-
-        Ok(node)
+        self.client_nodes.get_mut(node_id)
     }
 
     /// Allocate a unique token.
@@ -227,16 +219,11 @@ impl Stream {
                     return Ok(Some(StreamEvent::NodeCreated(node_id)));
                 }
                 Op::NodeActive { node_id } => {
-                    let Some(node) = self.client_nodes.get(node_id) else {
-                        bail!("Missing client node for index {node_id}");
-                    };
-
+                    let node = self.client_nodes.get(node_id)?;
                     self.c.client_node_set_active(node.id, true)?;
                 }
                 Op::NodeUpdate { node_id, what } => {
-                    let Some(node) = self.client_nodes.get_mut(node_id) else {
-                        bail!("Missing client node for index {node_id}");
-                    };
+                    let node = self.client_nodes.get_mut(node_id)?;
 
                     if node.take_modified() {
                         self.c.client_node_update(node.id, 4, 4, &node.params)?;
@@ -305,9 +292,9 @@ impl Stream {
                     }
                 }
                 Op::NodeStart { node_id } => {
-                    if let Some(node) = self.client_nodes.get(node_id)
-                        && let Some(a) = &node.activation
-                    {
+                    let node = self.client_nodes.get(node_id)?;
+
+                    if let Some(a) = &node.activation {
                         if unsafe {
                             atomic!(a, status).compare_exchange(
                                 ActivationStatus::INACTIVE,
@@ -324,9 +311,9 @@ impl Stream {
                     }
                 }
                 Op::NodePause { node_id } => {
-                    if let Some(node) = self.client_nodes.get(node_id)
-                        && let Some(a) = &node.activation
-                    {
+                    let node = self.client_nodes.get(node_id)?;
+
+                    if let Some(a) = &node.activation {
                         unsafe { atomic!(a, status).store(ActivationStatus::INACTIVE) };
                     } else {
                         tracing::error!(
@@ -458,21 +445,16 @@ impl Stream {
     }
 
     /// Handle read on custom token.
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, token))]
     pub fn handle_read(&mut self, token: Token) -> Result<()> {
         let Some(node_id) = self.read_to_client.get(&token) else {
-            tracing::warn!(?token, "No client found for token");
-            return Ok(());
+            bail!("No client found for token");
         };
 
-        let Some(client) = self.client_nodes.get_mut(*node_id) else {
-            tracing::warn!(?node_id, "No client found for index");
-            return Ok(());
-        };
+        let node = self.client_nodes.get_mut(*node_id)?;
 
-        let Some(read_fd) = &client.read_fd else {
-            tracing::warn!(client.id, "No read file descriptor for client");
-            return Ok(());
+        let Some(read_fd) = &node.read_fd else {
+            bail!("No read file descriptor for client");
         };
 
         let Some(ev) = read_fd.read()? else {
@@ -499,8 +481,6 @@ impl Stream {
                 self.header.n_fds()
             );
         }
-
-        tracing::info!(fds = ?self.fds.len(), "Number of fds");
 
         let Some(received) = self.fds.get_mut(index) else {
             bail!(
@@ -560,9 +540,7 @@ impl Stream {
     }
 
     fn node_read_interest(&mut self, node_id: ClientNodeId) -> Result<()> {
-        let Some(node) = self.client_nodes.get(node_id) else {
-            bail!("No client found for index {node_id}");
-        };
+        let node = self.client_nodes.get(node_id)?;
 
         if let Some(read_fd) = &node.read_fd {
             self.read_to_client.insert(node.read_token, node_id);
@@ -941,15 +919,16 @@ impl Stream {
     #[tracing::instrument(skip(self, pod))]
     fn client_node_transport(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.read_struct()?;
-        let read_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
-        let write_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
+        let read_fd = st.field()?.read_sized::<Fd>()?;
+        let write_fd = st.field()?.read_sized::<Fd>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
         let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let read_fd = self.take_fd(read_fd)?;
+        let write_fd = self.take_fd(write_fd)?;
+
+        let node = self.client_nodes.get_mut(node_id)?;
 
         if let Some(a) = node.activation.take() {
             self.memory.free(a);
@@ -989,9 +968,7 @@ impl Stream {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_param(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let mut st = pod.read_struct()?;
         let id = st.field()?.read_sized::<Param>()?;
@@ -1016,9 +993,7 @@ impl Stream {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_set_io(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let mut st = pod.read_struct()?;
         let id = st.field()?.read_sized::<id::IoType>()?;
@@ -1083,9 +1058,7 @@ impl Stream {
 
     #[tracing::instrument(skip(self, pod))]
     fn client_node_command(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let mut st = pod.as_ref().read_struct()?;
         let obj = st.field()?.read_object()?;
@@ -1116,9 +1089,7 @@ impl Stream {
         node_id: ClientNodeId,
         pod: Pod<Slice<'_>>,
     ) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let mut st = pod.read_struct()?;
         let direction = st.field()?.read::<Direction>()?;
@@ -1151,9 +1122,7 @@ impl Stream {
         node_id: ClientNodeId,
         pod: Pod<Slice<'_>>,
     ) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let mut st = pod.read_struct()?;
 
@@ -1276,9 +1245,7 @@ impl Stream {
         node_id: ClientNodeId,
         pod: Pod<Slice<'_>>,
     ) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let mut st = pod.read_struct()?;
         let direction = Direction::from_raw(st.field()?.read_sized::<u32>()?);
@@ -1362,9 +1329,7 @@ impl Stream {
         let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
-        let Some(node) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
+        let node = self.client_nodes.get_mut(node_id)?;
 
         let Ok(mem_id) = u32::try_from(mem_id) else {
             node.peer_activations.retain(|_, n| n.peer_id != peer_id);
@@ -1389,10 +1354,7 @@ impl Stream {
         node_id: ClientNodeId,
         pod: Pod<Slice<'_>>,
     ) -> Result<()> {
-        let Some(..) = self.client_nodes.get_mut(node_id) else {
-            bail!("Missing client node {node_id}");
-        };
-
+        self.client_nodes.get_mut(node_id)?;
         let st = pod.read_struct()?;
         tracing::warn!(?st, "Not implemented yet");
         Ok(())

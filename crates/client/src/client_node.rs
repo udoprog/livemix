@@ -39,14 +39,22 @@ impl ClientNodes {
 
     /// Get a reference to the client node with the given ID.
     #[inline]
-    pub fn get(&self, id: ClientNodeId) -> Option<&ClientNode> {
-        self.data.get(id.index())
+    pub fn get(&self, id: ClientNodeId) -> Result<&ClientNode> {
+        let Some(node) = self.data.get(id.index()) else {
+            bail!("No client node found for id {}", id);
+        };
+
+        Ok(node)
     }
 
     /// Get a mutable reference to the client node with the given ID.
     #[inline]
-    pub fn get_mut(&mut self, id: ClientNodeId) -> Option<&mut ClientNode> {
-        self.data.get_mut(id.index())
+    pub fn get_mut(&mut self, id: ClientNodeId) -> Result<&mut ClientNode> {
+        let Some(node) = self.data.get_mut(id.index()) else {
+            bail!("No client node found for id {}", id);
+        };
+
+        Ok(node)
     }
 }
 
