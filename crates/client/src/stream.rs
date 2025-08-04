@@ -960,6 +960,7 @@ impl Stream {
         node.write_fd = write_fd.map(EventFd::from);
 
         if node.read_fd.is_some() {
+            tracing::error!(?node.read_fd);
             self.ops.push_back(Op::NodeReadInterest { node_id });
         }
 
@@ -1333,31 +1334,19 @@ impl Stream {
 
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let Ok(mem_id) = u32::try_from(mem_id) else {
-            for a in node
-                .peer_activations
-                .extract_if(.., |a| a.peer_id == peer_id)
-            {
-                self.memory.free(a.region);
-            }
-
-            return Ok(());
-        };
-
-        let Some(signal_fd) = signal_fd else {
-            bail!("Missing fd for peer {peer_id} in node {node_id}");
-        };
-
-        let signal_fd = EventFd::from(signal_fd);
-
-        let region = self.memory.map(mem_id, offset, size)?.cast()?;
-
         for a in node
             .peer_activations
             .extract_if(.., |a| a.peer_id == peer_id)
         {
             self.memory.free(a.region);
         }
+
+        let (Ok(mem_id), Some(signal_fd)) = (u32::try_from(mem_id), signal_fd) else {
+            return Ok(());
+        };
+
+        let signal_fd = EventFd::from(signal_fd);
+        let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
         node.peer_activations
             .push(unsafe { Activation::new(peer_id, signal_fd, region) });

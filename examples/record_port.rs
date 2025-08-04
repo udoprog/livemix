@@ -46,10 +46,24 @@ impl ExampleApplication {
             start = Some(SystemTime::now());
         }
 
+        if let Some(this) = &node.activation {
+            unsafe {
+                let pending = atomic!(this, state[0].pending).load();
+                let status = atomic!(this, status).load();
+
+                if pending != 0 || status != ActivationStatus::TRIGGERED {
+                    tracing::warn!(?pending, ?status, "this");
+                }
+            }
+        }
+
         for a in &node.peer_activations {
             unsafe {
-                if !a.wait_until_pending() {
-                    tracing::warn!(a.peer_id, "Activation wait failed");
+                let pending = atomic!(a.region, state[0].pending).load();
+                let status = atomic!(a.region, status).load();
+
+                if pending == 0 || status != ActivationStatus::NOT_TRIGGERED {
+                    tracing::warn!(a.peer_id, ?pending, ?status);
                 }
             }
         }
@@ -76,11 +90,6 @@ impl ExampleApplication {
 
         let clock = unsafe { volatile!(io_position, clock).read() };
         let duration = clock.duration;
-
-        if let Some(start) = start {
-            let elapsed = start.elapsed().context("Elapsed time")?;
-            tracing::warn!(?elapsed, "Duration spinning");
-        }
 
         for port in node.ports.inputs_mut() {
             let Some(io_buffers) = &mut port.io_buffers else {
