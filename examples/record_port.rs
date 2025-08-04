@@ -23,11 +23,12 @@ use protocol::{Connection, Poll, TimerFd, ffi, flags, object};
 const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
 const DEFAULT_RATE: u32 = 48000;
-const DEFAULT_VOLUME: f32 = 0.5;
+const DEFAULT_VOLUME: f32 = 0.1;
 const TONE: f32 = 440.0;
 
 struct ExampleApplication {
     tick: usize,
+    failed_signals: usize,
     buf: Vec<f32>,
     writer: hound::WavWriter<File>,
     accumulator: f32,
@@ -41,7 +42,7 @@ impl ExampleApplication {
 
         let mut start = None;
 
-        if self.tick % 1000 == 0 {
+        if self.tick % 100 == 0 {
             start = Some(SystemTime::now());
         }
 
@@ -67,12 +68,12 @@ impl ExampleApplication {
         let clock = unsafe { volatile!(io_position, clock).read() };
         let duration = clock.duration;
 
-        if self.tick % 1000 == 0 {
+        if self.tick % 100 == 0 {
             tracing::warn!(?clock);
         }
 
         for port in node.ports.inputs_mut() {
-            let (Some(buffers), Some(io_buffers)) = (&port.buffers, &port.io_buffers) else {
+            let Some(io_buffers) = &mut port.io_buffers else {
                 continue;
             };
 
@@ -93,7 +94,7 @@ impl ExampleApplication {
 
             let id = unsafe { volatile!(io_buffers, buffer_id).read() };
 
-            let Some(buffer) = buffers.buffers.get(id as usize) else {
+            let Some(buffer) = port.buffers.get_mut(id as u32) else {
                 bail!("Input no buffer with id {id} for port {}", port.id);
             };
 
@@ -125,14 +126,13 @@ impl ExampleApplication {
             let old_read =
                 unsafe { volatile!(io_buffers, status).replace(flags::Status::NEED_DATA) };
 
-            if self.tick % 1000 == 0 {
+            if self.tick % 100 == 0 {
                 tracing::warn!(?data.flags, ?id, ?old_read, samples);
             }
         }
 
         for port in node.ports.outputs_mut() {
-            let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &mut port.io_buffers)
-            else {
+            let Some(io_buffers) = &mut port.io_buffers else {
                 continue;
             };
 
@@ -146,26 +146,24 @@ impl ExampleApplication {
             }
 
             let status = unsafe { volatile!(io_buffers, status).read() };
+            let target_id = unsafe { volatile!(io_buffers, buffer_id).read() };
 
-            // The way we are currently implemented, all buffers are consumed
-            // immediately so to the best of my knowledge they are available for
-            // output.
-            //
-            // We will have to implement proper buffer management later though.
-            let Some(buffer) = buffers.buffers.get_mut(self.tick % 2) else {
-                bail!("Output no buffer for port {}", port.id);
+            if status & Status::NEED_DATA && target_id > 0 {
+                port.buffers.free(target_id as u32);
+            }
+
+            if status & Status::HAVE_DATA {
+                tracing::warn!(?status);
+                continue;
+            }
+
+            let Some(buffer) = port.buffers.next() else {
+                tracing::error!("no available buffers");
+                continue;
             };
 
             let _ = &buffer.metas[0];
             let data = &mut buffer.datas[0];
-
-            if !matches!(status, Status::OK | Status::NEED_DATA) {
-                unsafe {
-                    let _ = data.chunk.as_mut();
-                }
-
-                continue;
-            };
 
             // 128 seems to be the number of samples expected by the peer I'm
             // using so YMMV.
@@ -189,19 +187,25 @@ impl ExampleApplication {
                 chunk.offset = 0;
                 chunk.stride = 4;
 
-                volatile!(io_buffers, buffer_id).replace(buffer.id);
+                volatile!(io_buffers, buffer_id).replace(buffer.id as i32);
                 volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
             };
 
-            if self.tick % 1000 == 0 {
+            if self.tick % 100 == 0 {
                 tracing::warn!(?data.flags, samples);
             }
         }
 
-        // Signal peers that we are done.
         for (_, a) in &node.peer_activations {
             unsafe {
-                a.signal()?;
+                let signaled = a.signal()?;
+
+                if signaled {
+                    tracing::warn!(self.failed_signals, signaled);
+                    self.failed_signals = 0;
+                } else {
+                    self.failed_signals += 1;
+                }
             }
         }
 
@@ -218,7 +222,7 @@ impl ExampleApplication {
 
         if let Some(start) = start {
             let elapsed = start.elapsed().context("Elapsed time")?;
-            tracing::info!(?elapsed);
+            tracing::warn!(?elapsed);
         }
 
         Ok(())
@@ -273,6 +277,7 @@ fn main() -> Result<()> {
 
     let mut app = ExampleApplication {
         tick: 0,
+        failed_signals: 0,
         buf: Vec::with_capacity(1024 * 1024),
         writer,
         accumulator: 0.0,

@@ -56,58 +56,60 @@ impl Activation {
     /// # Safety
     ///
     /// The caller is responsible for ensuring that this is a valid activation record.
-    pub unsafe fn signal(&self) -> Result<()> {
+    pub unsafe fn signal(&self) -> Result<bool> {
         let nsec = get_monotonic_nsec();
 
-        match self.version {
-            Version::V0 => unsafe {
-                self.signal_v0(nsec)?;
-            },
-            Version::V1 => unsafe {
-                self.signal_v1(nsec)?;
-            },
-        }
+        let signaled = match self.version {
+            Version::V0 => unsafe { self.signal_v0(nsec)? },
+            Version::V1 => unsafe { self.signal_v1(nsec)? },
+        };
 
-        Ok(())
+        Ok(signaled)
     }
 
     // Port of `trigger_link_v0`.
-    pub unsafe fn signal_v0(&self, nsec: u64) -> Result<()> {
+    pub unsafe fn signal_v0(&self, nsec: u64) -> Result<bool> {
         unsafe {
             let pending = atomic!(self.region, state[0].pending).fetch_sub(1);
 
-            if pending == 1 {
-                atomic!(self.region, status).store(ActivationStatus::TRIGGERED);
-                volatile!(self.region, signal_time).write(nsec);
-
-                if !self.signal_fd.write(1)? {
-                    tracing::error!("Failed to signal activation");
-                }
+            if pending != 1 {
+                return Ok(false);
             }
 
-            Ok(())
+            atomic!(self.region, status).store(ActivationStatus::TRIGGERED);
+            volatile!(self.region, signal_time).write(nsec);
+
+            if !self.signal_fd.write(1)? {
+                tracing::error!("Failed to signal activation");
+            }
+
+            Ok(true)
         }
     }
 
     // Port of `trigger_link_v1`.
-    pub unsafe fn signal_v1(&self, nsec: u64) -> Result<()> {
+    pub unsafe fn signal_v1(&self, nsec: u64) -> Result<bool> {
         unsafe {
             let pending = atomic!(self.region, state[0].pending).fetch_sub(1);
 
-            if pending == 1 {
-                let changed = atomic!(self.region, status)
-                    .compare_exchange(ActivationStatus::NOT_TRIGGERED, ActivationStatus::TRIGGERED);
-
-                if changed {
-                    volatile!(self.region, signal_time).write(nsec);
-
-                    if !self.signal_fd.write(1)? {
-                        tracing::error!("Failed to signal activation");
-                    }
-                }
+            if pending != 1 {
+                return Ok(false);
             }
 
-            Ok(())
+            let changed = atomic!(self.region, status)
+                .compare_exchange(ActivationStatus::NOT_TRIGGERED, ActivationStatus::TRIGGERED);
+
+            if !changed {
+                return Ok(false);
+            }
+
+            volatile!(self.region, signal_time).write(nsec);
+
+            if !self.signal_fd.write(1)? {
+                tracing::error!("Failed to signal activation");
+            }
+
+            Ok(true)
         }
     }
 }

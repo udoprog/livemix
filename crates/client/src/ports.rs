@@ -2,6 +2,7 @@ use core::fmt;
 use core::mem;
 
 use std::collections::BTreeMap;
+use std::collections::VecDeque;
 use std::collections::btree_map::Entry;
 
 use alloc::string::String;
@@ -25,6 +26,7 @@ use protocol::id::{
 use protocol::{ffi, flags, object};
 use tracing::Level;
 
+use crate::buffer::Buffer;
 use crate::{Buffers, Region};
 
 /// The identifier of a port.
@@ -92,8 +94,37 @@ where
     }
 }
 
+/// A set of allocated buffers for a port.
+#[derive(Default)]
+pub struct PortBuffers {
+    /// The buffers associated with the port.
+    buffers: Option<Buffers>,
+    /// The available buffers.
+    available: VecDeque<u32>,
+}
+
+impl PortBuffers {
+    /// Free the given buffer by id.
+    pub fn free(&mut self, id: u32) {
+        self.available.push_back(id);
+    }
+
+    /// Get the next free buffer in the set.
+    pub fn next(&mut self) -> Option<&mut Buffer> {
+        let buffers = self.buffers.as_mut()?;
+        let id = self.available.pop_front()?;
+        buffers.buffers.get_mut(id as usize)
+    }
+
+    /// Just get the specified buffer by id.
+    pub fn get_mut(&mut self, id: u32) -> Option<&mut Buffer> {
+        let buffers = self.buffers.as_mut()?;
+        let index = usize::try_from(id).ok()?;
+        buffers.buffers.get_mut(index)
+    }
+}
+
 /// The definition of a port.
-#[derive(Debug)]
 #[non_exhaustive]
 pub struct Port {
     /// The direction of the port.
@@ -102,8 +133,8 @@ pub struct Port {
     pub id: PortId,
     /// The name of the port.
     pub name: String,
-    /// Buffers associated with the port.
-    pub buffers: Option<Buffers>,
+    /// List of available buffers for the port.
+    pub buffers: PortBuffers,
     /// The IO clock region for the port.
     pub io_clock: Option<Region<ffi::IoClock>>,
     /// The IO position region for the port.
@@ -230,11 +261,20 @@ impl Port {
     #[inline]
     #[tracing::instrument(skip(self), fields(port_id = ?self.id), ret(level = Level::TRACE))]
     pub(crate) fn replace_buffers(&mut self, buffers: Buffers) -> Option<Buffers> {
-        self.buffers.replace(buffers)
+        let len = buffers.buffers.len();
+        let old = self.buffers.buffers.replace(buffers);
+
+        self.buffers.available.clear();
+
+        for id in 0..len {
+            self.buffers.available.push_back(id as u32);
+        }
+
+        old
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Ports {
     input_ports: Vec<Port>,
     output_ports: Vec<Port>,
@@ -286,7 +326,7 @@ impl Ports {
             id,
             modified: true,
             name: String::new(),
-            buffers: None,
+            buffers: PortBuffers::default(),
             io_clock: None,
             io_position: None,
             io_buffers: None,

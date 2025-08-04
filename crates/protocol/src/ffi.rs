@@ -375,7 +375,7 @@ pub struct IoBuffers {
     /// the status code.
     pub status: flags::Status,
     /// a buffer id.
-    pub buffer_id: u32,
+    pub buffer_id: i32,
 }
 
 /// Describes essential buffer header metadata such as flags and timestamps.
