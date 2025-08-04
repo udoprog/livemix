@@ -47,6 +47,11 @@ impl ExampleApplication {
         }
 
         if let Some(activation) = &node.activation {
+            while unsafe { atomic!(activation, state[0].pending).load() != 0 } {
+                std::thread::yield_now();
+                tracing::warn!("non-zero pending");
+            }
+
             let previous_status =
                 unsafe { atomic!(activation, status).swap(ActivationStatus::AWAKE) };
 
@@ -67,30 +72,6 @@ impl ExampleApplication {
 
         let clock = unsafe { volatile!(io_position, clock).read() };
         let duration = clock.duration;
-
-        // So this section is temporarily added to "cope" with potential issues
-        // with memory coherence. Note that we do this *after* we have received
-        // the eventfd signal to start processing, and we're not spinning for
-        // long enough to miss a processing window.
-        for port in node.ports.outputs_mut() {
-            let Some(io_buffers) = &mut port.io_buffers else {
-                continue;
-            };
-
-            let mut status = unsafe { volatile!(io_buffers, status).read() };
-            let mut tries = 128;
-
-            while status & Status::HAVE_DATA {
-                if tries == 0 {
-                    break;
-                }
-
-                // Try to read a few more times to "wait" until data has updated.
-                status = unsafe { volatile!(io_buffers, status).read() };
-                std::thread::yield_now();
-                tries -= 1;
-            }
-        }
 
         if let Some(start) = start {
             let elapsed = start.elapsed().context("Elapsed time")?;

@@ -70,9 +70,7 @@ impl Activation {
     // Port of `trigger_link_v0`.
     pub unsafe fn signal_v0(&self, nsec: u64) -> Result<bool> {
         unsafe {
-            let pending = atomic!(self.region, state[0].pending).fetch_sub(1);
-
-            if pending != 1 {
+            if !self.decrement_pending_v2() {
                 return Ok(false);
             }
 
@@ -90,9 +88,7 @@ impl Activation {
     // Port of `trigger_link_v1`.
     pub unsafe fn signal_v1(&self, nsec: u64) -> Result<bool> {
         unsafe {
-            let pending = atomic!(self.region, state[0].pending).fetch_sub(1);
-
-            if pending != 1 {
+            if !self.decrement_pending_v1() {
                 return Ok(false);
             }
 
@@ -111,6 +107,34 @@ impl Activation {
 
             Ok(true)
         }
+    }
+
+    #[allow(unused)]
+    unsafe fn decrement_pending_v1(&self) -> bool {
+        unsafe { atomic!(self.region, state[0].pending).fetch_sub(1) == 1 }
+    }
+
+    #[allow(unused)]
+    unsafe fn decrement_pending_v2(&self) -> bool {
+        let mut tick = 0;
+        let pos = unsafe { atomic!(self.region, state[0].pending) };
+
+        let mut tries = 64;
+
+        while tries > 0 {
+            let value = unsafe { pos.load() };
+
+            if value == 0 {
+                std::thread::yield_now();
+                continue;
+            }
+
+            if unsafe { pos.compare_exchange(value, value - 1) } {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
