@@ -68,7 +68,34 @@ impl ExampleApplication {
         let clock = unsafe { volatile!(io_position, clock).read() };
         let duration = clock.duration;
 
-        tracing::warn!(clock.position, clock.duration);
+        // So this section is temporarily added to "cope" with potential issues
+        // with memory coherence. Note that we do this *after* we have received
+        // the eventfd signal to start processing, and we're not spinning for
+        // long enough to miss a processing window.
+        for port in node.ports.outputs_mut() {
+            let Some(io_buffers) = &mut port.io_buffers else {
+                continue;
+            };
+
+            let mut status = unsafe { volatile!(io_buffers, status).read() };
+            let mut tries = 128;
+
+            while status & Status::HAVE_DATA {
+                if tries == 0 {
+                    break;
+                }
+
+                // Try to read a few more times to "wait" until data has updated.
+                status = unsafe { volatile!(io_buffers, status).read() };
+                std::thread::yield_now();
+                tries -= 1;
+            }
+        }
+
+        if let Some(start) = start {
+            let elapsed = start.elapsed().context("Elapsed time")?;
+            tracing::warn!(?elapsed, "Duration spinning");
+        }
 
         for port in node.ports.inputs_mut() {
             let Some(io_buffers) = &mut port.io_buffers else {
@@ -153,8 +180,7 @@ impl ExampleApplication {
             }
 
             if status & Status::HAVE_DATA {
-                tracing::warn!(?status);
-                continue;
+                return Ok(());
             }
 
             let Some(buffer) = port.buffers.next() else {
@@ -201,7 +227,10 @@ impl ExampleApplication {
                 let signaled = a.signal()?;
 
                 if signaled {
-                    tracing::warn!(self.failed_signals, signaled);
+                    if self.failed_signals > 0 {
+                        tracing::warn!(self.failed_signals, signaled);
+                    }
+
                     self.failed_signals = 0;
                 } else {
                     self.failed_signals += 1;
