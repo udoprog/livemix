@@ -79,7 +79,7 @@ impl ExampleApplication {
 
             let status = unsafe { volatile!(io_buffers, status).read() };
 
-            if status != Status::HAVE_DATA {
+            if !(status & Status::HAVE_DATA) {
                 continue;
             };
 
