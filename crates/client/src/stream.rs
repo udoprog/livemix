@@ -23,18 +23,13 @@ use protocol::EventFd;
 use protocol::Poll;
 use protocol::Prop;
 use protocol::buf::RecvBuf;
-use protocol::consts;
-use protocol::consts::ActivationStatus;
-use protocol::consts::Direction;
+use protocol::consts::{self, ActivationStatus, Direction};
 use protocol::ffi;
 use protocol::flags;
 use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::Ids;
-use protocol::op;
-use protocol::op::{ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
-use protocol::poll::ChangeInterest;
-use protocol::poll::PollEvent;
-use protocol::poll::{Interest, Token};
+use protocol::op::{self, ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
+use protocol::poll::{ChangeInterest, Interest, PollEvent, Token};
 use protocol::types::Header;
 use protocol::{Connection, Properties, prop};
 use slab::Slab;
@@ -190,9 +185,17 @@ impl Stream {
     }
 
     /// Add file descriptors.
+    #[tracing::instrument(skip(self, fds))]
     pub fn add_fds(&mut self, fds: impl IntoIterator<Item = OwnedFd>) {
+        let mut added = 0usize;
+
         for fd in fds {
             self.fds.push_back(ReceivedFd { fd: Some(fd) });
+            added += 1;
+        }
+
+        if added > 0 {
+            tracing::trace!(added, fds = self.fds.len());
         }
     }
 
@@ -246,7 +249,7 @@ impl Stream {
 
                         self.c.client_node_port_update(
                             node.id,
-                            consts::Direction::INPUT,
+                            Direction::INPUT,
                             port.id,
                             &port.name,
                             port.param_values(),
@@ -261,7 +264,7 @@ impl Stream {
 
                         self.c.client_node_port_update(
                             node.id,
-                            consts::Direction::OUTPUT,
+                            Direction::OUTPUT,
                             port.id,
                             &port.name,
                             port.param_values(),
@@ -369,9 +372,13 @@ impl Stream {
         };
 
         if self.header.n_fds() > 0 {
-            let n = self.header.n_fds() as usize;
+            let n_fds = self.header.n_fds() as usize;
 
-            for fd in self.fds.drain(..n) {
+            if n_fds > 0 {
+                tracing::warn!(n_fds, "Freeing file descriptors");
+            }
+
+            for fd in self.fds.drain(..n_fds) {
                 if let Some(fd) = fd.fd {
                     tracing::warn!("Unused file descriptor dropped: {fd:?}");
                 }
@@ -419,7 +426,7 @@ impl Stream {
             tracing::trace!(?e.interest, "connection");
 
             if e.interest.is_read() {
-                let mut fds = [0; 16];
+                let mut fds = [0; 32];
 
                 let n_fds = self
                     .c
@@ -492,6 +499,8 @@ impl Stream {
                 self.header.n_fds()
             );
         }
+
+        tracing::info!(fds = ?self.fds.len(), "Number of fds");
 
         let Some(received) = self.fds.get_mut(index) else {
             bail!(
@@ -1149,7 +1158,7 @@ impl Stream {
         let mut st = pod.read_struct()?;
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
-            .read::<(consts::Direction, PortId, i32, u32, u32)>()
+            .read::<(Direction, PortId, i32, u32, u32)>()
             .context("reading header")?;
 
         let mix_id = u32::try_from(mix_id).ok();
@@ -1272,7 +1281,7 @@ impl Stream {
         };
 
         let mut st = pod.read_struct()?;
-        let direction = consts::Direction::from_raw(st.field()?.read_sized::<u32>()?);
+        let direction = Direction::from_raw(st.field()?.read_sized::<u32>()?);
         let port_id = st.field()?.read::<PortId>()?;
         let _mix_id = st.field()?.read_sized::<u32>()?;
         let id = st.field()?.read_sized::<id::IoType>()?;

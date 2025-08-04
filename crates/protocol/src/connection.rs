@@ -155,13 +155,13 @@ impl Connection {
     /// Receive file descriptors from the server.
     pub fn recv_with_fds(&mut self, recv: &mut RecvBuf, fds: &mut [RawFd]) -> Result<usize, Error> {
         const {
-            assert!(mem::align_of::<MaybeUninit<[u64; 16]>>() >= mem::align_of::<libc::cmsghdr>());
+            assert!(mem::align_of::<MaybeUninit<[u64; 64]>>() >= mem::align_of::<libc::cmsghdr>());
         }
 
         let fd_len = mem::size_of::<RawFd>() * fds.len();
         let size = unsafe { libc::CMSG_SPACE(fd_len as u32) as usize };
 
-        let mut buf = MaybeUninit::<[u64; 16]>::uninit();
+        let mut buf = MaybeUninit::<[u64; 64]>::uninit();
         assert!(mem::size_of_val(&buf) >= size);
 
         let mut iov = libc::iovec {

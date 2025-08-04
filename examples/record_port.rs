@@ -40,6 +40,12 @@ impl ExampleApplication {
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
 
+        for (_, a) in &node.peer_activations {
+            unsafe {
+                a.wait_until_pending();
+            }
+        }
+
         let mut start = None;
 
         if self.tick % 100 == 0 {
