@@ -1,3 +1,4 @@
+use core::fmt;
 use core::mem;
 
 use std::collections::BTreeMap;
@@ -12,6 +13,83 @@ use slab::Slab;
 
 use crate::memory::Region;
 use crate::{Activation, Ports};
+
+/// Collection of data related to client nodes.
+pub struct ClientNodes {
+    data: Slab<ClientNode>,
+}
+
+impl ClientNodes {
+    /// Create a new `ClientNodes` instance.
+    #[inline]
+    pub fn new() -> Self {
+        Self { data: Slab::new() }
+    }
+
+    /// Insert a new client node into the collection.
+    pub(crate) fn insert(&mut self, node: ClientNode) -> ClientNodeId {
+        let id = self.data.insert(node);
+        ClientNodeId::new(id as u32)
+    }
+
+    /// Remove a client node from the collection by its identifier.
+    pub(crate) fn remove(&mut self, id: ClientNodeId) -> Option<ClientNode> {
+        self.data.try_remove(id.index())
+    }
+
+    /// Get a reference to the client node with the given ID.
+    #[inline]
+    pub fn get(&self, id: ClientNodeId) -> Option<&ClientNode> {
+        self.data.get(id.index())
+    }
+
+    /// Get a mutable reference to the client node with the given ID.
+    #[inline]
+    pub fn get_mut(&mut self, id: ClientNodeId) -> Option<&mut ClientNode> {
+        self.data.get_mut(id.index())
+    }
+}
+
+/// A client node identifier.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct ClientNodeId(u32);
+
+impl ClientNodeId {
+    /// Create a new `ClientNodeId` from a `u32`.
+    #[inline]
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    /// Convert the `ClientNodeId` into a `u32`.
+    #[inline]
+    pub(crate) fn into_u32(self) -> u32 {
+        self.0
+    }
+
+    /// Get the index of the client node.
+    ///
+    /// Since it was constructed from a `u32`, it can always be safely coerced
+    /// into one.
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl fmt::Display for ClientNodeId {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl fmt::Debug for ClientNodeId {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 /// A client node.
 #[non_exhaustive]

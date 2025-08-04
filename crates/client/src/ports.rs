@@ -1,3 +1,4 @@
+use core::fmt;
 use core::mem;
 
 use std::collections::BTreeMap;
@@ -9,6 +10,11 @@ use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
 use pod::AsSlice;
+use pod::PodItem;
+use pod::PodSink;
+use pod::PodStream;
+use pod::Readable;
+use pod::Writable;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::consts::{self, Direction};
 use protocol::flags::ParamFlag;
@@ -21,6 +27,44 @@ use tracing::Level;
 
 use crate::{Buffers, Region};
 
+/// The identifier of a port.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct PortId(u32);
+
+impl PortId {
+    /// Get the index of the port.
+    ///
+    /// Since it was constructed from a `usize`, it can always be safely coerced
+    /// into one.
+    fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl fmt::Display for PortId {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Writable for PortId {
+    #[inline]
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), pod::Error> {
+        pod.next()?.write(self.0)
+    }
+}
+
+impl<'de> Readable<'de> for PortId {
+    #[inline]
+    fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, pod::Error> {
+        let pod = pod.next()?;
+        Ok(PortId(pod.read_sized::<u32>()?))
+    }
+}
+
+/// A port parameter with associated flags.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct PortParam<B = DynamicBuf>
@@ -52,10 +96,10 @@ where
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Port {
-    /// Identifier of the port, unique per direction.
-    pub id: u32,
     /// The direction of the port.
-    pub dir: Direction,
+    pub direction: Direction,
+    /// Identifier of the port, unique per direction.
+    pub id: PortId,
     /// The name of the port.
     pub name: String,
     /// Buffers associated with the port.
@@ -74,12 +118,6 @@ pub struct Port {
 }
 
 impl Port {
-    /// Access the port id.
-    #[inline]
-    pub(crate) fn id(&self) -> u32 {
-        self.id
-    }
-
     /// Take the modified state of the port.
     #[inline]
     pub(crate) fn take_modified(&mut self) -> bool {
@@ -134,17 +172,6 @@ impl Port {
         self.param_values.insert(id, params);
         self.set_flag(id, flags::ParamFlag::READ);
         self.modified = true;
-
-        // Decode a received parameter.
-        match id {
-            id::Param::FORMAT => {
-                if let Some([param]) = self.param_values.get(&id).map(Vec::as_slice) {
-                    std::dbg!(param.value.as_ref().read::<object::AudioFormat>()?);
-                }
-            }
-            _ => {}
-        }
-
         Ok(())
     }
 
@@ -181,6 +208,14 @@ impl Port {
         Some(param)
     }
 
+    /// Get the values of a parameter.
+    pub fn get_param(&self, id: Param) -> &[PortParam<DynamicBuf>] {
+        self.param_values
+            .get(&id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
     /// Get parameters from the port.
     pub(crate) fn param_values(&self) -> &BTreeMap<Param, Vec<PortParam<impl AsSlice>>> {
         &self.param_values
@@ -193,7 +228,7 @@ impl Port {
 
     /// Replace the current set of buffers for this port.
     #[inline]
-    #[tracing::instrument(skip(self), fields(port_id = self.id), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self), fields(port_id = ?self.id), ret(level = Level::TRACE))]
     pub(crate) fn replace_buffers(&mut self, buffers: Buffers) -> Option<Buffers> {
         self.buffers.replace(buffers)
     }
@@ -237,14 +272,18 @@ impl Ports {
 
     /// Insert a new port in the specified direction and return the inserted
     /// port for configuration.
-    pub fn insert(&mut self, dir: Direction) -> Result<&mut Port> {
-        let ports = self.get_direction_mut(dir)?;
+    pub fn insert(&mut self, direction: Direction) -> Result<&mut Port> {
+        let ports = self.get_direction_mut(direction)?;
 
-        let id = ports.len() as u32;
+        let Ok(id) = u32::try_from(ports.len()) else {
+            bail!("Too many ports in {direction:?} direction");
+        };
+
+        let id = PortId(id);
 
         let mut port = Port {
+            direction,
             id,
-            dir,
             modified: true,
             name: String::new(),
             buffers: None,
@@ -257,18 +296,14 @@ impl Ports {
         };
 
         ports.push(port);
-        Ok(&mut ports[id as usize])
+        Ok(&mut ports[id.index()])
     }
 
     /// Get a port.
-    fn get(&self, direction: Direction, id: u32) -> Result<&Port> {
-        let Ok(id) = usize::try_from(id) else {
-            bail!("Invalid port id: {id}");
-        };
-
+    pub fn get(&self, direction: Direction, id: PortId) -> Result<&Port> {
         let ports = self.get_direction(direction)?;
 
-        let Some(port) = ports.get(id) else {
+        let Some(port) = ports.get(id.index()) else {
             bail!("Port {id} not found in {direction:?} ports");
         };
 
@@ -276,14 +311,10 @@ impl Ports {
     }
 
     /// Get a port mutably.
-    pub(crate) fn get_mut(&mut self, direction: Direction, id: u32) -> Result<&mut Port> {
-        let Ok(id) = usize::try_from(id) else {
-            bail!("Invalid port id: {id}");
-        };
-
+    pub fn get_mut(&mut self, direction: Direction, id: PortId) -> Result<&mut Port> {
         let ports = self.get_direction_mut(direction)?;
 
-        let Some(port) = ports.get_mut(id) else {
+        let Some(port) = ports.get_mut(id.index()) else {
             bail!("Port {id} not found in {direction:?} ports");
         };
 

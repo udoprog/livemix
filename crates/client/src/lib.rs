@@ -12,7 +12,7 @@ mod client;
 use self::client::Client;
 
 mod stream;
-pub use self::stream::{Stream, StreamEvent};
+pub use self::stream::Stream;
 
 pub mod memory;
 use self::memory::{Memory, Region};
@@ -21,12 +21,13 @@ mod buffer;
 use self::buffer::Buffers;
 
 mod client_node;
-pub use self::client_node::ClientNode;
+pub use self::client_node::{ClientNode, ClientNodeId, ClientNodes};
 
 mod ports;
-pub use self::ports::{Port, PortParam, Ports};
+pub use self::ports::{Port, PortId, PortParam, Ports};
 
 mod activation;
 pub use self::activation::Activation;
 
+pub mod events;
 pub mod ptr;

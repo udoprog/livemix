@@ -4,7 +4,7 @@ use pod::{Readable, Writable};
 use crate::id;
 
 /// Some of the contents of the format parameter.
-#[derive(Debug, PartialEq, Readable, Writable)]
+#[derive(Debug, Clone, PartialEq, Readable, Writable)]
 #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
 pub struct Format {
     /// The media type of the format.
@@ -16,7 +16,7 @@ pub struct Format {
 }
 
 /// A raw audio format.
-#[derive(Debug, PartialEq, Readable, Writable)]
+#[derive(Debug, Clone, PartialEq, Readable, Writable)]
 #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
 pub struct AudioFormat {
     /// The media type of the format.

@@ -1,4 +1,5 @@
 use core::ffi::CStr;
+use core::fmt;
 use core::mem;
 use core::slice;
 
@@ -24,6 +25,7 @@ use protocol::Prop;
 use protocol::buf::RecvBuf;
 use protocol::consts;
 use protocol::consts::ActivationStatus;
+use protocol::consts::Direction;
 use protocol::ffi;
 use protocol::flags;
 use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
@@ -40,19 +42,13 @@ use tracing::Level;
 
 use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
+use crate::events::RemoveNodeParamEvent;
+use crate::events::{RemovePortParamEvent, SetNodeParamEvent, SetPortParamEvent, StreamEvent};
 use crate::ports::PortParam;
 use crate::ptr::{atomic, volatile};
-use crate::{Buffers, Client, ClientNode, Memory, Ports, Region};
-
-/// A client node identifier.
-#[repr(transparent)]
-pub struct ClientNodeId(usize);
-
-/// A stream event.
-pub enum StreamEvent {
-    Process(ClientNodeId),
-    NodeCreated(ClientNodeId),
-}
+use crate::{
+    Buffers, Client, ClientNode, ClientNodeId, ClientNodes, Memory, PortId, Ports, Region,
+};
 
 const CREATE_CLIENT_NODE: i32 = 0x2000;
 const GET_REGISTRY_SYNC: i32 = 0x1000;
@@ -79,15 +75,15 @@ pub struct Stream {
     id_to_registry: BTreeMap<u32, usize>,
     factories: BTreeMap<String, usize>,
     globals: GlobalMap,
-    client_nodes: Slab<ClientNode>,
+    client_nodes: ClientNodes,
     local_id_to_kind: BTreeMap<u32, Kind>,
     has_header: bool,
     header: Header,
     ids: Ids,
     tokens: Ids,
     process_set: Ids,
-    read_to_client: HashMap<Token, usize>,
-    write_to_client: HashMap<Token, usize>,
+    read_to_client: HashMap<Token, ClientNodeId>,
+    write_to_client: HashMap<Token, ClientNodeId>,
     fds: VecDeque<ReceivedFd>,
     ops: VecDeque<Op>,
     memory: Memory,
@@ -127,7 +123,7 @@ impl Stream {
             id_to_registry: BTreeMap::new(),
             factories: BTreeMap::new(),
             globals: GlobalMap::new(),
-            client_nodes: Slab::new(),
+            client_nodes: ClientNodes::new(),
             local_id_to_kind: BTreeMap::new(),
             has_header: false,
             header: Header::default(),
@@ -145,18 +141,18 @@ impl Stream {
     }
 
     /// Get a node.
-    pub fn node(&self, node: ClientNodeId) -> Result<&ClientNode> {
-        let Some(node) = self.client_nodes.get(node.0) else {
-            bail!("No client node found for index {}", node.0);
+    pub fn node(&self, node_id: ClientNodeId) -> Result<&ClientNode> {
+        let Some(node) = self.client_nodes.get(node_id) else {
+            bail!("No client node found for index {}", node_id);
         };
 
         Ok(node)
     }
 
     /// Get a mutable node.
-    pub fn node_mut(&mut self, node: ClientNodeId) -> Result<&mut ClientNode> {
-        let Some(node) = self.client_nodes.get_mut(node.0) else {
-            bail!("No client node found for index {}", node.0);
+    pub fn node_mut(&mut self, node_id: ClientNodeId) -> Result<&mut ClientNode> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("No client node found for index {}", node_id);
         };
 
         Ok(node)
@@ -224,19 +220,19 @@ impl Stream {
                         tracing_error!(error, "Failed to construct client node");
                     }
                 }
-                Op::NodeCreated { client } => {
-                    return Ok(Some(StreamEvent::NodeCreated(ClientNodeId(client))));
+                Op::NodeCreated { node_id } => {
+                    return Ok(Some(StreamEvent::NodeCreated(node_id)));
                 }
-                Op::NodeActive { client } => {
-                    let Some(node) = self.client_nodes.get(client) else {
-                        bail!("Missing client node for index {client}");
+                Op::NodeActive { node_id } => {
+                    let Some(node) = self.client_nodes.get(node_id) else {
+                        bail!("Missing client node for index {node_id}");
                     };
 
                     self.c.client_node_set_active(node.id, true)?;
                 }
-                Op::NodeUpdate { client } => {
-                    let Some(node) = self.client_nodes.get_mut(client) else {
-                        bail!("Missing client node for index {client}");
+                Op::NodeUpdate { node_id, what } => {
+                    let Some(node) = self.client_nodes.get_mut(node_id) else {
+                        bail!("Missing client node for index {node_id}");
                     };
 
                     if node.take_modified() {
@@ -251,7 +247,7 @@ impl Stream {
                         self.c.client_node_port_update(
                             node.id,
                             consts::Direction::INPUT,
-                            port.id(),
+                            port.id,
                             &port.name,
                             port.param_values(),
                             port.param_flags(),
@@ -266,15 +262,47 @@ impl Stream {
                         self.c.client_node_port_update(
                             node.id,
                             consts::Direction::OUTPUT,
-                            port.id(),
+                            port.id,
                             &port.name,
                             port.param_values(),
                             port.param_flags(),
                         )?;
                     }
+
+                    if let Some(what) = what {
+                        let ev = match what {
+                            NodeUpdateWhat::SetNodeParam(param) => {
+                                StreamEvent::SetNodeParam(SetNodeParamEvent { node_id, param })
+                            }
+                            NodeUpdateWhat::RemoveNodeParam(param) => {
+                                StreamEvent::RemoveNodeParam(RemoveNodeParamEvent {
+                                    node_id,
+                                    param,
+                                })
+                            }
+                            NodeUpdateWhat::SetPortParam(direction, port_id, param) => {
+                                StreamEvent::SetPortParam(SetPortParamEvent {
+                                    node_id,
+                                    direction,
+                                    port_id,
+                                    param,
+                                })
+                            }
+                            NodeUpdateWhat::RemovePortParam(direction, port_id, param) => {
+                                StreamEvent::RemovePortParam(RemovePortParamEvent {
+                                    node_id,
+                                    direction,
+                                    port_id,
+                                    param,
+                                })
+                            }
+                        };
+
+                        return Ok(Some(ev));
+                    }
                 }
-                Op::NodeStart { client } => {
-                    if let Some(node) = self.client_nodes.get(client)
+                Op::NodeStart { node_id } => {
+                    if let Some(node) = self.client_nodes.get(node_id)
                         && let Some(a) = &node.activation
                     {
                         if unsafe {
@@ -287,25 +315,25 @@ impl Stream {
                         }
                     } else {
                         tracing::error!(
-                            ?client,
+                            ?node_id,
                             "Cannot start node, missing activation for client"
                         );
                     }
                 }
-                Op::NodePause { client } => {
-                    if let Some(node) = self.client_nodes.get(client)
+                Op::NodePause { node_id } => {
+                    if let Some(node) = self.client_nodes.get(node_id)
                         && let Some(a) = &node.activation
                     {
                         unsafe { atomic!(a, status).store(ActivationStatus::INACTIVE) };
                     } else {
                         tracing::error!(
-                            ?client,
+                            ?node_id,
                             "Cannot pause node, missing activation for client"
                         );
                     }
                 }
-                Op::NodeReadInterest { client } => {
-                    self.node_read_interest(client)?;
+                Op::NodeReadInterest { node_id } => {
+                    self.node_read_interest(node_id)?;
                 }
             }
         }
@@ -368,8 +396,8 @@ impl Stream {
             }
         }
 
-        if let Some(index) = self.process_set.take_next() {
-            return Ok(Some(StreamEvent::Process(ClientNodeId(index as usize))));
+        if let Some(raw_id) = self.process_set.take_next() {
+            return Ok(Some(StreamEvent::Process(ClientNodeId::new(raw_id))));
         }
 
         while let Some((fd, token, interest)) = self.add_interest() {
@@ -425,13 +453,13 @@ impl Stream {
     /// Handle read on custom token.
     #[tracing::instrument(skip(self))]
     pub fn handle_read(&mut self, token: Token) -> Result<()> {
-        let Some(index) = self.read_to_client.get(&token) else {
+        let Some(node_id) = self.read_to_client.get(&token) else {
             tracing::warn!(?token, "No client found for token");
             return Ok(());
         };
 
-        let Some(client) = self.client_nodes.get_mut(*index) else {
-            tracing::warn!(?index, "No client found for index");
+        let Some(client) = self.client_nodes.get_mut(*node_id) else {
+            tracing::warn!(?node_id, "No client found for index");
             return Ok(());
         };
 
@@ -444,7 +472,7 @@ impl Stream {
             return Ok(());
         };
 
-        self.process_set.set(*index as u32);
+        self.process_set.set(node_id.into_u32());
         Ok(())
     }
 
@@ -518,17 +546,17 @@ impl Stream {
         self.local_id_to_kind
             .insert(new_id, Kind::ClientNode(index));
 
-        self.ops.push_back(Op::NodeCreated { client: index });
+        self.ops.push_back(Op::NodeCreated { node_id: index });
         Ok(())
     }
 
-    fn node_read_interest(&mut self, client: usize) -> Result<()> {
-        let Some(node) = self.client_nodes.get(client) else {
-            bail!("No client found for index {client}");
+    fn node_read_interest(&mut self, node_id: ClientNodeId) -> Result<()> {
+        let Some(node) = self.client_nodes.get(node_id) else {
+            bail!("No client found for index {node_id}");
         };
 
         if let Some(read_fd) = &node.read_fd {
-            self.read_to_client.insert(node.read_token, client);
+            self.read_to_client.insert(node.read_token, node_id);
             self.add_interest.push_back((
                 read_fd.as_raw_fd(),
                 node.read_token,
@@ -537,7 +565,7 @@ impl Stream {
         }
 
         if let Some(write_fd) = &node.write_fd {
-            self.write_to_client.insert(node.write_token, client);
+            self.write_to_client.insert(node.write_token, node_id);
             self.add_interest.push_back((
                 write_fd.as_raw_fd(),
                 node.write_token,
@@ -623,37 +651,37 @@ impl Stream {
                     }
                 }
             }
-            Kind::ClientNode(index) => {
+            Kind::ClientNode(node_id) => {
                 let op = ClientNodeEvent::from_raw(self.header.op());
                 tracing::trace!("Event: {op}");
 
                 match op {
                     ClientNodeEvent::TRANSPORT => {
-                        self.client_node_transport(index, pod).context(op)?;
+                        self.client_node_transport(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::SET_PARAM => {
-                        self.client_node_set_param(index, pod).context(op)?;
+                        self.client_node_set_param(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::SET_IO => {
-                        self.client_node_set_io(index, pod).context(op)?;
+                        self.client_node_set_io(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::COMMAND => {
-                        self.client_node_command(index, pod).context(op)?;
+                        self.client_node_command(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::PORT_SET_PARAM => {
-                        self.client_node_port_set_param(index, pod).context(op)?;
+                        self.client_node_port_set_param(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::USE_BUFFERS => {
-                        self.client_node_use_buffers(index, pod).context(op)?;
+                        self.client_node_use_buffers(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::PORT_SET_IO => {
-                        self.client_node_port_set_io(index, pod).context(op)?;
+                        self.client_node_port_set_io(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::SET_ACTIVATION => {
-                        self.client_node_set_activation(index, pod).context(op)?;
+                        self.client_node_set_activation(node_id, pod).context(op)?;
                     }
                     ClientNodeEvent::PORT_SET_MIX_INFO => {
-                        self.client_node_set_mix_info(index, pod).context(op)?;
+                        self.client_node_set_mix_info(node_id, pod).context(op)?;
                     }
                     op => {
                         tracing::warn!("Unsupported event: {op}");
@@ -852,8 +880,11 @@ impl Stream {
             match *kind {
                 Kind::Registry => {}
                 Kind::ClientNode(index) => {
-                    self.ops.push_back(Op::NodeActive { client: index });
-                    self.ops.push_back(Op::NodeUpdate { client: index });
+                    self.ops.push_back(Op::NodeActive { node_id: index });
+                    self.ops.push_back(Op::NodeUpdate {
+                        node_id: index,
+                        what: None,
+                    });
                 }
             }
         }
@@ -884,13 +915,12 @@ impl Stream {
             if let Some(kind) = self.local_id_to_kind.remove(&local_id) {
                 match kind {
                     Kind::Registry => {}
-                    Kind::ClientNode(index) => {
-                        let Some(..) = self.client_nodes.try_remove(index) else {
-                            tracing::warn!(index, "Tried to remove unknown client node");
-                            return Ok(());
-                        };
-
-                        tracing::info!(index, "Removed client node");
+                    Kind::ClientNode(node_id) => {
+                        if self.client_nodes.remove(node_id).is_none() {
+                            tracing::warn!(?node_id, "Tried to remove unknown client node");
+                        } else {
+                            tracing::info!(?node_id, "Removed client node");
+                        }
                     }
                 }
             }
@@ -900,7 +930,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_transport(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
+    fn client_node_transport(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.read_struct()?;
         let read_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
         let write_fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
@@ -908,8 +938,8 @@ impl Stream {
         let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         if let Some(a) = node.activation.take() {
@@ -935,48 +965,50 @@ impl Stream {
             }
         }
 
-        tracing::debug!(index, ?read_fd, ?write_fd, mem_id, offset, size,);
-
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
-        };
+        tracing::debug!(?node_id, ?read_fd, ?write_fd, mem_id, offset, size);
 
         node.read_fd = read_fd.map(EventFd::from);
         node.write_fd = write_fd.map(EventFd::from);
 
         if node.read_fd.is_some() {
-            self.ops.push_back(Op::NodeReadInterest { client: index });
+            self.ops
+                .push_back(Op::NodeReadInterest { node_id: node_id });
         }
 
         Ok(())
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_param(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_set_param(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let mut st = pod.read_struct()?;
         let id = st.field()?.read_sized::<Param>()?;
         let _flags = st.field()?.read_sized::<i32>()?;
 
-        if let Some(obj) = st.field()?.read_option()? {
+        let what = if let Some(obj) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
             node.set_param(id, [obj.read_object()?.to_owned()?]);
+            NodeUpdateWhat::SetNodeParam(id)
         } else {
             tracing::trace!(?id, "remove");
             node.remove_param(id);
-        }
+            NodeUpdateWhat::RemoveNodeParam(id)
+        };
 
-        self.ops.push_back(Op::NodeUpdate { client: index });
+        self.ops.push_back(Op::NodeUpdate {
+            node_id: node_id,
+            what: Some(what),
+        });
         Ok(())
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_io(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_set_io(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let mut st = pod.read_struct()?;
@@ -1041,9 +1073,9 @@ impl Stream {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_command(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_command(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let mut st = pod.as_ref().read_struct()?;
@@ -1056,10 +1088,10 @@ impl Stream {
 
         match object_id {
             id::NodeCommand::START => {
-                self.ops.push_back(Op::NodeStart { client: index });
+                self.ops.push_back(Op::NodeStart { node_id });
             }
             id::NodeCommand::PAUSE => {
-                self.ops.push_back(Op::NodePause { client: index });
+                self.ops.push_back(Op::NodePause { node_id });
             }
             _ => {
                 tracing::warn!(?object_id, "Unsupported command");
@@ -1070,41 +1102,54 @@ impl Stream {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_port_set_param(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_port_set_param(
+        &mut self,
+        node_id: ClientNodeId,
+        pod: Pod<Slice<'_>>,
+    ) -> Result<()> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let mut st = pod.read_struct()?;
-        let direction = consts::Direction::from_raw(st.field()?.read_sized::<u32>()?);
-        let port_id = st.field()?.read_sized::<u32>()?;
+        let direction = st.field()?.read::<Direction>()?;
+        let port_id = st.field()?.read::<PortId>()?;
         let id = st.field()?.read_sized::<Param>()?;
         let flags = st.field()?.read_sized::<u32>()?;
 
         let port = node.ports.get_mut(direction, port_id)?;
 
-        if let Some(param) = st.field()?.read_option()? {
+        let what = if let Some(param) = st.field()?.read_option()? {
             tracing::trace!(?id, flags, object = ?param.as_ref().read_object()?, "set");
             port.set_param(id, [PortParam::with_flags(param.read_object()?, flags)])?;
+            NodeUpdateWhat::SetPortParam(direction, port_id, id)
         } else {
             tracing::trace!(?id, flags, "remove");
             _ = port.remove_param(id);
-        }
+            NodeUpdateWhat::RemovePortParam(direction, port_id, id)
+        };
 
-        self.ops.push_back(Op::NodeUpdate { client: index });
+        self.ops.push_back(Op::NodeUpdate {
+            node_id: node_id,
+            what: Some(what),
+        });
         Ok(())
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_use_buffers(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_use_buffers(
+        &mut self,
+        node_id: ClientNodeId,
+        pod: Pod<Slice<'_>>,
+    ) -> Result<()> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let mut st = pod.read_struct()?;
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
-            .read::<(consts::Direction, u32, i32, u32, u32)>()
+            .read::<(consts::Direction, PortId, i32, u32, u32)>()
             .context("reading header")?;
 
         let mix_id = u32::try_from(mix_id).ok();
@@ -1217,14 +1262,18 @@ impl Stream {
         Ok(())
     }
 
-    fn client_node_port_set_io(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_port_set_io(
+        &mut self,
+        node_id: ClientNodeId,
+        pod: Pod<Slice<'_>>,
+    ) -> Result<()> {
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let mut st = pod.read_struct()?;
         let direction = consts::Direction::from_raw(st.field()?.read_sized::<u32>()?);
-        let port_id = st.field()?.read_sized::<u32>()?;
+        let port_id = st.field()?.read::<PortId>()?;
         let _mix_id = st.field()?.read_sized::<u32>()?;
         let id = st.field()?.read_sized::<id::IoType>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
@@ -1232,7 +1281,7 @@ impl Stream {
         let size = st.field()?.read_sized::<usize>()?;
         let port = node.ports.get_mut(direction, port_id)?;
 
-        let span = tracing::info_span!("client_node_port_set_io", ?direction, port_id, ?id,);
+        let span = tracing::info_span!("client_node_port_set_io", ?direction, ?port_id, ?id,);
         let _span = span.enter();
 
         match id {
@@ -1291,7 +1340,11 @@ impl Stream {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_activation(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
+    fn client_node_set_activation(
+        &mut self,
+        node_id: ClientNodeId,
+        pod: Pod<Slice<'_>>,
+    ) -> Result<()> {
         let mut st = pod.read_struct()?;
 
         let peer_id = st.field()?.read_sized::<u32>()?;
@@ -1300,8 +1353,8 @@ impl Stream {
         let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
-        let Some(node) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+        let Some(node) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let Ok(mem_id) = u32::try_from(mem_id) else {
@@ -1310,7 +1363,7 @@ impl Stream {
         };
 
         let Some(fd) = fd else {
-            bail!("Missing fd for peer {peer_id} in node {index}");
+            bail!("Missing fd for peer {peer_id} in node {node_id}");
         };
 
         let region = self.memory.map(mem_id, offset, size)?.cast()?;
@@ -1322,9 +1375,13 @@ impl Stream {
     }
 
     #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_mix_info(&mut self, index: usize, pod: Pod<Slice<'_>>) -> Result<()> {
-        let Some(..) = self.client_nodes.get_mut(index) else {
-            bail!("Missing client node {index}");
+    fn client_node_set_mix_info(
+        &mut self,
+        node_id: ClientNodeId,
+        pod: Pod<Slice<'_>>,
+    ) -> Result<()> {
+        let Some(..) = self.client_nodes.get_mut(node_id) else {
+            bail!("Missing client node {node_id}");
         };
 
         let st = pod.read_struct()?;
@@ -1374,7 +1431,7 @@ struct RegistryState {
 #[derive(Debug)]
 enum Kind {
     Registry,
-    ClientNode(usize),
+    ClientNode(ClientNodeId),
 }
 
 #[derive(Debug)]
@@ -1383,17 +1440,41 @@ struct ReceivedFd {
 }
 
 #[derive(Debug)]
+enum NodeUpdateWhat {
+    SetNodeParam(Param),
+    RemoveNodeParam(Param),
+    SetPortParam(Direction, PortId, Param),
+    RemovePortParam(Direction, PortId, Param),
+}
+
+#[derive(Debug)]
 enum Op {
     CoreHello,
     GetRegistry,
-    Pong { id: u32, seq: u32 },
+    Pong {
+        id: u32,
+        seq: u32,
+    },
     ConstructNode,
-    NodeCreated { client: usize },
-    NodeActive { client: usize },
-    NodeUpdate { client: usize },
-    NodeStart { client: usize },
-    NodePause { client: usize },
-    NodeReadInterest { client: usize },
+    NodeCreated {
+        node_id: ClientNodeId,
+    },
+    NodeActive {
+        node_id: ClientNodeId,
+    },
+    NodeUpdate {
+        node_id: ClientNodeId,
+        what: Option<NodeUpdateWhat>,
+    },
+    NodeStart {
+        node_id: ClientNodeId,
+    },
+    NodePause {
+        node_id: ClientNodeId,
+    },
+    NodeReadInterest {
+        node_id: ClientNodeId,
+    },
 }
 
 #[derive(Debug)]

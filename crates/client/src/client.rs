@@ -15,6 +15,7 @@ use protocol::poll::{ChangeInterest, Interest};
 use protocol::{Connection, Properties};
 use tracing::Level;
 
+use crate::PortId;
 use crate::ports::PortParam;
 
 #[derive(Debug)]
@@ -303,7 +304,7 @@ impl Client {
         &mut self,
         id: u32,
         direction: consts::Direction,
-        port_id: u32,
+        port_id: PortId,
         name: &str,
         param_values: &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>>,
         param_flags: &BTreeMap<id::Param, flags::ParamFlag>,

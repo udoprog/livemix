@@ -1,26 +1,28 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::mem;
 use std::os::fd::AsRawFd;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
+use client::events::StreamEvent;
 use client::ptr::{atomic, volatile};
-use client::{ClientNode, Port, PortParam, StreamEvent};
+use client::{ClientNode, Port, PortId, PortParam};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
 use protocol::consts::{ActivationStatus, Direction};
 use protocol::flags::Status;
 use protocol::id::{
-    AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param, ParamBuffers,
-    ParamIo, ParamMeta,
+    self, AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
+    ParamBuffers, ParamIo, ParamMeta,
 };
 use protocol::poll::{Interest, PollEvent};
-use protocol::{Connection, Poll, TimerFd, ffi, flags};
+use protocol::{Connection, Poll, TimerFd, ffi, flags, object};
 
 const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
-const DEFAULT_RATE: f32 = 48000.0;
+const DEFAULT_RATE: u32 = 48000;
 const DEFAULT_VOLUME: f32 = 0.5;
 
 struct ExampleApplication {
@@ -28,6 +30,7 @@ struct ExampleApplication {
     buf: Vec<f32>,
     writer: hound::WavWriter<File>,
     accumulator: f32,
+    formats: HashMap<(Direction, PortId), object::AudioFormat>,
 }
 
 impl ExampleApplication {
@@ -66,6 +69,15 @@ impl ExampleApplication {
             if status != Status::HAVE_DATA {
                 continue;
             };
+
+            let Some(format) = self.formats.get(&(port.direction, port.id)) else {
+                continue;
+            };
+
+            if format.rate != DEFAULT_RATE {
+                tracing::warn!(?format, "Unsupported rate on input port");
+                continue;
+            }
 
             let id = unsafe { volatile!(io_buffers, buffer_id).read() };
 
@@ -106,52 +118,61 @@ impl ExampleApplication {
             }
         }
 
-        if true {
-            for port in node.ports.outputs_mut() {
-                let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &mut port.io_buffers)
-                else {
-                    continue;
-                };
+        for port in node.ports.outputs_mut() {
+            let (Some(buffers), Some(io_buffers)) = (&mut port.buffers, &mut port.io_buffers)
+            else {
+                continue;
+            };
 
-                let status = unsafe { volatile!(io_buffers, status).read() };
+            let Some(format) = self.formats.get(&(port.direction, port.id)) else {
+                continue;
+            };
 
-                if !matches!(status, Status::OK | Status::NEED_DATA) {
-                    continue;
-                };
+            if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
+                tracing::warn!(?format, "Unsupported channel count on output port");
+                continue;
+            }
 
-                let Some(buffer) = buffers.buffers.get_mut(1) else {
-                    bail!("Output no buffer for port {}", port.id);
-                };
+            let status = unsafe { volatile!(io_buffers, status).read() };
 
-                let _ = &buffer.metas[0];
-                let data = &mut buffer.datas[0];
+            if !matches!(status, Status::OK | Status::NEED_DATA) {
+                continue;
+            };
 
-                let samples;
+            let Some(buffer) = buffers.buffers.get_mut(1) else {
+                bail!("Output no buffer for port {}", port.id);
+            };
 
-                unsafe {
-                    let chunk = data.chunk.as_mut();
-                    samples = data.region.len() / mem::size_of::<f32>();
+            let _ = &buffer.metas[0];
+            let data = &mut buffer.datas[0];
 
-                    let mut ptr = data.region.cast_array::<f32>()?;
+            let samples;
 
-                    for d in ptr.as_slice_mut() {
-                        *d = self.accumulator.sin() * DEFAULT_VOLUME;
-                        self.accumulator += M_PI_M2 * 440.0 / DEFAULT_RATE;
-                    }
+            unsafe {
+                let chunk = data.chunk.as_mut();
+                samples = data.region.len() / mem::size_of::<f32>();
 
-                    chunk.size = (samples * mem::size_of::<f32>()) as u32;
-                    chunk.offset = 0;
-                    chunk.stride = 4;
+                let mut ptr = data.region.cast_array::<f32>()?;
+
+                for d in ptr.as_slice_mut() {
+                    *d = self.accumulator.sin() * DEFAULT_VOLUME;
+                    self.accumulator += M_PI_M2 * 440.0 / format.rate as f32;
                 }
 
-                unsafe {
-                    volatile!(io_buffers, buffer_id).replace(buffer.id);
-                    volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
-                };
+                self.accumulator %= M_PI_M2;
 
-                if self.tick % 1000 == 0 {
-                    tracing::warn!(?data.flags, samples);
-                }
+                chunk.size = (samples * mem::size_of::<f32>()) as u32;
+                chunk.offset = 0;
+                chunk.stride = 4;
+            }
+
+            unsafe {
+                volatile!(io_buffers, buffer_id).replace(buffer.id);
+                volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
+            };
+
+            if self.tick % 1000 == 0 {
+                tracing::warn!(?data.flags, samples);
             }
         }
 
@@ -231,6 +252,7 @@ fn main() -> Result<()> {
         buf: Vec::with_capacity(1024 * 1024),
         writer,
         accumulator: 0.0,
+        formats: HashMap::new(),
     };
 
     loop {
@@ -250,6 +272,46 @@ fn main() -> Result<()> {
                 StreamEvent::Process(node) => {
                     let node = stream.node_mut(node)?;
                     app.process(node).context("Processing node")?;
+                }
+                StreamEvent::SetPortParam(ev) => {
+                    // Decode a received parameter.
+                    match ev.param {
+                        id::Param::FORMAT => {
+                            let node = stream.node(ev.node_id)?;
+                            let port = node.ports.get(ev.direction, ev.port_id)?;
+
+                            if let [param] = port.get_param(ev.param) {
+                                let format = param.value.as_ref().read::<object::Format>()?;
+
+                                match format.media_type {
+                                    MediaType::AUDIO => {
+                                        let audio_format =
+                                            param.value.as_ref().read::<object::AudioFormat>()?;
+                                        app.formats
+                                            .insert((ev.direction, ev.port_id), audio_format);
+                                    }
+                                    other => {
+                                        tracing::error!(?other, "Unsupported media type on port");
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                StreamEvent::RemovePortParam(ev) => match ev.param {
+                    id::Param::FORMAT => {
+                        tracing::info!(
+                            "Removed format parameter from port {}/{}",
+                            ev.direction,
+                            ev.port_id
+                        );
+                        app.formats.remove(&(ev.direction, ev.port_id));
+                    }
+                    _ => {}
+                },
+                _ => {
+                    // Other events, ignore.
                 }
             }
         }
