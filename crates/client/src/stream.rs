@@ -539,14 +539,14 @@ impl Stream {
         let write_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
         let read_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
 
-        let index =
+        let node_id =
             self.client_nodes
                 .insert(ClientNode::new(new_id, ports, write_token, read_token)?);
 
         self.local_id_to_kind
-            .insert(new_id, Kind::ClientNode(index));
+            .insert(new_id, Kind::ClientNode(node_id));
 
-        self.ops.push_back(Op::NodeCreated { node_id: index });
+        self.ops.push_back(Op::NodeCreated { node_id: node_id });
         Ok(())
     }
 

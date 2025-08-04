@@ -44,6 +44,8 @@ pub struct ActivationState {
 /// the future. This makes it possible to look ahead in the scheduled
 /// segments
 /// and anticipate the changes in the timeline.
+///
+/// This is the equivalent of `struct spa_io_position`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct IoPosition {
@@ -63,6 +65,7 @@ pub struct IoPosition {
     pub segments: [IoSegment; IO_POSITION_MAX_SEGMENTS],
 }
 
+/// This is the equivalent of `struct spa_io_video_size`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IoVideoSize {
@@ -94,6 +97,8 @@ pub struct IoVideoSize {
 ///
 /// Extra information can be placed in the segment by setting the valid flags
 /// and filling up the corresponding structures.
+///
+/// This is the equivalent of `struct spa_io_segment`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct IoSegment {
@@ -119,7 +124,9 @@ pub struct IoSegment {
     pub video: IoSegmentVideo,
 }
 
-/// video frame segment
+/// Video frame segment.
+///
+/// This is the equivalent of `struct spa_io_video_bar`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IoSegmentVideo {
@@ -151,7 +158,9 @@ pub struct Rectangle {
     pub height: u32,
 }
 
-/// bar and beat segment
+/// Bar and beat segment.
+///
+/// This is the equivalent of `struct spa_io_segment_bar`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct IoSegmentBar {
@@ -170,6 +179,7 @@ pub struct IoSegmentBar {
     _pad: Pad<[u32; 8]>,
 }
 
+/// This is the equivalent of `struct pw_node_activation`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct NodeActivation {
@@ -266,6 +276,8 @@ fn test_layout() {
 ///
 /// A node is a driver when \ref spa_io_clock.id in \ref SPA_IO_Clock and \ref
 /// spa_io_position.clock.id in \ref SPA_IO_Position are the same.
+///
+/// This is the equivalent of `struct spa_io_clock`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct IoClock {
@@ -329,6 +341,8 @@ pub struct IoClock {
 ///
 /// Status can also be a negative errno value to indicate errors. such as:
 /// -EINVAL: buffer_id is invalid -EPIPE: no more buffers available
+///
+/// This is the equivalent of `struct spa_io_buffers`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IoBuffers {
@@ -339,6 +353,8 @@ pub struct IoBuffers {
 }
 
 /// Describes essential buffer header metadata such as flags and timestamps.
+///
+/// This is the equivalent of `struct spa_meta_header`.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MetaHeader {
@@ -355,6 +371,8 @@ pub struct MetaHeader {
 }
 
 /// Chunk of memory, can change for each buffer.
+///
+/// This is the equivalent of `struct spa_chunk`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chunk {

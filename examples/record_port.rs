@@ -24,6 +24,7 @@ const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
 const DEFAULT_RATE: u32 = 48000;
 const DEFAULT_VOLUME: f32 = 0.5;
+const SINE_TONE: f32 = 440.0;
 
 struct ExampleApplication {
     tick: usize,
@@ -124,6 +125,8 @@ impl ExampleApplication {
                 continue;
             };
 
+            std::dbg!(port.io_clock.is_some());
+
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
             };
@@ -139,24 +142,34 @@ impl ExampleApplication {
                 continue;
             };
 
-            let Some(buffer) = buffers.buffers.get_mut(1) else {
+            // The way we are currently implemented, all buffers are consumed
+            // immediately so to the best of my knowledge they are available for
+            // output.
+            //
+            // We will have to implement proper buffer management later though.
+            let Some(buffer) = buffers.buffers.get_mut(self.tick % 2) else {
                 bail!("Output no buffer for port {}", port.id);
             };
 
-            let _ = &buffer.metas[0];
+            let meta = &buffer.metas[0];
             let data = &mut buffer.datas[0];
 
-            let samples;
+            // 128 seems to be the number of samples expected by the peer (YMMV)
+            // but for now I'm not sure why.
+            let samples = (data.region.len() / mem::size_of::<f32>()).min(128);
 
             unsafe {
+                let meta_header = meta.region.cast::<ffi::MetaHeader>()?.read();
+
+                tracing::info!("{meta_header:?}");
+
                 let chunk = data.chunk.as_mut();
-                samples = data.region.len() / mem::size_of::<f32>();
 
                 let mut ptr = data.region.cast_array::<f32>()?;
 
-                for d in ptr.as_slice_mut() {
+                for d in ptr.as_slice_mut().iter_mut().take(samples) {
                     *d = self.accumulator.sin() * DEFAULT_VOLUME;
-                    self.accumulator += M_PI_M2 * 440.0 / format.rate as f32;
+                    self.accumulator += M_PI_M2 * SINE_TONE / format.rate as f32;
                 }
 
                 self.accumulator %= M_PI_M2;
@@ -164,9 +177,7 @@ impl ExampleApplication {
                 chunk.size = (samples * mem::size_of::<f32>()) as u32;
                 chunk.offset = 0;
                 chunk.stride = 4;
-            }
 
-            unsafe {
                 volatile!(io_buffers, buffer_id).replace(buffer.id);
                 volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
             };
@@ -356,7 +367,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.set_param(Param::ENUM_FORMAT, [PortParam::new(value)])?;
-    port.set_read(Param::ENUM_FORMAT);
 
     let value = pod
         .clear_mut()
@@ -368,7 +378,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.set_param(Param::META, [PortParam::new(value)])?;
-    port.set_read(Param::META);
 
     let value = pod
         .clear_mut()
@@ -402,7 +411,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.push_param(Param::IO, PortParam::new(value))?;
-    port.set_read(Param::IO);
 
     let value = pod
         .clear_mut()
@@ -429,8 +437,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         })?;
 
     port.set_param(Param::BUFFERS, [PortParam::new(value)])?;
-    port.set_read(Param::BUFFERS);
-
     port.set_write(Param::FORMAT);
     Ok(())
 }
