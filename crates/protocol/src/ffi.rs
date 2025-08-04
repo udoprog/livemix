@@ -197,7 +197,7 @@ pub struct NodeActivation {
     ///   `unsigned int pending_sync:1;`
     /// * A new position is pending.
     ///   `unsigned int pending_new_pos:1;`
-    pub header_bits: [u8; 4],
+    pub header_bits: u32,
     /// One current state and one next state as version flag.
     pub state: [ActivationState; 2],
     /// Time at which the node was triggered (i.e. as ready to start processing

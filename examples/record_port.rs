@@ -40,24 +40,21 @@ impl ExampleApplication {
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
 
-        for (_, a) in &node.peer_activations {
-            unsafe {
-                a.wait_until_pending();
-            }
-        }
-
         let mut start = None;
 
         if self.tick % 100 == 0 {
             start = Some(SystemTime::now());
         }
 
-        if let Some(activation) = &node.activation {
-            while unsafe { atomic!(activation, state[0].pending).load() != 0 } {
-                std::thread::yield_now();
-                tracing::warn!("non-zero pending");
+        for a in &node.peer_activations {
+            unsafe {
+                if !a.wait_until_pending() {
+                    tracing::warn!(a.peer_id, "Activation wait failed");
+                }
             }
+        }
 
+        if let Some(activation) = &node.activation {
             let previous_status =
                 unsafe { atomic!(activation, status).swap(ActivationStatus::AWAKE) };
 
@@ -73,6 +70,7 @@ impl ExampleApplication {
         }
 
         let Some(io_position) = &node.io_position else {
+            tracing::error!("Missing IO position");
             return Ok(());
         };
 
@@ -167,7 +165,8 @@ impl ExampleApplication {
             }
 
             if status & Status::HAVE_DATA {
-                return Ok(());
+                tracing::warn!(?port.direction, ?port.id, ?status);
+                continue;
             }
 
             let Some(buffer) = port.buffers.next() else {
@@ -209,7 +208,7 @@ impl ExampleApplication {
             }
         }
 
-        for (_, a) in &node.peer_activations {
+        for a in &node.peer_activations {
             unsafe {
                 let signaled = a.signal()?;
 
@@ -257,7 +256,7 @@ impl ExampleApplication {
         }
 
         self.writer.flush()?;
-        tracing::warn!(samples, sum, len = self.writer.len(), "Flushed to file");
+        tracing::trace!(samples, sum, len = self.writer.len(), "Flushed to file");
         Ok(())
     }
 }

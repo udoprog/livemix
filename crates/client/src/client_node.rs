@@ -2,6 +2,7 @@ use core::fmt;
 use core::mem;
 
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::vec::Vec;
 
 use anyhow::{Result, bail};
@@ -107,7 +108,7 @@ pub struct ClientNode {
     /// Activation record for this node.
     pub activation: Option<Region<ffi::NodeActivation>>,
     /// Activation records for dependent nodes.
-    pub peer_activations: Slab<Activation>,
+    pub peer_activations: Vec<Activation>,
     /// Ports associated with the client node.
     pub ports: Ports,
     pub(super) read_fd: Option<EventFd>,
@@ -138,7 +139,7 @@ impl ClientNode {
             write_token,
             read_token,
             activation: None,
-            peer_activations: Slab::new(),
+            peer_activations: Vec::new(),
             params,
             io_control: None,
             io_clock: None,

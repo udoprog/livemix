@@ -362,7 +362,7 @@ impl Stream {
             let n_fds = self.header.n_fds() as usize;
 
             if n_fds > 0 {
-                tracing::warn!(n_fds, "Freeing file descriptors");
+                tracing::trace!(n_fds, "Freeing file descriptors");
             }
 
             for fd in self.fds.drain(..n_fds) {
@@ -448,7 +448,8 @@ impl Stream {
     #[tracing::instrument(skip(self, token))]
     pub fn handle_read(&mut self, token: Token) -> Result<()> {
         let Some(node_id) = self.read_to_client.get(&token) else {
-            bail!("No client found for token");
+            tracing::warn!(?token, "Got read for unknown token");
+            return Ok(());
         };
 
         let node = self.client_nodes.get_mut(*node_id)?;
@@ -919,11 +920,11 @@ impl Stream {
     #[tracing::instrument(skip(self, pod))]
     fn client_node_transport(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
         let mut st = pod.read_struct()?;
-        let read_fd = st.field()?.read_sized::<Fd>()?;
-        let write_fd = st.field()?.read_sized::<Fd>()?;
-        let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<usize>()?;
-        let size = st.field()?.read_sized::<usize>()?;
+        let read_fd = st.field()?.read::<Fd>()?;
+        let write_fd = st.field()?.read::<Fd>()?;
+        let mem_id = st.field()?.read::<i32>()?;
+        let offset = st.field()?.read::<usize>()?;
+        let size = st.field()?.read::<usize>()?;
 
         let read_fd = self.take_fd(read_fd)?;
         let write_fd = self.take_fd(write_fd)?;
@@ -959,8 +960,7 @@ impl Stream {
         node.write_fd = write_fd.map(EventFd::from);
 
         if node.read_fd.is_some() {
-            self.ops
-                .push_back(Op::NodeReadInterest { node_id: node_id });
+            self.ops.push_back(Op::NodeReadInterest { node_id });
         }
 
         Ok(())
@@ -985,7 +985,7 @@ impl Stream {
         };
 
         self.ops.push_back(Op::NodeUpdate {
-            node_id: node_id,
+            node_id,
             what: Some(what),
         });
         Ok(())
@@ -1324,27 +1324,43 @@ impl Stream {
         let mut st = pod.read_struct()?;
 
         let peer_id = st.field()?.read_sized::<u32>()?;
-        let fd = self.take_fd(st.field()?.read_sized::<Fd>()?)?;
+        let signal_fd = st.field()?.read_sized::<Fd>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
         let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
 
+        let signal_fd = self.take_fd(signal_fd)?;
+
         let node = self.client_nodes.get_mut(node_id)?;
 
         let Ok(mem_id) = u32::try_from(mem_id) else {
-            node.peer_activations.retain(|_, n| n.peer_id != peer_id);
+            for a in node
+                .peer_activations
+                .extract_if(.., |a| a.peer_id == peer_id)
+            {
+                self.memory.free(a.region);
+            }
+
             return Ok(());
         };
 
-        let Some(fd) = fd else {
+        let Some(signal_fd) = signal_fd else {
             bail!("Missing fd for peer {peer_id} in node {node_id}");
         };
 
+        let signal_fd = EventFd::from(signal_fd);
+
         let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
-        let activation = unsafe { Activation::new(peer_id, EventFd::from(fd), region) };
+        for a in node
+            .peer_activations
+            .extract_if(.., |a| a.peer_id == peer_id)
+        {
+            self.memory.free(a.region);
+        }
 
-        node.peer_activations.insert(activation);
+        node.peer_activations
+            .push(unsafe { Activation::new(peer_id, signal_fd, region) });
         Ok(())
     }
 

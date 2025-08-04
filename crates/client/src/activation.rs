@@ -54,25 +54,27 @@ impl Activation {
     }
 
     /// Wait until peer is pending.
-    pub unsafe fn wait_until_pending(&self) {
+    pub unsafe fn wait_until_pending(&self) -> bool {
         let pending = unsafe { atomic!(self.region, state[0].pending) };
         let status = unsafe { atomic!(self.region, status) };
 
         let mut logged = false;
+        let mut retry = 16;
 
         // Wait until the pending count is non-zero.
         loop {
-            std::thread::yield_now();
-
             let pending = unsafe { pending.load() };
             let status = unsafe { status.load() };
 
-            if pending > 0 && status == ActivationStatus::NOT_TRIGGERED {
-                break;
+            if pending > 0 && status == ActivationStatus::NOT_TRIGGERED || retry == 0 {
+                return true;
             }
 
             std::thread::yield_now();
+            retry -= 1;
         }
+
+        false
     }
 
     /// Signal the activation.
@@ -94,7 +96,7 @@ impl Activation {
     // Port of `trigger_link_v0`.
     pub unsafe fn signal_v0(&self, nsec: u64) -> Result<bool> {
         unsafe {
-            if !self.decreemnt_pending() {
+            if !self.decrement_pending() {
                 return Ok(false);
             }
 
@@ -112,7 +114,7 @@ impl Activation {
     // Port of `trigger_link_v1`.
     pub unsafe fn signal_v1(&self, nsec: u64) -> Result<bool> {
         unsafe {
-            if !self.decreemnt_pending() {
+            if !self.decrement_pending() {
                 return Ok(false);
             }
 
@@ -133,7 +135,7 @@ impl Activation {
         }
     }
     #[allow(unused)]
-    unsafe fn decreemnt_pending(&self) -> bool {
+    unsafe fn decrement_pending(&self) -> bool {
         let value = unsafe { atomic!(self.region, state[0].pending).fetch_sub(1) };
         value == 1
     }
