@@ -54,7 +54,7 @@ impl ExampleApplication {
                 tracing::warn!(?previous_status, "Expected TRIGGERED");
             }
 
-            if self.tick % 50 == 0 {
+            if self.tick % 100 == 0 {
                 let xrun_count = unsafe { volatile!(activation, xrun_count).read() };
                 let signal_time = unsafe { volatile!(activation, signal_time).read() };
                 tracing::warn!(xrun_count, signal_time);
@@ -68,9 +68,7 @@ impl ExampleApplication {
         let clock = unsafe { volatile!(io_position, clock).read() };
         let duration = clock.duration;
 
-        if self.tick % 100 == 0 {
-            tracing::warn!(?clock);
-        }
+        tracing::warn!(clock.position, clock.duration);
 
         for port in node.ports.inputs_mut() {
             let Some(io_buffers) = &mut port.io_buffers else {
@@ -79,9 +77,11 @@ impl ExampleApplication {
 
             let status = unsafe { volatile!(io_buffers, status).read() };
 
+            tracing::warn!(?status);
+
             if !(status & Status::HAVE_DATA) {
                 continue;
-            };
+            }
 
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
