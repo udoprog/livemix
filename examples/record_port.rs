@@ -68,7 +68,7 @@ impl ExampleApplication {
         let duration = clock.duration;
 
         if self.tick % 1000 == 0 {
-            tracing::warn!(?clock, name = ?clock.name_c_str());
+            tracing::warn!(?clock);
         }
 
         for port in node.ports.inputs_mut() {

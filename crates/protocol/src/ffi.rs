@@ -146,10 +146,17 @@ pub struct IoSegmentVideo {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Fraction {
     pub num: u32,
     pub denom: u32,
+}
+
+impl fmt::Debug for Fraction {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} / {}", self.num, self.denom)
+    }
 }
 
 #[repr(C)]
@@ -256,6 +263,24 @@ fn test_layout() {
     assert_eq!(mem::offset_of!(NodeActivation, client_version), 540);
 }
 
+#[derive(Copy, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct ArrayCString<const N: usize>([c_char; N]);
+
+impl<const N: usize> ArrayCString<N> {
+    /// Get the C string as a CStr.
+    pub fn as_c_str(&self) -> &CStr {
+        unsafe { CStr::from_ptr(self.0.as_ptr()) }
+    }
+}
+
+impl<const N: usize> fmt::Debug for ArrayCString<N> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_c_str().fmt(f)
+    }
+}
+
 /// Absolute time reporting.
 ///
 /// Nodes that can report clocking information will receive this io block. The
@@ -289,7 +314,7 @@ pub struct IoClock {
     /// Clock name prefixed with API, set by node when it receives \ref
     /// SPA_IO_Clock. The clock name is unique per clock and can be used to
     /// check if nodes share the same clock.
-    pub name: [c_char; 64],
+    pub name: ArrayCString<64>,
     /// Time in nanoseconds against monotonic clock (CLOCK_MONOTONIC). This
     /// fields reflects a real time instant in the past. The value may have
     /// jitter.
@@ -319,13 +344,6 @@ pub struct IoClock {
     pub cycle: u32,
     /// Estimated accumulated xrun duration.
     pub xrun: u64,
-}
-
-impl IoClock {
-    /// Get the clock name as a C string.
-    pub fn name_c_str(&self) -> &CStr {
-        unsafe { CStr::from_ptr(self.name.as_ptr()) }
-    }
 }
 
 /// IO area to exchange buffers.
