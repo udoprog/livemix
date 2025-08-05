@@ -53,20 +53,13 @@ struct ExampleApplication {
     timing_count: usize,
     accumulators: HashMap<PortId, f32>,
     inputs: HashMap<(PortId, MixId), InputBuffer>,
-    now: u64,
-    last: Option<u64>,
 }
 
 impl ExampleApplication {
     #[tracing::instrument(skip(self, node))]
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
-        self.now = utils::get_monotonic_nsec();
-
-        if let Some(last) = self.last.replace(self.now) {
-            self.timing_sum += self.now - last;
-            self.timing_count += 1;
-        }
+        let now = utils::get_monotonic_nsec();
 
         if let Some(this) = &node.activation {
             unsafe {
@@ -128,7 +121,7 @@ impl ExampleApplication {
 
                 let id = unsafe { volatile!(buf.region, buffer_id).read() };
 
-                let Some(buffer) = port.buffers.get_mut(id as u32) else {
+                let Some(buffer) = port.buffers.get_mut(buf.mix_id, id as u32) else {
                     bail!("Input no buffer with id {id} for port {}", port.id);
                 };
 
@@ -146,7 +139,7 @@ impl ExampleApplication {
                     }
                     Entry::Vacant(e) => e.insert(InputBuffer {
                         format: format.clone(),
-                        buf: Vec::with_capacity(data.max_size),
+                        buf: Vec::with_capacity(duration as usize),
                     }),
                 };
 
@@ -192,48 +185,58 @@ impl ExampleApplication {
                 let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
 
                 if status & Status::NEED_DATA && target_id > 0 {
-                    port.buffers.free(target_id as u32);
+                    port.buffers.free(target_id as u32, buf.mix_id);
                 }
-            }
-
-            let Some(buffer) = port.buffers.next() else {
-                self.no_output_buffer += 1;
-                continue;
-            };
-
-            let accumulator = self.accumulators.entry(port.id).or_insert(0.0);
-
-            let _ = &buffer.metas[0];
-            let data = &mut buffer.datas[0];
-
-            // 128 seems to be the number of samples expected by the peer I'm
-            // using so YMMV.
-            let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
-
-            unsafe {
-                let chunk = data.chunk.as_mut();
-
-                let mut region = data.region.cast_array::<f32>()?;
-
-                for d in region.as_slice_mut().iter_mut().take(samples) {
-                    *d = accumulator.sin() * DEFAULT_VOLUME;
-                    *accumulator += M_PI_M2 * TONE / format.rate as f32;
-
-                    if *accumulator >= M_PI_M2 {
-                        *accumulator -= M_PI_M2;
-                    }
-                }
-
-                chunk.size = (samples * mem::size_of::<f32>()) as u32;
-                chunk.offset = 0;
-                chunk.stride = 4;
             }
 
             for buf in &mut port.io_buffers {
+                let Some(buffer) = port.buffers.next(buf.mix_id) else {
+                    self.no_output_buffer += 1;
+                    continue;
+                };
+
+                let mut accumulator = *self.accumulators.entry(port.id).or_insert(0.0);
+
+                let _ = &buffer.metas[0];
+                let data = &mut buffer.datas[0];
+
+                // 128 seems to be the number of samples expected by the peer I'm
+                // using so YMMV.
+                let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
+
+                unsafe {
+                    let chunk = data.chunk.as_mut();
+
+                    let mut region = data.region.cast_array::<f32>()?;
+
+                    for d in region.as_slice_mut().iter_mut().take(samples) {
+                        *d = accumulator.sin() * DEFAULT_VOLUME;
+                        accumulator += M_PI_M2 * TONE / format.rate as f32;
+
+                        if accumulator >= M_PI_M2 {
+                            accumulator -= M_PI_M2;
+                        }
+                    }
+
+                    chunk.size = (samples * mem::size_of::<f32>()) as u32;
+                    chunk.offset = 0;
+                    chunk.stride = 4;
+                }
+
                 unsafe {
                     volatile!(buf.region, buffer_id).replace(buffer.id as i32);
                     volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
                 };
+            }
+
+            let accumulator = self.accumulators.entry(port.id).or_insert(0.0);
+
+            for _ in 0..duration {
+                *accumulator += M_PI_M2 * TONE / format.rate as f32;
+
+                if *accumulator >= M_PI_M2 {
+                    *accumulator -= M_PI_M2;
+                }
             }
         }
 
@@ -255,6 +258,8 @@ impl ExampleApplication {
             }
         }
 
+        self.timing_sum += now - utils::get_monotonic_nsec();
+        self.timing_count += 1;
         Ok(())
     }
 
@@ -337,7 +342,8 @@ impl ExampleApplication {
         }
 
         if self.timing_count > 0 {
-            let average_timing = self.timing_sum as f64 / self.timing_count as f64;
+            let average_timing =
+                Duration::from_nanos((self.timing_sum as f64 / self.timing_count as f64) as u64);
             tracing::warn!(?average_timing);
             self.timing_count = 0;
             self.timing_sum = 0;
@@ -381,8 +387,6 @@ fn main() -> Result<()> {
         failed_signals: 0,
         timing_sum: 0,
         timing_count: 0,
-        now: utils::get_monotonic_nsec(),
-        last: None,
     };
 
     loop {

@@ -1124,10 +1124,8 @@ impl Stream {
         let node = self.client_nodes.get_mut(node_id)?;
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
-            .read::<(Direction, PortId, i32, u32, u32)>()
+            .read::<(Direction, PortId, MixId, u32, u32)>()
             .context("reading header")?;
-
-        let mix_id = u32::try_from(mix_id).ok();
 
         let mut buffers = Vec::new();
 
@@ -1214,25 +1212,23 @@ impl Stream {
             mix_id,
             flags,
             buffers,
+            available: 0,
         };
 
-        let replaced = node
-            .ports
+        node.ports
             .get_mut(direction, port_id)?
-            .replace_buffers(buffers);
+            .replace_buffers(mix_id, buffers, |b| {
+                for buffer in b.buffers {
+                    for meta in buffer.metas {
+                        self.memory.free(meta.region);
+                    }
 
-        if let Some(replaced) = replaced {
-            for buffer in replaced.buffers {
-                for meta in buffer.metas {
-                    self.memory.free(meta.region);
+                    for data in buffer.datas {
+                        self.memory.free(data.region);
+                        self.memory.free(data.chunk);
+                    }
                 }
-
-                for data in buffer.datas {
-                    self.memory.free(data.region);
-                    self.memory.free(data.chunk);
-                }
-            }
-        }
+            });
 
         Ok(())
     }
@@ -1307,7 +1303,7 @@ impl Stream {
                     }
                 }
 
-                port.buffers.reset();
+                port.buffers.reset(mix_id);
             }
             id => {
                 tracing::warn!(?id, "Unsupported IO type in port set IO");

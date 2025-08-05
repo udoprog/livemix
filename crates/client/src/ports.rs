@@ -142,39 +142,37 @@ where
 #[derive(Default)]
 pub struct PortBuffers {
     /// The buffers associated with the port.
-    buffers: Option<Buffers>,
-    /// The available buffers.
-    available: u128,
+    buffers: Vec<Buffers>,
 }
 
 impl PortBuffers {
     /// Reset port buffers.
-    pub fn reset(&mut self) {
-        self.available.clear_bits();
-
-        for id in 0..self.buffers.as_ref().map_or(0, |b| b.buffers.len()) {
-            self.available.set_bit(id as u32);
+    pub fn reset(&mut self, mix_id: MixId) {
+        if let Some(buf) = self.buffers.iter_mut().find(|b| b.mix_id == mix_id) {
+            buf.available.clear_bits();
         }
     }
 
     /// Free the given buffer by id.
-    pub fn free(&mut self, id: u32) {
-        self.available.set_bit(id);
+    pub fn free(&mut self, id: u32, mix_id: MixId) {
+        if let Some(buf) = self.buffers.iter_mut().find(|b| b.mix_id == mix_id) {
+            buf.available.set_bit(id);
+        }
     }
 
     /// Get the next free buffer in the set.
-    pub fn next(&mut self) -> Option<&mut Buffer> {
-        let buffers = self.buffers.as_mut()?;
-        let id = self.available.iter_ones().next()?;
-        self.available.clear_bit(id);
-        buffers.buffers.get_mut(id as usize)
+    pub fn next(&mut self, mix_id: MixId) -> Option<&mut Buffer> {
+        let buf = self.buffers.iter_mut().find(|b| b.mix_id == mix_id)?;
+        let id = buf.available.iter_ones().next()?;
+        buf.available.clear_bit(id);
+        buf.buffers.get_mut(id as usize)
     }
 
     /// Just get the specified buffer by id.
-    pub fn get_mut(&mut self, id: u32) -> Option<&mut Buffer> {
-        let buffers = self.buffers.as_mut()?;
+    pub fn get_mut(&mut self, mix_id: MixId, id: u32) -> Option<&mut Buffer> {
         let index = usize::try_from(id).ok()?;
-        buffers.buffers.get_mut(index)
+        let buf = self.buffers.iter_mut().find(|b| b.mix_id == mix_id)?;
+        buf.buffers.get_mut(index)
     }
 }
 
@@ -327,11 +325,18 @@ impl Port {
 
     /// Replace the current set of buffers for this port.
     #[inline]
-    #[tracing::instrument(skip(self), fields(port_id = ?self.id), ret(level = Level::TRACE))]
-    pub(crate) fn replace_buffers(&mut self, buffers: Buffers) -> Option<Buffers> {
-        let old = self.buffers.buffers.replace(buffers);
-        self.buffers.reset();
-        old
+    #[tracing::instrument(skip(self, f), fields(port_id = ?self.id), ret(level = Level::TRACE))]
+    pub(crate) fn replace_buffers(
+        &mut self,
+        mix_id: MixId,
+        buffers: Buffers,
+        mut f: impl FnMut(Buffers),
+    ) {
+        for buf in self.buffers.buffers.extract_if(.., |b| b.mix_id == mix_id) {
+            f(buf);
+        }
+
+        self.buffers.buffers.push(buffers);
     }
 }
 

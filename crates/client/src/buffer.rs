@@ -5,6 +5,7 @@ use protocol::ffi;
 use protocol::flags;
 use protocol::id;
 
+use crate::MixId;
 use crate::memory::Region;
 
 #[derive(Debug)]
@@ -38,7 +39,9 @@ pub struct Buffer {
 #[non_exhaustive]
 pub struct Buffers {
     pub direction: consts::Direction,
-    pub mix_id: Option<u32>,
+    pub mix_id: MixId,
     pub flags: u32,
     pub buffers: Vec<Buffer>,
+    /// The buffers which are available in this set.
+    pub available: u128,
 }
