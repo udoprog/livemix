@@ -5,12 +5,12 @@ use std::io::BufWriter;
 use std::mem;
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
 use client::ptr::{atomic, volatile};
-use client::{ClientNode, MixId, Port, PortId, PortParam};
+use client::{ClientNode, MixId, Port, PortId, PortParam, utils};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
@@ -29,7 +29,6 @@ const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
 const DEFAULT_RATE: u32 = 48000;
 const DEFAULT_VOLUME: f32 = 0.1;
 const TONE: f32 = 440.0;
-const DEBUG_INTERVAL: usize = 100;
 
 struct InputBuffer {
     format: object::AudioFormat,
@@ -38,7 +37,6 @@ struct InputBuffer {
 
 struct ExampleApplication {
     tick: usize,
-    failed_signals: usize,
     formats: HashMap<(Direction, PortId), object::AudioFormat>,
     /// At the beginning of processing we check whether or not peers have a
     /// pending value greater than 0, and have a status of NOT_TRIGGERED.
@@ -46,19 +44,28 @@ struct ExampleApplication {
     /// If that is not the case, we increment this counter add add the peer to the bitset.
     non_ready_peers: usize,
     non_ready_peers_bitset: IdSet,
+    not_triggered: usize,
+    not_input_have_data: usize,
+    not_self_triggered: usize,
+    no_output_buffer: usize,
+    failed_signals: usize,
+    timing_sum: u64,
+    timing_count: usize,
     accumulators: HashMap<PortId, f32>,
     inputs: HashMap<(PortId, MixId), InputBuffer>,
+    now: u64,
+    last: Option<u64>,
 }
 
 impl ExampleApplication {
     #[tracing::instrument(skip(self, node))]
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
+        self.now = utils::get_monotonic_nsec();
 
-        let mut start = None;
-
-        if self.tick % DEBUG_INTERVAL == 0 {
-            start = Some(SystemTime::now());
+        if let Some(last) = self.last.replace(self.now) {
+            self.timing_sum += self.now - last;
+            self.timing_count += 1;
         }
 
         if let Some(this) = &node.activation {
@@ -67,7 +74,7 @@ impl ExampleApplication {
                 let status = atomic!(this, status).load();
 
                 if pending != 0 || status != ActivationStatus::TRIGGERED {
-                    tracing::info!(?pending, ?status, "this");
+                    self.not_self_triggered += 1;
                 }
             }
         }
@@ -89,14 +96,7 @@ impl ExampleApplication {
                 unsafe { atomic!(activation, status).swap(ActivationStatus::AWAKE) };
 
             if previous_status != ActivationStatus::TRIGGERED {
-                tracing::warn!(?previous_status, "Expected TRIGGERED");
-            }
-
-            if self.tick % DEBUG_INTERVAL == 0 {
-                let xrun_count = unsafe { volatile!(activation, xrun_count).read() };
-                let signal_time = unsafe { volatile!(activation, signal_time).read() };
-                let now = client::utils::get_monotonic_nsec();
-                tracing::warn!(xrun_count, signal_time, now);
+                self.not_triggered += 1;
             }
         }
 
@@ -122,6 +122,7 @@ impl ExampleApplication {
                 let status = unsafe { volatile!(buf.region, status).read() };
 
                 if !(status & Status::HAVE_DATA) {
+                    self.not_input_have_data += 1;
                     continue;
                 }
 
@@ -171,12 +172,7 @@ impl ExampleApplication {
                     b.buf.set_len(b.buf.len() + samples);
                 }
 
-                let old_read =
-                    unsafe { volatile!(buf.region, status).replace(flags::Status::NEED_DATA) };
-
-                if self.tick % DEBUG_INTERVAL == 0 {
-                    tracing::warn!(?data.flags, ?id, ?old_read, samples);
-                }
+                unsafe { volatile!(buf.region, status).replace(flags::Status::NEED_DATA) };
             }
         }
 
@@ -201,6 +197,7 @@ impl ExampleApplication {
             }
 
             let Some(buffer) = port.buffers.next() else {
+                self.no_output_buffer += 1;
                 continue;
             };
 
@@ -238,25 +235,12 @@ impl ExampleApplication {
                     volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
                 };
             }
-
-            if self.tick % DEBUG_INTERVAL == 0 {
-                tracing::warn!(?data.flags, samples);
-            }
         }
 
         for a in &node.peer_activations {
             unsafe {
                 let signaled = a.signal()?;
-
-                if signaled {
-                    if self.failed_signals > 0 {
-                        tracing::warn!(self.failed_signals, signaled);
-                    }
-
-                    self.failed_signals = 0;
-                } else {
-                    self.failed_signals += 1;
-                }
+                self.failed_signals += usize::from(!signaled);
             }
         }
 
@@ -269,19 +253,6 @@ impl ExampleApplication {
             if previous_status != ActivationStatus::AWAKE {
                 tracing::warn!(?previous_status, "Expected AWAKE");
             }
-        }
-
-        if self.tick % DEBUG_INTERVAL == 0 {
-            if self.non_ready_peers > 0 {
-                tracing::warn!(self.non_ready_peers, ?self.non_ready_peers_bitset, "Peer activation is not ready");
-                self.non_ready_peers = 0;
-                self.non_ready_peers_bitset.clear();
-            }
-        }
-
-        if let Some(start) = start {
-            let elapsed = start.elapsed().context("Elapsed time")?;
-            tracing::warn!(?elapsed);
         }
 
         Ok(())
@@ -305,13 +276,24 @@ impl ExampleApplication {
 
             if b.buf.len() > 0 {
                 let file = PathBuf::from(format!("capture_{port_id}_{mix_id}.wav"));
-                let mut writer;
 
-                if file.is_file() {
-                    writer = hound::WavWriter::append(&file)?;
-                } else {
-                    writer = hound::WavWriter::new(BufWriter::new(File::create(&file)?), spec)?;
-                }
+                let mut writer = 'writer: {
+                    if !file.is_file() {
+                        break 'writer hound::WavWriter::new(
+                            BufWriter::new(File::create(&file)?),
+                            spec,
+                        )?;
+                    }
+
+                    let writer = hound::WavWriter::append(&file)?;
+
+                    if writer.spec() == spec {
+                        break 'writer writer;
+                    }
+
+                    tracing::warn!(?file, "File format mismatch, overwriting");
+                    hound::WavWriter::new(BufWriter::new(File::create(&file)?), spec)?
+                };
 
                 let mut samples = 0;
                 let mut sum = 0.0;
@@ -322,9 +304,43 @@ impl ExampleApplication {
                     samples += 1;
                 }
 
-                tracing::info!(?file, samples, sum, len = writer.len(), "Flushed to file");
+                tracing::info!(?file, samples, sum, len = writer.len(), "Wrote");
                 writer.finalize()?;
             }
+        }
+
+        if self.failed_signals > 0 || self.non_ready_peers > 0 {
+            tracing::warn!(self.failed_signals, self.non_ready_peers, ?self.non_ready_peers_bitset);
+            self.failed_signals = 0;
+            self.non_ready_peers = 0;
+            self.non_ready_peers_bitset.clear();
+        }
+
+        if self.not_triggered > 0 {
+            tracing::warn!(self.not_triggered);
+            self.not_triggered = 0;
+        }
+
+        if self.not_input_have_data > 0 {
+            tracing::warn!(self.not_input_have_data);
+            self.not_input_have_data = 0;
+        }
+
+        if self.not_self_triggered > 0 {
+            tracing::warn!(self.not_self_triggered);
+            self.not_self_triggered = 0;
+        }
+
+        if self.no_output_buffer > 0 {
+            tracing::warn!(self.no_output_buffer);
+            self.no_output_buffer = 0;
+        }
+
+        if self.timing_count > 0 {
+            let average_timing = self.timing_sum as f64 / self.timing_count as f64;
+            tracing::warn!(?average_timing);
+            self.timing_count = 0;
+            self.timing_sum = 0;
         }
 
         Ok(())
@@ -353,12 +369,20 @@ fn main() -> Result<()> {
 
     let mut app = ExampleApplication {
         tick: 0,
-        failed_signals: 0,
         formats: HashMap::new(),
         non_ready_peers: 0,
         non_ready_peers_bitset: IdSet::new(),
         accumulators: HashMap::new(),
         inputs: HashMap::new(),
+        not_triggered: 0,
+        not_input_have_data: 0,
+        not_self_triggered: 0,
+        no_output_buffer: 0,
+        failed_signals: 0,
+        timing_sum: 0,
+        timing_count: 0,
+        now: utils::get_monotonic_nsec(),
+        last: None,
     };
 
     loop {
