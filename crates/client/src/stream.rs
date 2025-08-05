@@ -352,10 +352,12 @@ impl Stream {
             return Ok(false);
         };
 
+        let st = pod.read_struct()?;
+
         let result = match self.header.id() {
-            consts::CORE_ID => self.core(pod),
-            consts::CLIENT_ID => self.client(pod),
-            _ => self.dynamic(pod),
+            consts::CORE_ID => self.core(st),
+            consts::CLIENT_ID => self.client(st),
+            _ => self.dynamic(st),
         };
 
         if self.header.n_fds() > 0 {
@@ -564,31 +566,31 @@ impl Stream {
         Ok(())
     }
 
-    fn core(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
+    fn core(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let op = CoreEvent::from_raw(self.header.op());
         tracing::trace!("Event: {op}");
 
         match op {
             CoreEvent::INFO => {
-                self.core_info_event(pod).context(op)?;
+                self.core_info_event(st).context(op)?;
             }
             CoreEvent::DONE => {
-                self.core_done_event(pod).context(op)?;
+                self.core_done_event(st).context(op)?;
             }
             CoreEvent::PING => {
-                self.core_ping_event(pod).context(op)?;
+                self.core_ping_event(st).context(op)?;
             }
             CoreEvent::ERROR => {
-                self.core_error_event(pod).context(op)?;
+                self.core_error_event(st).context(op)?;
             }
             CoreEvent::BOUND_ID => {
-                self.core_bound_id_event(pod).context(op)?;
+                self.core_bound_id_event(st).context(op)?;
             }
             CoreEvent::ADD_MEM => {
-                self.core_add_mem_event(pod).context(op)?;
+                self.core_add_mem_event(st).context(op)?;
             }
             CoreEvent::DESTROY => {
-                self.core_destroy(pod).context(op)?;
+                self.core_destroy(st).context(op)?;
             }
             op => {
                 tracing::warn!("Unsupported event: {op}");
@@ -598,15 +600,15 @@ impl Stream {
         Ok(())
     }
 
-    fn client(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
+    fn client(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let op = ClientEvent::from_raw(self.header.op());
 
         match op {
             ClientEvent::INFO => {
-                self.client_info(pod).context(op)?;
+                self.client_info(st).context(op)?;
             }
             ClientEvent::ERROR => {
-                self.client_error(pod).context(op)?;
+                self.client_error(st).context(op)?;
             }
             op => {
                 tracing::warn!("Unsupported event: {op}");
@@ -616,7 +618,7 @@ impl Stream {
         Ok(())
     }
 
-    fn dynamic(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
+    fn dynamic(&mut self, st: Struct<Slice<'_>>) -> Result<()> {
         let Some(kind) = self.local_id_to_kind.get(&self.header.id()) else {
             tracing::warn!(?self.header, "Unknown receiver");
             return Ok(());
@@ -629,10 +631,10 @@ impl Stream {
 
                 match op {
                     RegistryEvent::GLOBAL => {
-                        self.registry_global(pod).context(op)?;
+                        self.registry_global(st).context(op)?;
                     }
                     RegistryEvent::GLOBAL_REMOVE => {
-                        self.registry_global_remove(pod).context(op)?;
+                        self.registry_global_remove(st).context(op)?;
                     }
                     op => {
                         tracing::warn!(?op, "Registry unsupported op");
@@ -645,31 +647,31 @@ impl Stream {
 
                 match op {
                     ClientNodeEvent::TRANSPORT => {
-                        self.client_node_transport(node_id, pod).context(op)?;
+                        self.client_node_transport(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::SET_PARAM => {
-                        self.client_node_set_param(node_id, pod).context(op)?;
+                        self.client_node_set_param(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::SET_IO => {
-                        self.client_node_set_io(node_id, pod).context(op)?;
+                        self.client_node_set_io(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::COMMAND => {
-                        self.client_node_command(node_id, pod).context(op)?;
+                        self.client_node_command(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::PORT_SET_PARAM => {
-                        self.client_node_port_set_param(node_id, pod).context(op)?;
+                        self.client_node_port_set_param(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::USE_BUFFERS => {
-                        self.client_node_use_buffers(node_id, pod).context(op)?;
+                        self.client_node_use_buffers(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::PORT_SET_IO => {
-                        self.client_node_port_set_io(node_id, pod).context(op)?;
+                        self.client_node_port_set_io(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::SET_ACTIVATION => {
-                        self.client_node_set_activation(node_id, pod).context(op)?;
+                        self.client_node_set_activation(node_id, st).context(op)?;
                     }
                     ClientNodeEvent::PORT_SET_MIX_INFO => {
-                        self.client_node_set_mix_info(node_id, pod).context(op)?;
+                        self.client_node_set_mix_info(node_id, st).context(op)?;
                     }
                     op => {
                         tracing::warn!("Unsupported event: {op}");
@@ -682,24 +684,19 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_info_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
-        let id = st.field()?.read_sized::<u32>()?;
-        let cookie = st.field()?.read_sized::<i32>()?;
-        let user_name = st.field()?.read_unsized::<str>()?.to_owned();
-        let host_name = st.field()?.read_unsized::<str>()?.to_owned();
-        let version = st.field()?.read_unsized::<str>()?.to_owned();
-        let name = st.field()?.read_unsized::<str>()?.to_owned();
-        let change_mask = st.field()?.read_sized::<u64>()?;
+    fn core_info_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
+        let (id, cookie) = st.read::<(u32, i32)>()?;
+        let (user_name, host_name, version, name) =
+            st.read::<(String, String, String, String)>()?;
+        let change_mask = st.read::<flags::CoreInfoChangeFlags>()?;
 
-        let mut props = st.field()?.read_struct()?;
+        let mut props = st.read::<Struct<_>>()?;
 
-        if change_mask & 0x1 != 0 {
-            let n_items = props.field()?.read_sized::<i32>()?;
+        if change_mask & flags::CoreInfoChangeFlags::PROPS {
+            let n_items = props.read::<u32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.read_unsized::<str>()?.to_owned();
-                let value = props.field()?.read_unsized::<str>()?.to_owned();
+                let (key, value) = props.read::<(String, String)>()?;
                 self.core.properties.insert(key, value);
             }
         }
@@ -715,8 +712,8 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_done_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let (id, seq) = pod.read_struct()?.read::<(i32, i32)>()?;
+    fn core_done_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
+        let (id, seq) = st.read::<(i32, i32)>()?;
 
         match id {
             GET_REGISTRY_SYNC => {
@@ -735,8 +732,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_ping_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn core_ping_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let id = st.field()?.read_sized()?;
         let seq = st.field()?.read_sized()?;
 
@@ -746,8 +742,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_error_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn core_error_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let id = st.field()?.read_sized::<i32>()?;
         let seq = st.field()?.read_sized::<i32>()?;
         let res = st.field()?.read_sized::<i32>()?;
@@ -758,8 +753,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_bound_id_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn core_bound_id_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let local_id = st.field()?.read_sized::<u32>()?;
         let global_id = st.field()?.read_sized::<u32>()?;
         self.globals.insert(local_id, global_id);
@@ -769,10 +763,8 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_add_mem_event(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let (id, ty, fd, flags) = pod
-            .read_struct()?
-            .read::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
+    fn core_add_mem_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
+        let (id, ty, fd, flags) = st.read::<(u32, id::DataType, Fd, flags::MemBlock)>()?;
 
         let fd = self.take_fd(fd)?;
 
@@ -786,8 +778,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn core_destroy(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn core_destroy(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let id = st.field()?.read_sized::<u32>()?;
 
         tracing::debug!(id);
@@ -795,8 +786,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn client_info(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn client_info(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let id = st.field()?.read_sized::<u32>()?;
         let change_mask = st.field()?.read_sized::<u64>()?;
 
@@ -820,8 +810,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn client_error(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn client_error(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let id = st.field()?.read_sized::<i32>()?;
         let res = st.field()?.read_sized::<i32>()?;
         let error = st.field()?.read_unsized::<str>()?.to_owned();
@@ -830,9 +819,8 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn registry_global(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let (id, permissions, ty, version, mut props) =
-            pod.read::<Struct<_>>()?.read::<(_, _, _, _, Struct<_>)>()?;
+    fn registry_global(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
+        let (id, permissions, ty, version, mut props) = st.read::<(_, _, _, _, Struct<_>)>()?;
 
         let n_items = props.read::<u32>()?;
 
@@ -881,8 +869,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all)]
-    fn registry_global_remove(&mut self, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    fn registry_global_remove(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
         let id = st.field()?.read_sized::<u32>()?;
 
         let Some(registry_index) = self.id_to_registry.remove(&id) else {
@@ -917,9 +904,12 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
-    fn client_node_transport(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
-        let mut st = pod.read_struct()?;
+    #[tracing::instrument(skip(self, st))]
+    fn client_node_transport(
+        &mut self,
+        node_id: ClientNodeId,
+        mut st: Struct<Slice<'_>>,
+    ) -> Result<()> {
         let read_fd = st.field()?.read::<Fd>()?;
         let write_fd = st.field()?.read::<Fd>()?;
         let mem_id = st.field()?.read::<i32>()?;
@@ -966,11 +956,14 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_param(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
+    #[tracing::instrument(skip(self, st))]
+    fn client_node_set_param(
+        &mut self,
+        node_id: ClientNodeId,
+        mut st: Struct<Slice<'_>>,
+    ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let mut st = pod.read_struct()?;
         let id = st.field()?.read_sized::<Param>()?;
         let _flags = st.field()?.read_sized::<i32>()?;
 
@@ -991,11 +984,14 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
-    fn client_node_set_io(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
+    #[tracing::instrument(skip(self, st))]
+    fn client_node_set_io(
+        &mut self,
+        node_id: ClientNodeId,
+        mut st: Struct<Slice<'_>>,
+    ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let mut st = pod.read_struct()?;
         let id = st.field()?.read_sized::<id::IoType>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
         let offset = st.field()?.read_sized::<usize>()?;
@@ -1056,11 +1052,14 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
-    fn client_node_command(&mut self, node_id: ClientNodeId, pod: Pod<Slice<'_>>) -> Result<()> {
+    #[tracing::instrument(skip(self, st))]
+    fn client_node_command(
+        &mut self,
+        node_id: ClientNodeId,
+        mut st: Struct<Slice<'_>>,
+    ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let mut st = pod.as_ref().read_struct()?;
         let obj = st.field()?.read_object()?;
 
         let object_type = id::CommandType::from_id(obj.object_type());
@@ -1083,15 +1082,14 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
+    #[tracing::instrument(skip(self, st))]
     fn client_node_port_set_param(
         &mut self,
         node_id: ClientNodeId,
-        pod: Pod<Slice<'_>>,
+        mut st: Struct<Slice<'_>>,
     ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let mut st = pod.read_struct()?;
         let direction = st.field()?.read::<Direction>()?;
         let port_id = st.field()?.read::<PortId>()?;
         let id = st.field()?.read_sized::<Param>()?;
@@ -1116,15 +1114,13 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
+    #[tracing::instrument(skip(self, st))]
     fn client_node_use_buffers(
         &mut self,
         node_id: ClientNodeId,
-        pod: Pod<Slice<'_>>,
+        mut st: Struct<Slice<'_>>,
     ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
-
-        let mut st = pod.read_struct()?;
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
             .read::<(Direction, PortId, i32, u32, u32)>()
@@ -1240,14 +1236,14 @@ impl Stream {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, st))]
     fn client_node_port_set_io(
         &mut self,
         node_id: ClientNodeId,
-        pod: Pod<Slice<'_>>,
+        mut st: Struct<Slice<'_>>,
     ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let mut st = pod.read_struct()?;
         let direction = Direction::from_raw(st.field()?.read_sized::<u32>()?);
         let port_id = st.field()?.read::<PortId>()?;
         let _mix_id = st.field()?.read_sized::<u32>()?;
@@ -1315,14 +1311,12 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
+    #[tracing::instrument(skip(self, st))]
     fn client_node_set_activation(
         &mut self,
         node_id: ClientNodeId,
-        pod: Pod<Slice<'_>>,
+        mut st: Struct<Slice<'_>>,
     ) -> Result<()> {
-        let mut st = pod.read_struct()?;
-
         let peer_id = st.field()?.read_sized::<u32>()?;
         let signal_fd = st.field()?.read_sized::<Fd>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
@@ -1352,14 +1346,13 @@ impl Stream {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, pod))]
+    #[tracing::instrument(skip(self, st))]
     fn client_node_set_mix_info(
         &mut self,
         node_id: ClientNodeId,
-        pod: Pod<Slice<'_>>,
+        mut st: Struct<Slice<'_>>,
     ) -> Result<()> {
         self.client_nodes.get_mut(node_id)?;
-        let st = pod.read_struct()?;
         tracing::warn!(?st, "Not implemented yet");
         Ok(())
     }

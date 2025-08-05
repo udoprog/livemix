@@ -356,6 +356,17 @@ pod::macros::flags! {
         #[constant = libspa_sys::SPA_CHUNK_FLAG_EMPTY]
         EMPTY = 1 << 1;
     }
+
+    /// Describes `PW_CORE_CHANGE_MASK_*`.
+    #[examples = [PROPS]]
+    #[not_set = []]
+    #[module = protocol::flags]
+    pub struct CoreInfoChangeFlags(u32) {
+        NONE;
+        /// Chunk data is corrupted in some way.
+        #[constant = pipewire_sys::PW_CORE_CHANGE_MASK_PROPS]
+        PROPS = 1 << 0;
+    }
 }
 
 impl ParamFlag {
@@ -373,4 +384,9 @@ impl MemMap {
 
 impl DataFlag {
     pub const READWRITE: Self = Self(Self::READABLE.0 | Self::WRITABLE.0);
+}
+
+impl CoreInfoChangeFlags {
+    /// All flags.
+    pub const ALL: Self = Self(Self::PROPS.0);
 }
