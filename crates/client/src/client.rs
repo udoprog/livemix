@@ -330,11 +330,12 @@ impl Client {
         let port_flags = flags::Port::NONE;
 
         pod.as_mut().write_struct(|st| {
-            st.write((direction, port_id, change_mask))?;
+            st.write((direction, port_id))?;
+
+            st.write(change_mask)?;
 
             // Parameters.
-            st.field()
-                .write_sized(param_values.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
+            st.write(param_values.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
 
             for (_, params) in param_values {
                 for param in params {
@@ -344,23 +345,18 @@ impl Client {
 
             if change_mask & flags::ClientNodePortUpdate::INFO {
                 st.field().write_struct(|st| {
-                    st.field().write_sized(port_change_mask)?;
-                    st.field().write_sized(port_flags)?;
+                    st.write((port_change_mask, port_flags))?;
 
                     // Rate num / denom
-                    st.field().write_sized(0u32)?;
-                    st.field().write_sized(0u32)?;
+                    st.field().write((0u32, 0u32))?;
 
                     // Properties.
-                    st.field().write_sized(2u32)?;
-                    st.field().write_unsized("port.name")?;
-                    st.field().write_unsized(name)?;
-
-                    st.field().write_unsized("format.dsp")?;
-                    st.field().write_unsized("32 bit float mono audio")?;
+                    st.write(2u32)?;
+                    st.write(("port.name", name))?;
+                    st.write(("format.dsp", "32 bit float mono audio"))?;
 
                     // Parameters.
-                    st.field().write_sized(param_flags.len() as u32)?;
+                    st.write(param_flags.len() as u32)?;
 
                     for (id, flag) in param_flags {
                         st.write((id, *flag))?;

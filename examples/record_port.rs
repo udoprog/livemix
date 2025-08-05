@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::BufWriter;
 use std::mem;
 use std::os::fd::AsRawFd;
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
 use client::ptr::{atomic, volatile};
-use client::{ClientNode, Port, PortId, PortParam};
+use client::{ClientNode, MixId, Port, PortId, PortParam};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
@@ -31,9 +33,6 @@ const DEBUG_INTERVAL: usize = 100;
 struct ExampleApplication {
     tick: usize,
     failed_signals: usize,
-    buf: Vec<f32>,
-    writer: hound::WavWriter<File>,
-    accumulator: f32,
     formats: HashMap<(Direction, PortId), object::AudioFormat>,
     /// At the beginning of processing we check whether or not peers have a
     /// pending value greater than 0, and have a status of NOT_TRIGGERED.
@@ -41,6 +40,8 @@ struct ExampleApplication {
     /// If that is not the case, we increment this counter add add the peer to the bitset.
     non_ready_peers: usize,
     non_ready_peers_bitset: IdSet,
+    accumulators: HashMap<(PortId, MixId), f32>,
+    outputs: HashMap<(PortId, MixId), Vec<f32>>,
 }
 
 impl ExampleApplication {
@@ -102,128 +103,128 @@ impl ExampleApplication {
         let duration = clock.duration;
 
         for port in node.ports.inputs_mut() {
-            let Some(io_buffers) = &mut port.io_buffers else {
-                continue;
-            };
-
-            let status = unsafe { volatile!(io_buffers, status).read() };
-
-            tracing::warn!(?status);
-
-            if !(status & Status::HAVE_DATA) {
-                continue;
-            }
-
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
             };
 
-            if format.rate != DEFAULT_RATE {
-                tracing::warn!(?format, "Unsupported rate on input port");
-                continue;
-            }
+            for buf in &mut port.io_buffers {
+                let status = unsafe { volatile!(buf.region, status).read() };
 
-            let id = unsafe { volatile!(io_buffers, buffer_id).read() };
+                if !(status & Status::HAVE_DATA) {
+                    continue;
+                }
 
-            let Some(buffer) = port.buffers.get_mut(id as u32) else {
-                bail!("Input no buffer with id {id} for port {}", port.id);
-            };
+                if format.rate != DEFAULT_RATE {
+                    tracing::warn!(?format, "Unsupported rate on input port");
+                    continue;
+                }
 
-            let _ = &buffer.metas[0];
-            let data = &buffer.datas[0];
+                let id = unsafe { volatile!(buf.region, buffer_id).read() };
 
-            let samples;
+                let Some(buffer) = port.buffers.get_mut(id as u32) else {
+                    bail!("Input no buffer with id {id} for port {}", port.id);
+                };
 
-            unsafe {
-                let chunk = data.chunk.as_ref();
-                let offset = chunk.offset as usize % data.max_size;
-                let size = (chunk.size as usize - offset).min(data.max_size);
+                let _ = &buffer.metas[0];
+                let data = &buffer.datas[0];
 
-                samples = size / mem::size_of::<f32>();
+                let out = self
+                    .outputs
+                    .entry((port.id, buf.mix_id))
+                    .or_insert_with(|| Vec::with_capacity(data.max_size));
 
-                self.buf.reserve(samples);
+                let samples;
 
-                self.buf
-                    .as_mut_ptr()
-                    .add(self.buf.len())
-                    .copy_from_nonoverlapping(
+                unsafe {
+                    let chunk = data.chunk.as_ref();
+                    let offset = chunk.offset as usize % data.max_size;
+                    let size = (chunk.size as usize - offset).min(data.max_size);
+
+                    samples = size / mem::size_of::<f32>();
+
+                    out.reserve(samples);
+
+                    out.as_mut_ptr().add(out.len()).copy_from_nonoverlapping(
                         data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
                         samples,
                     );
 
-                self.buf.set_len(self.buf.len() + samples);
-            }
+                    out.set_len(out.len() + samples);
+                }
 
-            let old_read =
-                unsafe { volatile!(io_buffers, status).replace(flags::Status::NEED_DATA) };
+                let old_read =
+                    unsafe { volatile!(buf.region, status).replace(flags::Status::NEED_DATA) };
 
-            if self.tick % DEBUG_INTERVAL == 0 {
-                tracing::warn!(?data.flags, ?id, ?old_read, samples);
+                if self.tick % DEBUG_INTERVAL == 0 {
+                    tracing::warn!(?data.flags, ?id, ?old_read, samples);
+                }
             }
         }
 
         for port in node.ports.outputs_mut() {
-            let Some(io_buffers) = &mut port.io_buffers else {
-                continue;
-            };
-
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
             };
 
-            if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
-                tracing::warn!(?format, "Unsupported format on output port");
-                continue;
-            }
-
-            let status = unsafe { volatile!(io_buffers, status).read() };
-            let target_id = unsafe { volatile!(io_buffers, buffer_id).read() };
-
-            if status & Status::NEED_DATA && target_id > 0 {
-                port.buffers.free(target_id as u32);
-            }
-
-            if status & Status::HAVE_DATA {
-                tracing::warn!(?port.direction, ?port.id, ?status);
-                continue;
-            }
-
-            let Some(buffer) = port.buffers.next() else {
-                tracing::error!("No available buffers");
-                continue;
-            };
-
-            let _ = &buffer.metas[0];
-            let data = &mut buffer.datas[0];
-
-            // 128 seems to be the number of samples expected by the peer I'm
-            // using so YMMV.
-            let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
-
-            unsafe {
-                let chunk = data.chunk.as_mut();
-
-                let mut region = data.region.cast_array::<f32>()?;
-
-                for d in region.as_slice_mut().iter_mut().take(samples) {
-                    *d = self.accumulator.sin() * DEFAULT_VOLUME;
-                    self.accumulator += M_PI_M2 * TONE / format.rate as f32;
-
-                    if self.accumulator >= M_PI_M2 {
-                        self.accumulator -= M_PI_M2;
-                    }
+            for buf in &mut port.io_buffers {
+                if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
+                    tracing::warn!(?format, "Unsupported format on output port");
+                    continue;
                 }
 
-                chunk.size = (samples * mem::size_of::<f32>()) as u32;
-                chunk.offset = 0;
-                chunk.stride = 4;
+                let status = unsafe { volatile!(buf.region, status).read() };
+                let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
 
-                volatile!(io_buffers, buffer_id).replace(buffer.id as i32);
-                volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
-            };
+                if status & Status::NEED_DATA && target_id > 0 {
+                    port.buffers.free(target_id as u32);
+                }
 
-            if self.tick % DEBUG_INTERVAL == 0 {
-                tracing::warn!(?data.flags, samples);
+                if status & Status::HAVE_DATA {
+                    tracing::warn!(?port.direction, ?port.id, ?status);
+                    continue;
+                }
+
+                let Some(buffer) = port.buffers.next() else {
+                    continue;
+                };
+
+                let accumulator = self
+                    .accumulators
+                    .entry((port.id, buf.mix_id))
+                    .or_insert(0.0);
+
+                let _ = &buffer.metas[0];
+                let data = &mut buffer.datas[0];
+
+                // 128 seems to be the number of samples expected by the peer I'm
+                // using so YMMV.
+                let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
+
+                unsafe {
+                    let chunk = data.chunk.as_mut();
+
+                    let mut region = data.region.cast_array::<f32>()?;
+
+                    for d in region.as_slice_mut().iter_mut().take(samples) {
+                        *d = accumulator.sin() * DEFAULT_VOLUME;
+                        *accumulator += M_PI_M2 * TONE / format.rate as f32;
+
+                        if *accumulator >= M_PI_M2 {
+                            *accumulator -= M_PI_M2;
+                        }
+                    }
+
+                    chunk.size = (samples * mem::size_of::<f32>()) as u32;
+                    chunk.offset = 0;
+                    chunk.stride = 4;
+
+                    volatile!(buf.region, buffer_id).replace(buffer.id as i32);
+                    volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
+                };
+
+                if self.tick % DEBUG_INTERVAL == 0 {
+                    tracing::warn!(?data.flags, samples);
+                }
             }
         }
 
@@ -273,17 +274,38 @@ impl ExampleApplication {
     /// Process client.
     #[tracing::instrument(skip(self))]
     pub fn tick(&mut self) -> Result<()> {
-        let mut samples = 0;
-        let mut sum = 0.0;
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
 
-        for sample in self.buf.drain(..) {
-            self.writer.write_sample(sample)?;
-            sum += sample;
-            samples += 1;
+        for (&(port_id, mix_id), buf) in &mut self.outputs {
+            if buf.len() > 0 {
+                let file = PathBuf::from(format!("capture_{port_id}_{mix_id}.wav"));
+                let mut writer;
+
+                if file.is_file() {
+                    writer = hound::WavWriter::append(&file)?;
+                } else {
+                    writer = hound::WavWriter::new(BufWriter::new(File::create(&file)?), spec)?;
+                }
+
+                let mut samples = 0;
+                let mut sum = 0.0;
+
+                for sample in buf.drain(..) {
+                    writer.write_sample(sample)?;
+                    sum += sample;
+                    samples += 1;
+                }
+
+                tracing::info!(?file, samples, sum, len = writer.len(), "Flushed to file");
+                writer.finalize()?;
+            }
         }
 
-        self.writer.flush()?;
-        tracing::trace!(samples, sum, len = self.writer.len(), "Flushed to file");
         Ok(())
     }
 }
@@ -308,24 +330,14 @@ fn main() -> Result<()> {
     let mut events = ArrayVec::<PollEvent, 4>::new();
     let mut recv = RecvBuf::new();
 
-    let spec = hound::WavSpec {
-        channels: 1,
-        sample_rate: 48000,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
-    };
-
-    let writer = hound::WavWriter::new(File::create("capture.wav")?, spec)?;
-
     let mut app = ExampleApplication {
         tick: 0,
         failed_signals: 0,
-        buf: Vec::with_capacity(1024 * 1024),
-        writer,
-        accumulator: 0.0,
         formats: HashMap::new(),
         non_ready_peers: 0,
         non_ready_peers_bitset: IdSet::new(),
+        accumulators: HashMap::new(),
+        outputs: HashMap::new(),
     };
 
     loop {

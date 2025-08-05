@@ -39,10 +39,11 @@ use crate::activation::Activation;
 use crate::buffer::{self, Buffer};
 use crate::events::RemoveNodeParamEvent;
 use crate::events::{RemovePortParamEvent, SetNodeParamEvent, SetPortParamEvent, StreamEvent};
+use crate::ports::PortIoBuffer;
 use crate::ports::PortParam;
 use crate::ptr::{atomic, volatile};
 use crate::{
-    Buffers, Client, ClientNode, ClientNodeId, ClientNodes, Memory, PortId, Ports, Region,
+    Buffers, Client, ClientNode, ClientNodeId, ClientNodes, Memory, MixId, PortId, Ports, Region,
 };
 
 const CREATE_CLIENT_NODE: i32 = 0x2000;
@@ -1246,19 +1247,23 @@ impl Stream {
 
         let direction = Direction::from_raw(st.field()?.read_sized::<u32>()?);
         let port_id = st.field()?.read::<PortId>()?;
-        let _mix_id = st.field()?.read_sized::<u32>()?;
+        let mix_id = st.field()?.read::<MixId>()?;
         let id = st.field()?.read_sized::<id::IoType>()?;
         let mem_id = st.field()?.read_sized::<i32>()?;
         let offset = st.field()?.read_sized::<usize>()?;
         let size = st.field()?.read_sized::<usize>()?;
         let port = node.ports.get_mut(direction, port_id)?;
 
-        let span = tracing::info_span!("client_node_port_set_io", ?direction, ?port_id, ?id,);
+        let span = tracing::info_span!("client_node_port_set_io", ?direction, ?port_id, ?id);
         let _span = span.enter();
+
+        let mem_id = u32::try_from(mem_id).ok();
 
         match id {
             id::IoType::CLOCK => {
-                let Ok(mem_id) = u32::try_from(mem_id) else {
+                ensure!(mix_id == MixId::ZERO, "Mix ID must be 0 for CLOCK IO type");
+
+                let Some(mem_id) = mem_id else {
                     if let Some(region) = port.io_clock.take() {
                         self.memory.free(region);
                     };
@@ -1273,7 +1278,12 @@ impl Stream {
                 }
             }
             id::IoType::POSITION => {
-                let Ok(mem_id) = u32::try_from(mem_id) else {
+                ensure!(
+                    mix_id == MixId::ZERO,
+                    "Mix ID must be 0 for POSITION IO type"
+                );
+
+                let Some(mem_id) = mem_id else {
                     if let Some(region) = port.io_position.take() {
                         self.memory.free(region);
                     };
@@ -1288,19 +1298,16 @@ impl Stream {
                 }
             }
             id::IoType::BUFFERS => {
-                let Ok(mem_id) = u32::try_from(mem_id) else {
-                    if let Some(region) = port.io_buffers.take() {
-                        self.memory.free(region);
-                    };
-
-                    return Ok(());
-                };
-
-                let region = self.memory.map(mem_id, offset, size)?.cast()?;
-
-                if let Some(region) = port.io_buffers.replace(region) {
-                    self.memory.free(region);
+                if let Some(mem_id) = mem_id {
+                    let region = self.memory.map(mem_id, offset, size)?.cast()?;
+                    port.io_buffers.push(PortIoBuffer { mix_id, region });
+                } else {
+                    for buf in port.io_buffers.extract_if(.., |b| b.mix_id == mix_id) {
+                        self.memory.free(buf.region);
+                    }
                 }
+
+                port.buffers.reset();
             }
             id => {
                 tracing::warn!(?id, "Unsupported IO type in port set IO");
@@ -1352,8 +1359,31 @@ impl Stream {
         node_id: ClientNodeId,
         mut st: Struct<Slice<'_>>,
     ) -> Result<()> {
-        self.client_nodes.get_mut(node_id)?;
-        tracing::warn!(?st, "Not implemented yet");
+        let direction = st.read::<Direction>()?;
+        let port_id = st.read::<PortId>()?;
+        let mix_id = st.read::<MixId>()?;
+        let peer_id = st.read::<i32>()?;
+        let peer_id = u32::try_from(peer_id).ok().map(PortId::new);
+
+        let mut props = st.read::<Struct<_>>()?;
+        let n_items = props.read::<u32>()?;
+
+        let mut values = BTreeMap::new();
+
+        for _ in 0..n_items {
+            let (key, value) = props.read::<(String, String)>()?;
+            values.insert(key, value);
+        }
+
+        let node = self.client_nodes.get_mut(node_id)?;
+        let port = node.ports.get_mut(direction, port_id)?;
+
+        if let Some(peer_id) = peer_id {
+            port.mix_info.insert(mix_id, peer_id, values);
+        } else {
+            port.mix_info.remove(mix_id);
+        }
+
         Ok(())
     }
 }

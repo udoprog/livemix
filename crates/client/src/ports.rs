@@ -35,6 +35,11 @@ use crate::{Buffers, Region};
 pub struct PortId(u32);
 
 impl PortId {
+    /// Construct a new port identifier.
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+
     /// Get the index of the port.
     ///
     /// Since it was constructed from a `usize`, it can always be safely coerced
@@ -63,6 +68,42 @@ impl<'de> Readable<'de> for PortId {
     fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, pod::Error> {
         let pod = pod.next()?;
         Ok(PortId(pod.read_sized::<u32>()?))
+    }
+}
+
+/// The identifier of a mix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct MixId(u32);
+
+impl MixId {
+    /// The zero mix identifier.
+    pub const ZERO: Self = Self(0);
+
+    /// Construct a new mix identifier.
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl fmt::Display for MixId {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Writable for MixId {
+    #[inline]
+    fn write_into(&self, pod: &mut impl PodSink) -> Result<(), pod::Error> {
+        pod.next()?.write(self.0)
+    }
+}
+
+impl<'de> Readable<'de> for MixId {
+    #[inline]
+    fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, pod::Error> {
+        Ok(MixId(pod.next()?.read()?))
     }
 }
 
@@ -104,6 +145,15 @@ pub struct PortBuffers {
 }
 
 impl PortBuffers {
+    /// Reset port buffers.
+    pub fn reset(&mut self) {
+        self.available.clear();
+
+        for id in 0..self.buffers.as_ref().map_or(0, |b| b.buffers.len()) {
+            self.available.push_back(id as u32);
+        }
+    }
+
     /// Free the given buffer by id.
     pub fn free(&mut self, id: u32) {
         self.available.push_back(id);
@@ -124,6 +174,16 @@ impl PortBuffers {
     }
 }
 
+/// The IO area for a port.
+///
+/// This is keyed by mix, since it might refer to multiple links.
+pub struct PortIoBuffer {
+    /// The mix identifier.
+    pub mix_id: MixId,
+    /// The memory region.
+    pub region: Region<ffi::IoBuffers>,
+}
+
 /// The definition of a port.
 #[non_exhaustive]
 pub struct Port {
@@ -140,9 +200,13 @@ pub struct Port {
     /// The IO position region for the port.
     pub io_position: Option<Region<ffi::IoPosition>>,
     /// The IO buffers region for the port.
-    pub io_buffers: Option<Region<ffi::IoBuffers>>,
+    pub io_buffers: Vec<PortIoBuffer>,
     /// The audio format of the port.
     pub format: Option<object::AudioFormat>,
+    /// The mix information for the port.
+    ///
+    /// This tells you the peers are connected to the port.
+    pub mix_info: PortMixInfo,
     modified: bool,
     param_values: BTreeMap<Param, Vec<PortParam<DynamicBuf>>>,
     param_flags: BTreeMap<Param, ParamFlag>,
@@ -261,16 +325,39 @@ impl Port {
     #[inline]
     #[tracing::instrument(skip(self), fields(port_id = ?self.id), ret(level = Level::TRACE))]
     pub(crate) fn replace_buffers(&mut self, buffers: Buffers) -> Option<Buffers> {
-        let len = buffers.buffers.len();
         let old = self.buffers.buffers.replace(buffers);
-
-        self.buffers.available.clear();
-
-        for id in 0..len {
-            self.buffers.available.push_back(id as u32);
-        }
-
+        self.buffers.reset();
         old
+    }
+}
+
+pub struct PortMixInfoPeer {
+    /// The identifier of the mix.
+    pub mix_id: MixId,
+    /// The connected peer.
+    pub peer_id: PortId,
+    /// The properties of the peer.
+    pub properties: BTreeMap<String, String>,
+}
+
+#[derive(Default)]
+pub struct PortMixInfo {
+    peers: Vec<PortMixInfoPeer>,
+}
+
+impl PortMixInfo {
+    /// Insert a peer ID for the given mix.
+    pub fn insert(&mut self, mix_id: MixId, peer_id: PortId, properties: BTreeMap<String, String>) {
+        self.peers.push(PortMixInfoPeer {
+            mix_id,
+            peer_id,
+            properties,
+        });
+    }
+
+    /// Remove a peer ID for the given mix.
+    pub fn remove(&mut self, mix_id: MixId) {
+        self.peers.retain(|peer| peer.mix_id != mix_id);
     }
 }
 
@@ -329,10 +416,11 @@ impl Ports {
             buffers: PortBuffers::default(),
             io_clock: None,
             io_position: None,
-            io_buffers: None,
+            io_buffers: Vec::new(),
             format: None,
             param_values: BTreeMap::new(),
             param_flags: BTreeMap::new(),
+            mix_info: PortMixInfo::default(),
         };
 
         ports.push(port);

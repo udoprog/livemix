@@ -24,7 +24,7 @@ mod client_node;
 pub use self::client_node::{ClientNode, ClientNodeId, ClientNodes};
 
 mod ports;
-pub use self::ports::{Port, PortId, PortParam, Ports};
+pub use self::ports::{MixId, Port, PortId, PortParam, Ports};
 
 mod activation;
 pub use self::activation::Activation;
