@@ -83,6 +83,9 @@ impl MixId {
     /// The zero mix identifier.
     pub const ZERO: Self = Self(0);
 
+    /// An invalid mix identifier.
+    pub const INVALID: Self = Self(u32::MAX);
+
     /// Construct a new mix identifier.
     pub fn new(id: u32) -> Self {
         Self(id)

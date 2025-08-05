@@ -38,6 +38,16 @@ impl ClientNodes {
         self.data.try_remove(id.index())
     }
 
+    /// Iterate over all client nodes.
+    pub(crate) fn iter(&mut self) -> impl Iterator<Item = &ClientNode> {
+        self.data.iter().map(|(_, node)| node)
+    }
+
+    /// Iterate over all client nodes mutably.
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut ClientNode> {
+        self.data.iter_mut().map(|(_, node)| node)
+    }
+
     /// Get a reference to the client node with the given ID.
     #[inline]
     pub fn get(&self, id: ClientNodeId) -> Result<&ClientNode> {

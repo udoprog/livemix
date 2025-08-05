@@ -146,6 +146,16 @@ impl Stream {
         self.client_nodes.get_mut(node_id)
     }
 
+    /// Iterate over nodes.
+    pub fn nodes(&mut self) -> impl Iterator<Item = &ClientNode> {
+        self.client_nodes.iter()
+    }
+
+    /// Iterate over nodes mutably.
+    pub fn nodes_mut(&mut self) -> impl Iterator<Item = &mut ClientNode> {
+        self.client_nodes.iter_mut()
+    }
+
     /// Allocate a unique token.
     #[inline]
     pub fn token(&mut self) -> Result<Token> {
@@ -1124,8 +1134,14 @@ impl Stream {
         let node = self.client_nodes.get_mut(node_id)?;
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
-            .read::<(Direction, PortId, MixId, u32, u32)>()
+            .read::<(Direction, PortId, i32, u32, u32)>()
             .context("reading header")?;
+
+        let mix_id = if mix_id < 0 {
+            MixId::INVALID
+        } else {
+            MixId::new(mix_id as u32)
+        };
 
         let mut buffers = Vec::new();
 

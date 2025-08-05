@@ -10,7 +10,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
 use client::ptr::{atomic, volatile};
-use client::{ClientNode, MixId, Port, PortId, PortParam, utils};
+use client::{ClientNode, MixId, Port, PortId, PortParam, Stream, utils};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
@@ -38,6 +38,8 @@ struct InputBuffer {
 struct ExampleApplication {
     tick: usize,
     formats: HashMap<(Direction, PortId), object::AudioFormat>,
+    accumulators: HashMap<PortId, f32>,
+    inputs: HashMap<(PortId, MixId), InputBuffer>,
     /// At the beginning of processing we check whether or not peers have a
     /// pending value greater than 0, and have a status of NOT_TRIGGERED.
     ///
@@ -51,14 +53,32 @@ struct ExampleApplication {
     failed_signals: usize,
     timing_sum: u64,
     timing_count: usize,
-    accumulators: HashMap<PortId, f32>,
-    inputs: HashMap<(PortId, MixId), InputBuffer>,
+    debug_activations: bool,
 }
 
 impl ExampleApplication {
     #[tracing::instrument(skip(self, node))]
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
+
+        if self.debug_activations && self.tick % 100 == 0 {
+            if let Some(a) = &node.activation {
+                unsafe {
+                    let pending = atomic!(a, state[0].pending).load();
+                    let required = atomic!(a, state[0].required).load();
+                    tracing::warn!(?pending, ?required, "this");
+                }
+            }
+
+            for a in &node.peer_activations {
+                unsafe {
+                    let pending = atomic!(a.region, state[0].pending).load();
+                    let required = atomic!(a.region, state[0].required).load();
+                    tracing::warn!(?a.peer_id, ?pending, ?required);
+                }
+            }
+        }
+
         let now = utils::get_monotonic_nsec();
 
         if let Some(this) = &node.activation {
@@ -264,8 +284,8 @@ impl ExampleApplication {
     }
 
     /// Process client.
-    #[tracing::instrument(skip(self))]
-    pub fn tick(&mut self) -> Result<()> {
+    #[tracing::instrument(skip_all)]
+    pub fn tick(&mut self, _stream: &mut Stream) -> Result<()> {
         for (&(port_id, mix_id), b) in &mut self.inputs {
             if b.format.format != AudioFormat::F32P {
                 b.buf.clear();
@@ -376,10 +396,10 @@ fn main() -> Result<()> {
     let mut app = ExampleApplication {
         tick: 0,
         formats: HashMap::new(),
-        non_ready_peers: 0,
-        non_ready_peers_bitset: IdSet::new(),
         accumulators: HashMap::new(),
         inputs: HashMap::new(),
+        non_ready_peers: 0,
+        non_ready_peers_bitset: IdSet::new(),
         not_triggered: 0,
         not_input_have_data: 0,
         not_self_triggered: 0,
@@ -387,6 +407,7 @@ fn main() -> Result<()> {
         failed_signals: 0,
         timing_sum: 0,
         timing_count: 0,
+        debug_activations: false,
     };
 
     loop {
@@ -456,7 +477,7 @@ fn main() -> Result<()> {
             if e.token == timer_token {
                 if e.interest.is_read() {
                     timer.read().context("reading the timer")?;
-                    app.tick()?;
+                    app.tick(&mut stream)?;
                 }
 
                 continue;
