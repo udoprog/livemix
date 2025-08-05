@@ -2,6 +2,7 @@ use core::fmt;
 use core::mem;
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::VecDeque;
 use std::collections::btree_map::Entry;
 
@@ -10,6 +11,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use anyhow::{Result, bail};
+use bittle::Bits;
+use bittle::BitsMut;
 use pod::AsSlice;
 use pod::PodItem;
 use pod::PodSink;
@@ -141,28 +144,29 @@ pub struct PortBuffers {
     /// The buffers associated with the port.
     buffers: Option<Buffers>,
     /// The available buffers.
-    available: VecDeque<u32>,
+    available: u128,
 }
 
 impl PortBuffers {
     /// Reset port buffers.
     pub fn reset(&mut self) {
-        self.available.clear();
+        self.available.clear_bits();
 
         for id in 0..self.buffers.as_ref().map_or(0, |b| b.buffers.len()) {
-            self.available.push_back(id as u32);
+            self.available.set_bit(id as u32);
         }
     }
 
     /// Free the given buffer by id.
     pub fn free(&mut self, id: u32) {
-        self.available.push_back(id);
+        self.available.set_bit(id);
     }
 
     /// Get the next free buffer in the set.
     pub fn next(&mut self) -> Option<&mut Buffer> {
         let buffers = self.buffers.as_mut()?;
-        let id = self.available.pop_front()?;
+        let id = self.available.iter_ones().next()?;
+        self.available.clear_bit(id);
         buffers.buffers.get_mut(id as usize)
     }
 

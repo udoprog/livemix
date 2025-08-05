@@ -40,7 +40,7 @@ struct ExampleApplication {
     /// If that is not the case, we increment this counter add add the peer to the bitset.
     non_ready_peers: usize,
     non_ready_peers_bitset: IdSet,
-    accumulators: HashMap<(PortId, MixId), f32>,
+    accumulators: HashMap<PortId, f32>,
     outputs: HashMap<(PortId, MixId), Vec<f32>>,
 }
 
@@ -166,65 +166,62 @@ impl ExampleApplication {
                 continue;
             };
 
-            for buf in &mut port.io_buffers {
-                if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
-                    tracing::warn!(?format, "Unsupported format on output port");
-                    continue;
-                }
+            if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
+                tracing::warn!(?format, "Unsupported format on output port");
+                continue;
+            }
 
+            // Recycle buffers.
+            for buf in &mut port.io_buffers {
                 let status = unsafe { volatile!(buf.region, status).read() };
                 let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
 
                 if status & Status::NEED_DATA && target_id > 0 {
                     port.buffers.free(target_id as u32);
                 }
+            }
 
-                if status & Status::HAVE_DATA {
-                    tracing::warn!(?port.direction, ?port.id, ?status);
-                    continue;
+            let Some(buffer) = port.buffers.next() else {
+                continue;
+            };
+
+            let accumulator = self.accumulators.entry(port.id).or_insert(0.0);
+
+            let _ = &buffer.metas[0];
+            let data = &mut buffer.datas[0];
+
+            // 128 seems to be the number of samples expected by the peer I'm
+            // using so YMMV.
+            let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
+
+            unsafe {
+                let chunk = data.chunk.as_mut();
+
+                let mut region = data.region.cast_array::<f32>()?;
+
+                for d in region.as_slice_mut().iter_mut().take(samples) {
+                    *d = accumulator.sin() * DEFAULT_VOLUME;
+                    *accumulator += M_PI_M2 * TONE / format.rate as f32;
+
+                    if *accumulator >= M_PI_M2 {
+                        *accumulator -= M_PI_M2;
+                    }
                 }
 
-                let Some(buffer) = port.buffers.next() else {
-                    continue;
-                };
+                chunk.size = (samples * mem::size_of::<f32>()) as u32;
+                chunk.offset = 0;
+                chunk.stride = 4;
+            }
 
-                let accumulator = self
-                    .accumulators
-                    .entry((port.id, buf.mix_id))
-                    .or_insert(0.0);
-
-                let _ = &buffer.metas[0];
-                let data = &mut buffer.datas[0];
-
-                // 128 seems to be the number of samples expected by the peer I'm
-                // using so YMMV.
-                let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
-
+            for buf in &mut port.io_buffers {
                 unsafe {
-                    let chunk = data.chunk.as_mut();
-
-                    let mut region = data.region.cast_array::<f32>()?;
-
-                    for d in region.as_slice_mut().iter_mut().take(samples) {
-                        *d = accumulator.sin() * DEFAULT_VOLUME;
-                        *accumulator += M_PI_M2 * TONE / format.rate as f32;
-
-                        if *accumulator >= M_PI_M2 {
-                            *accumulator -= M_PI_M2;
-                        }
-                    }
-
-                    chunk.size = (samples * mem::size_of::<f32>()) as u32;
-                    chunk.offset = 0;
-                    chunk.stride = 4;
-
                     volatile!(buf.region, buffer_id).replace(buffer.id as i32);
                     volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
                 };
+            }
 
-                if self.tick % DEBUG_INTERVAL == 0 {
-                    tracing::warn!(?data.flags, samples);
-                }
+            if self.tick % DEBUG_INTERVAL == 0 {
+                tracing::warn!(?data.flags, samples);
             }
         }
 

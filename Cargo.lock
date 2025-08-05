@@ -110,6 +110,7 @@ name = "client"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bittle",
  "libc",
  "libspa-sys",
  "pipewire-sys",
