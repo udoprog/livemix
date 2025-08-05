@@ -5,12 +5,12 @@ use core::fmt;
 use bittle::{Bits, BitsMut};
 
 /// Id allocator for the protocol.
-pub struct Ids {
+pub struct IdSet {
     /// 64 bits indicating which buckets in layer1 are used.
     layer: u128,
 }
 
-impl Ids {
+impl IdSet {
     /// Create a new identifier allocator.
     pub const fn new() -> Self {
         Self { layer: 0 }
@@ -110,6 +110,11 @@ impl Ids {
         Some(id)
     }
 
+    /// Clear the bit set.
+    pub fn clear(&mut self) {
+        self.layer = 0;
+    }
+
     /// Iterate over all bits that are set.
     pub fn take_next(&mut self) -> Option<u32> {
         let id = self.layer.iter_ones().next()?;
@@ -118,16 +123,16 @@ impl Ids {
     }
 }
 
-impl Default for Ids {
+impl Default for IdSet {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl fmt::Debug for Ids {
+impl fmt::Debug for IdSet {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Ids").finish_non_exhaustive()
+        f.debug_set().entries(self.layer.iter_ones()).finish()
     }
 }

@@ -17,6 +17,7 @@ use protocol::id::{
     self, AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
     ParamBuffers, ParamIo, ParamMeta,
 };
+use protocol::ids::IdSet;
 use protocol::poll::{Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd, ffi, flags, object};
 
@@ -25,6 +26,7 @@ const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
 const DEFAULT_RATE: u32 = 48000;
 const DEFAULT_VOLUME: f32 = 0.1;
 const TONE: f32 = 440.0;
+const DEBUG_INTERVAL: usize = 100;
 
 struct ExampleApplication {
     tick: usize,
@@ -33,6 +35,12 @@ struct ExampleApplication {
     writer: hound::WavWriter<File>,
     accumulator: f32,
     formats: HashMap<(Direction, PortId), object::AudioFormat>,
+    /// At the beginning of processing we check whether or not peers have a
+    /// pending value greater than 0, and have a status of NOT_TRIGGERED.
+    ///
+    /// If that is not the case, we increment this counter add add the peer to the bitset.
+    non_ready_peers: usize,
+    non_ready_peers_bitset: IdSet,
 }
 
 impl ExampleApplication {
@@ -42,7 +50,7 @@ impl ExampleApplication {
 
         let mut start = None;
 
-        if self.tick % 100 == 0 {
+        if self.tick % DEBUG_INTERVAL == 0 {
             start = Some(SystemTime::now());
         }
 
@@ -52,7 +60,7 @@ impl ExampleApplication {
                 let status = atomic!(this, status).load();
 
                 if pending != 0 || status != ActivationStatus::TRIGGERED {
-                    tracing::warn!(?pending, ?status, "this");
+                    tracing::info!(?pending, ?status, "this");
                 }
             }
         }
@@ -63,7 +71,8 @@ impl ExampleApplication {
                 let status = atomic!(a.region, status).load();
 
                 if pending == 0 || status != ActivationStatus::NOT_TRIGGERED {
-                    tracing::warn!(a.peer_id, ?pending, ?status);
+                    self.non_ready_peers += 1;
+                    self.non_ready_peers_bitset.set(a.peer_id);
                 }
             }
         }
@@ -76,10 +85,11 @@ impl ExampleApplication {
                 tracing::warn!(?previous_status, "Expected TRIGGERED");
             }
 
-            if self.tick % 100 == 0 {
+            if self.tick % DEBUG_INTERVAL == 0 {
                 let xrun_count = unsafe { volatile!(activation, xrun_count).read() };
                 let signal_time = unsafe { volatile!(activation, signal_time).read() };
-                tracing::warn!(xrun_count, signal_time);
+                let now = client::utils::get_monotonic_nsec();
+                tracing::warn!(xrun_count, signal_time, now);
             }
         }
 
@@ -147,7 +157,7 @@ impl ExampleApplication {
             let old_read =
                 unsafe { volatile!(io_buffers, status).replace(flags::Status::NEED_DATA) };
 
-            if self.tick % 100 == 0 {
+            if self.tick % DEBUG_INTERVAL == 0 {
                 tracing::warn!(?data.flags, ?id, ?old_read, samples);
             }
         }
@@ -179,7 +189,7 @@ impl ExampleApplication {
             }
 
             let Some(buffer) = port.buffers.next() else {
-                tracing::error!("no available buffers");
+                tracing::error!("No available buffers");
                 continue;
             };
 
@@ -212,7 +222,7 @@ impl ExampleApplication {
                 volatile!(io_buffers, status).replace(flags::Status::HAVE_DATA);
             };
 
-            if self.tick % 100 == 0 {
+            if self.tick % DEBUG_INTERVAL == 0 {
                 tracing::warn!(?data.flags, samples);
             }
         }
@@ -241,6 +251,14 @@ impl ExampleApplication {
 
             if previous_status != ActivationStatus::AWAKE {
                 tracing::warn!(?previous_status, "Expected AWAKE");
+            }
+        }
+
+        if self.tick % DEBUG_INTERVAL == 0 {
+            if self.non_ready_peers > 0 {
+                tracing::warn!(self.non_ready_peers, ?self.non_ready_peers_bitset, "Peer activation is not ready");
+                self.non_ready_peers = 0;
+                self.non_ready_peers_bitset.clear();
             }
         }
 
@@ -306,6 +324,8 @@ fn main() -> Result<()> {
         writer,
         accumulator: 0.0,
         formats: HashMap::new(),
+        non_ready_peers: 0,
+        non_ready_peers_bitset: IdSet::new(),
     };
 
     loop {

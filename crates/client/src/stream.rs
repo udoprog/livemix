@@ -27,7 +27,7 @@ use protocol::consts::{self, ActivationStatus, Direction};
 use protocol::ffi;
 use protocol::flags;
 use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
-use protocol::ids::Ids;
+use protocol::ids::IdSet;
 use protocol::op::{self, ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
 use protocol::poll::{ChangeInterest, Interest, PollEvent, Token};
 use protocol::types::Header;
@@ -74,9 +74,9 @@ pub struct Stream {
     local_id_to_kind: BTreeMap<u32, Kind>,
     has_header: bool,
     header: Header,
-    ids: Ids,
-    tokens: Ids,
-    process_set: Ids,
+    ids: IdSet,
+    tokens: IdSet,
+    process_set: IdSet,
     read_to_client: HashMap<Token, ClientNodeId>,
     write_to_client: HashMap<Token, ClientNodeId>,
     fds: VecDeque<ReceivedFd>,
@@ -88,7 +88,7 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(connection: Connection) -> Result<Self> {
-        let mut ids = Ids::new();
+        let mut ids = IdSet::new();
 
         // Well-known identifiers.
         ids.set(consts::CORE_ID);
@@ -104,7 +104,7 @@ impl Stream {
             .properties
             .insert(prop::NODE_NAME, String::from("livemix_node"));
 
-        let mut tokens = Ids::new();
+        let mut tokens = IdSet::new();
         let connection_token = Token::new(tokens.alloc().context("no more tokens")? as u64);
 
         Ok(Self {
@@ -124,7 +124,7 @@ impl Stream {
             header: Header::default(),
             ids,
             tokens,
-            process_set: Ids::new(),
+            process_set: IdSet::new(),
             read_to_client: HashMap::new(),
             write_to_client: HashMap::new(),
             fds: VecDeque::with_capacity(16),
@@ -960,7 +960,6 @@ impl Stream {
         node.write_fd = write_fd.map(EventFd::from);
 
         if node.read_fd.is_some() {
-            tracing::error!(?node.read_fd);
             self.ops.push_back(Op::NodeReadInterest { node_id });
         }
 

@@ -8,6 +8,7 @@ use tracing::Level;
 
 use crate::memory::Region;
 use crate::ptr::{self, atomic, volatile};
+use crate::utils;
 
 /// The version of the activation protocol to use.
 #[derive(Debug)]
@@ -83,7 +84,7 @@ impl Activation {
     ///
     /// The caller is responsible for ensuring that this is a valid activation record.
     pub unsafe fn signal(&self) -> Result<bool> {
-        let nsec = get_monotonic_nsec();
+        let nsec = utils::get_monotonic_nsec();
 
         let signaled = match self.version {
             Version::V0 => unsafe { self.signal_v0(nsec)? },
@@ -139,21 +140,4 @@ impl Activation {
         let value = unsafe { atomic!(self.region, state[0].pending).fetch_sub(1) };
         value == 1
     }
-}
-
-fn get_monotonic_nsec() -> u64 {
-    const NSEC_PER_SEC: u64 = 1000000000u64;
-
-    let mut time_spec = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-
-    unsafe {
-        libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut time_spec);
-    }
-
-    (time_spec.tv_sec as u64)
-        .saturating_mul(NSEC_PER_SEC)
-        .saturating_add(time_spec.tv_nsec as u64)
 }
