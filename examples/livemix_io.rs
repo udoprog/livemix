@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::BufWriter;
 use std::mem;
@@ -30,6 +31,11 @@ const DEFAULT_VOLUME: f32 = 0.1;
 const TONE: f32 = 440.0;
 const DEBUG_INTERVAL: usize = 100;
 
+struct InputBuffer {
+    format: object::AudioFormat,
+    buf: Vec<f32>,
+}
+
 struct ExampleApplication {
     tick: usize,
     failed_signals: usize,
@@ -41,7 +47,7 @@ struct ExampleApplication {
     non_ready_peers: usize,
     non_ready_peers_bitset: IdSet,
     accumulators: HashMap<PortId, f32>,
-    outputs: HashMap<(PortId, MixId), Vec<f32>>,
+    inputs: HashMap<(PortId, MixId), InputBuffer>,
 }
 
 impl ExampleApplication {
@@ -107,15 +113,15 @@ impl ExampleApplication {
                 continue;
             };
 
+            if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
+                tracing::warn!(?format, "Unsupported format on output port");
+                continue;
+            }
+
             for buf in &mut port.io_buffers {
                 let status = unsafe { volatile!(buf.region, status).read() };
 
                 if !(status & Status::HAVE_DATA) {
-                    continue;
-                }
-
-                if format.rate != DEFAULT_RATE {
-                    tracing::warn!(?format, "Unsupported rate on input port");
                     continue;
                 }
 
@@ -128,10 +134,20 @@ impl ExampleApplication {
                 let _ = &buffer.metas[0];
                 let data = &buffer.datas[0];
 
-                let out = self
-                    .outputs
-                    .entry((port.id, buf.mix_id))
-                    .or_insert_with(|| Vec::with_capacity(data.max_size));
+                let b = match self.inputs.entry((port.id, buf.mix_id)) {
+                    Entry::Occupied(mut e) => {
+                        if e.get().format != *format {
+                            e.get_mut().buf.clear();
+                            e.get_mut().format = format.clone();
+                        }
+
+                        e.into_mut()
+                    }
+                    Entry::Vacant(e) => e.insert(InputBuffer {
+                        format: format.clone(),
+                        buf: Vec::with_capacity(data.max_size),
+                    }),
+                };
 
                 let samples;
 
@@ -142,14 +158,17 @@ impl ExampleApplication {
 
                     samples = size / mem::size_of::<f32>();
 
-                    out.reserve(samples);
+                    b.buf.reserve(samples);
 
-                    out.as_mut_ptr().add(out.len()).copy_from_nonoverlapping(
-                        data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
-                        samples,
-                    );
+                    b.buf
+                        .as_mut_ptr()
+                        .add(b.buf.len())
+                        .copy_from_nonoverlapping(
+                            data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
+                            samples,
+                        );
 
-                    out.set_len(out.len() + samples);
+                    b.buf.set_len(b.buf.len() + samples);
                 }
 
                 let old_read =
@@ -271,15 +290,20 @@ impl ExampleApplication {
     /// Process client.
     #[tracing::instrument(skip(self))]
     pub fn tick(&mut self) -> Result<()> {
-        let spec = hound::WavSpec {
-            channels: 1,
-            sample_rate: 48000,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
-        };
+        for (&(port_id, mix_id), b) in &mut self.inputs {
+            if b.format.format != AudioFormat::F32P {
+                b.buf.clear();
+                continue;
+            }
 
-        for (&(port_id, mix_id), buf) in &mut self.outputs {
-            if buf.len() > 0 {
+            let spec = hound::WavSpec {
+                channels: b.format.channels as u16,
+                sample_rate: b.format.rate,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            };
+
+            if b.buf.len() > 0 {
                 let file = PathBuf::from(format!("capture_{port_id}_{mix_id}.wav"));
                 let mut writer;
 
@@ -292,7 +316,7 @@ impl ExampleApplication {
                 let mut samples = 0;
                 let mut sum = 0.0;
 
-                for sample in buf.drain(..) {
+                for sample in b.buf.drain(..) {
                     writer.write_sample(sample)?;
                     sum += sample;
                     samples += 1;
@@ -334,7 +358,7 @@ fn main() -> Result<()> {
         non_ready_peers: 0,
         non_ready_peers_bitset: IdSet::new(),
         accumulators: HashMap::new(),
-        outputs: HashMap::new(),
+        inputs: HashMap::new(),
     };
 
     loop {
