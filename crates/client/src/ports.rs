@@ -75,7 +75,7 @@ impl<'de> Readable<'de> for PortId {
 }
 
 /// The identifier of a mix.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct MixId(u32);
 
@@ -99,6 +99,17 @@ impl fmt::Display for MixId {
     }
 }
 
+impl fmt::Debug for MixId {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0 == u32::MAX {
+            write!(f, "MixId::INVALID")
+        } else {
+            f.write_fmt(format_args!("MixId({})", self.0))
+        }
+    }
+}
+
 impl Writable for MixId {
     #[inline]
     fn write_into(&self, pod: &mut impl PodSink) -> Result<(), pod::Error> {
@@ -109,7 +120,7 @@ impl Writable for MixId {
 impl<'de> Readable<'de> for MixId {
     #[inline]
     fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, pod::Error> {
-        Ok(MixId(pod.next()?.read()?))
+        Ok(MixId(pod.next()?.read::<i32>()?.cast_unsigned()))
     }
 }
 
@@ -152,7 +163,7 @@ impl PortBuffers {
     /// Reset port buffers.
     pub fn reset(&mut self, mix_id: MixId) {
         if let Some(buf) = self.buffers.iter_mut().find(|b| b.mix_id == mix_id) {
-            buf.available.clear_bits();
+            buf.reset();
         }
     }
 
@@ -328,17 +339,17 @@ impl Port {
 
     /// Replace the current set of buffers for this port.
     #[inline]
-    #[tracing::instrument(skip(self, f), fields(port_id = ?self.id), ret(level = Level::TRACE))]
-    pub(crate) fn replace_buffers(
-        &mut self,
-        mix_id: MixId,
-        buffers: Buffers,
-        mut f: impl FnMut(Buffers),
-    ) {
-        for buf in self.buffers.buffers.extract_if(.., |b| b.mix_id == mix_id) {
+    #[tracing::instrument(skip(self, f, buffers), fields(port_id = ?self.id, mix_id = ?buffers.mix_id), ret(level = Level::TRACE))]
+    pub(crate) fn replace_buffers(&mut self, mut buffers: Buffers, mut f: impl FnMut(Buffers)) {
+        for buf in self
+            .buffers
+            .buffers
+            .extract_if(.., |b| b.mix_id == buffers.mix_id)
+        {
             f(buf);
         }
 
+        buffers.reset();
         self.buffers.buffers.push(buffers);
     }
 }

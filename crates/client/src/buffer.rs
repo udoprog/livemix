@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use bittle::BitsMut;
 use protocol::consts;
 use protocol::ffi;
 use protocol::flags;
@@ -44,4 +45,15 @@ pub struct Buffers {
     pub buffers: Vec<Buffer>,
     /// The buffers which are available in this set.
     pub available: u128,
+}
+
+impl Buffers {
+    /// Reset the buffer.
+    pub(crate) fn reset(&mut self) {
+        self.available = 0;
+
+        for n in 0..self.buffers.len() {
+            self.available.set_bit(n as u32);
+        }
+    }
 }

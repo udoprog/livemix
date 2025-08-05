@@ -1134,13 +1134,16 @@ impl Stream {
         let node = self.client_nodes.get_mut(node_id)?;
 
         let (direction, port_id, mix_id, flags, n_buffers) = st
-            .read::<(Direction, PortId, i32, u32, u32)>()
+            .read::<(Direction, PortId, MixId, u32, u32)>()
             .context("reading header")?;
 
-        let mix_id = if mix_id < 0 {
-            MixId::INVALID
+        // NB: Special case for MixId::INVALID, I have no idea why it's reported
+        // like this since it uses MixId(0) in port_set_io call, but we correct
+        // it here.
+        let mix_id = if mix_id == MixId::INVALID {
+            MixId::ZERO
         } else {
-            MixId::new(mix_id as u32)
+            mix_id
         };
 
         let mut buffers = Vec::new();
@@ -1233,7 +1236,7 @@ impl Stream {
 
         node.ports
             .get_mut(direction, port_id)?
-            .replace_buffers(mix_id, buffers, |b| {
+            .replace_buffers(buffers, |b| {
                 for buffer in b.buffers {
                     for meta in buffer.metas {
                         self.memory.free(meta.region);
