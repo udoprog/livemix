@@ -615,7 +615,10 @@ where
     }
 }
 
-impl<'de> PodItem<'de> for TypedPod<Slice<'de>, PackedPod> {
+impl<'de, P> PodItem<'de> for TypedPod<Slice<'de>, P>
+where
+    P: ReadPod,
+{
     #[inline]
     fn read<T>(self) -> Result<T, Error>
     where

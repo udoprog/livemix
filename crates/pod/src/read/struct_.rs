@@ -6,7 +6,7 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Error, PADDING, PackedPod, Pod, PodItem, PodStream, Readable, Reader, Slice, Type,
+    AsSlice, Error, PADDING, PackedPod, PodItem, PodStream, Readable, Reader, Slice, Type,
     TypedPod, UnsizedWritable, Writer,
 };
 
@@ -87,7 +87,7 @@ where
     where
         T: Readable<'de>,
     {
-        T::read_from(&mut Pod::new(self.buf.borrow_mut()))
+        T::read_from(self)
     }
 
     /// Read the next field in the struct.
@@ -254,6 +254,39 @@ impl<'de> Readable<'de> for Struct<Slice<'de>> {
     #[inline]
     fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
         Ok(pod.next()?.read_struct()?.into_slice())
+    }
+}
+
+/// Read from the [`Struct`] as a [`PodStream`].
+///
+/// # Examples
+///
+/// ```
+/// let mut pod = pod::array();
+/// pod.as_mut().write_struct(|st| {
+///     st.field().write(1i32)?;
+///     st.field().write(2i32)?;
+///     st.field().write(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut st = pod.as_ref().read_struct()?;
+/// let (a, b, c) = st.read::<(i32, i32, i32)>()?;
+/// assert_eq!(a, 1);
+/// assert_eq!(b, 2);
+/// assert_eq!(c, 3);
+/// assert!(st.is_empty());
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de, B> PodStream<'de> for Struct<B>
+where
+    B: Reader<'de>,
+{
+    type Item = TypedPod<Slice<'de>, PackedPod>;
+
+    #[inline]
+    fn next(&mut self) -> Result<Self::Item, Error> {
+        self.field()
     }
 }
 

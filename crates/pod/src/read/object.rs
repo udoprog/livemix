@@ -1,16 +1,12 @@
 use core::fmt;
 use core::mem;
 
-use crate::PodItem;
-use crate::PodStream;
-use crate::SizedReadable;
-use crate::UnsizedReadable;
 #[cfg(feature = "alloc")]
 use crate::buf::{AllocError, DynamicBuf};
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Error, PADDING, Property, Readable, Reader, Slice, Type, TypedPod, UnsizedWritable,
-    Writer,
+    AsSlice, Error, PADDING, PodItem, PodStream, Property, Readable, Reader, SizedReadable, Slice,
+    Type, TypedPod, UnsizedReadable, UnsizedWritable, Writer,
 };
 
 use super::Struct;
@@ -66,7 +62,7 @@ where
         })
     }
 
-    /// Conveniently read a value from the object.
+    /// Read a value from the [`Object`] using the [`Readable`] trait.
     ///
     /// # Examples
     ///
@@ -399,6 +395,27 @@ impl<'de> PodItem<'de> for Object<Slice<'de>> {
     }
 }
 
+/// Read from the [`Object`] as a [`PodStream`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Readable, Writable};
+///
+/// #[derive(Readable, Writable)]
+/// #[pod(object(type = 10u32, id = 20u32))]
+/// struct Contents {
+///     #[pod(property = 100u32)]
+///     value: u32,
+/// }
+///
+/// let mut pod = pod::array();
+/// pod.as_mut().write(Contents { value: 200 })?;
+///
+/// let c = pod.as_ref().read::<Contents>()?;
+/// assert_eq!(c.value, 200);
+/// # Ok::<_, pod::Error>(())
+/// ```
 impl<'de, B> PodStream<'de> for Object<B>
 where
     B: Reader<'de>,
