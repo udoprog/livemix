@@ -250,6 +250,13 @@ impl ExampleApplication {
 
             // Recycle buffers.
             for buf in &mut port.io_buffers {
+                let status = unsafe { volatile!(buf.region, status).read() };
+
+                if !(status & Status::NEED_DATA) && !(status & Status::OK) {
+                    port.port_buffers.free(buf.mix_id, buf_id);
+                    continue;
+                }
+
                 unsafe {
                     volatile!(buf.region, buffer_id).replace(buf_id as i32);
                     volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
@@ -327,7 +334,7 @@ impl ExampleApplication {
                     samples += 1;
                 }
 
-                tracing::info!(?file, samples, sum, len = writer.len(), "Wrote");
+                tracing::warn!(?file, samples, sum, len = writer.len(), "Wrote");
                 writer.finalize()?;
             }
         }

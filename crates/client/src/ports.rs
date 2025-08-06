@@ -240,6 +240,8 @@ impl PortBuffers {
         debug_assert_eq!(buf.mix_id, MixId::INVALID);
 
         let id = buf.available.iter_zeros().next()?;
+        let b = buf.buffers.get_mut(id as usize)?;
+
         buf.available.set_bit(id);
 
         for mix_id in mixes {
@@ -248,7 +250,7 @@ impl PortBuffers {
             }
         }
 
-        buf.buffers.get_mut(id as usize)
+        Some(b)
     }
 }
 
