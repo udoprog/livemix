@@ -242,8 +242,7 @@ impl ExampleApplication {
             }
         }
 
-        let was_awake =
-            unsafe { status.compare_exchange(Activation::AWAKE, Activation::NOT_TRIGGERED) };
+        let was_awake = unsafe { status.compare_exchange(Activation::AWAKE, Activation::FINISHED) };
 
         if was_awake {
             for a in &node.peer_activations {

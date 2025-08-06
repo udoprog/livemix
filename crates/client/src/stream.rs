@@ -310,7 +310,7 @@ impl Stream {
 
                     let was_inactive = unsafe {
                         atomic!(a, status)
-                            .compare_exchange(Activation::INACTIVE, Activation::NOT_TRIGGERED)
+                            .compare_exchange(Activation::INACTIVE, Activation::FINISHED)
                     };
 
                     if was_inactive {
