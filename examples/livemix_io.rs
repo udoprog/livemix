@@ -190,6 +190,16 @@ impl ExampleApplication {
         }
 
         for port in node.ports.outputs_mut() {
+            // Recycle buffers.
+            for buf in &mut port.io_buffers {
+                let status = unsafe { volatile!(buf.region, status).read() };
+                let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
+
+                if status & Status::NEED_DATA && target_id >= 0 {
+                    port.port_buffers.free(buf.mix_id, target_id as u32);
+                }
+            }
+
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
             };
@@ -199,21 +209,15 @@ impl ExampleApplication {
                 continue;
             }
 
-            // Recycle buffers.
-            for buf in &mut port.io_buffers {
-                let status = unsafe { volatile!(buf.region, status).read() };
-                let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
+            let buf_id = {
+                let mixes = port.io_buffers.iter().map(|b| b.mix_id);
 
-                if status & Status::NEED_DATA && target_id >= 0 {
-                    port.port_buffers.free(target_id as u32, buf.mix_id);
-                }
-
-                let Some(buffer) = port.port_buffers.next(buf.mix_id) else {
+                let Some(buffer) = port.port_buffers.next(mixes) else {
                     self.no_output_buffer += 1;
                     continue;
                 };
 
-                let mut accumulator = *self.accumulators.entry(port.id).or_default();
+                let accumulator = self.accumulators.entry(port.id).or_default();
 
                 let _ = &buffer.metas[0];
                 let data = &mut buffer.datas[0];
@@ -229,10 +233,10 @@ impl ExampleApplication {
 
                     for d in region.as_slice_mut().iter_mut().take(samples) {
                         *d = accumulator.sin() * DEFAULT_VOLUME;
-                        accumulator += M_PI_M2 * TONE / format.rate as f32;
+                        *accumulator += M_PI_M2 * TONE / format.rate as f32;
 
-                        if accumulator >= M_PI_M2 {
-                            accumulator -= M_PI_M2;
+                        if *accumulator >= M_PI_M2 {
+                            *accumulator -= M_PI_M2;
                         }
                     }
 
@@ -241,16 +245,16 @@ impl ExampleApplication {
                     chunk.stride = 4;
                 }
 
+                buffer.id
+            };
+
+            // Recycle buffers.
+            for buf in &mut port.io_buffers {
                 unsafe {
-                    volatile!(buf.region, buffer_id).replace(buffer.id as i32);
+                    volatile!(buf.region, buffer_id).replace(buf_id as i32);
                     volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
                 };
             }
-
-            let accumulator = self.accumulators.entry(port.id).or_default();
-
-            *accumulator += (M_PI_M2 * TONE / format.rate as f32) * (duration as f32);
-            *accumulator %= M_PI_M2;
         }
 
         for a in &node.peer_activations {

@@ -90,6 +90,11 @@ impl MixId {
     pub fn new(id: u32) -> Self {
         Self(id)
     }
+
+    /// Convert the `MixId` into a `usize`.
+    pub(crate) fn index(self) -> usize {
+        self.0 as usize
+    }
 }
 
 impl fmt::Display for MixId {
@@ -153,50 +158,97 @@ where
 }
 
 /// A set of allocated buffers for a port.
-#[derive(Default)]
 pub struct PortBuffers {
-    /// The global buffer in place, which applies to all mixes.
-    global_buffers: Option<Buffers>,
     /// The buffers associated with the port.
     buffers: Vec<Buffers>,
+    /// Bit sets, one per mix, indicating whether a buffer is currently in use
+    /// with a particular "mix" or peer.
+    mixes: Vec<u128>,
 }
 
 impl PortBuffers {
-    /// Reset port buffers.
-    pub fn reset(&mut self, mix_id: MixId) {
-        if let Some(buf) = self.find_buf_mut(mix_id) {
-            buf.reset();
+    /// Construct a new set of buffers with a pre-determined size of mixes.
+    pub fn new(direction: Direction) -> Self {
+        let mixes_len = if direction == Direction::OUTPUT {
+            64
+        } else {
+            0
+        };
+
+        Self {
+            buffers: Vec::new(),
+            mixes: vec![0; mixes_len],
+        }
+    }
+}
+
+impl PortBuffers {
+    /// Just get the specified buffer by id.
+    pub fn get_mut(&mut self, mix_id: MixId, buffer_id: u32) -> Option<&mut Buffer> {
+        let index = usize::try_from(buffer_id).ok()?;
+
+        self.buffers
+            .iter_mut()
+            .find(|b| b.mix_id == mix_id)?
+            .buffers
+            .get_mut(index)
+    }
+
+    /// The given mix id has been removed, so clear any reservations that are present on it.
+    pub fn free_all(&mut self, mix_id: MixId) {
+        debug_assert_ne!(mix_id, MixId::INVALID);
+
+        let Some(mix) = self.mixes.get_mut(mix_id.index()) else {
+            return;
+        };
+
+        let mix = mem::take(mix);
+
+        let Some(buf) = self.buffers.first_mut() else {
+            return;
+        };
+
+        debug_assert_eq!(buf.mix_id, MixId::INVALID);
+
+        for buffer_id in mix.iter_ones() {
+            if self.mixes.iter().all(|m| !m.test_bit(buffer_id)) {
+                buf.available.clear_bit(buffer_id);
+            }
         }
     }
 
     /// Free the given buffer by id.
-    pub fn free(&mut self, id: u32, mix_id: MixId) {
-        if let Some(buf) = self.find_buf_mut(mix_id) {
-            buf.available.set_bit(id);
+    pub fn free(&mut self, mix_id: MixId, buffer_id: u32) {
+        if let Some(mix) = self.mixes.get_mut(mix_id.index()) {
+            mix.clear_bit(buffer_id);
+        }
+
+        let Some(buf) = self.buffers.first_mut() else {
+            return;
+        };
+
+        debug_assert_eq!(buf.mix_id, MixId::INVALID);
+
+        if self.mixes.iter().all(|m| !m.test_bit(buffer_id)) {
+            buf.available.clear_bit(buffer_id);
         }
     }
 
     /// Get the next free buffer in the set.
-    pub fn next(&mut self, mix_id: MixId) -> Option<&mut Buffer> {
-        let buf = self.find_buf_mut(mix_id)?;
-        let id = buf.available.iter_ones().next()?;
-        buf.available.clear_bit(id);
-        buf.buffers.get_mut(id as usize)
-    }
+    pub fn next(&mut self, mixes: impl IntoIterator<Item = MixId>) -> Option<&mut Buffer> {
+        let buf = self.buffers.first_mut()?;
+        debug_assert_eq!(buf.mix_id, MixId::INVALID);
 
-    /// Just get the specified buffer by id.
-    pub fn get_mut(&mut self, mix_id: MixId, id: u32) -> Option<&mut Buffer> {
-        let index = usize::try_from(id).ok()?;
-        let buf = self.find_buf_mut(mix_id)?;
-        buf.buffers.get_mut(index)
-    }
+        let id = buf.available.iter_zeros().next()?;
+        buf.available.set_bit(id);
 
-    fn find_buf_mut(&mut self, mix_id: MixId) -> Option<&mut Buffers> {
-        if let Some(buf) = &mut self.global_buffers {
-            return Some(buf);
+        for mix_id in mixes {
+            if let Some(mix) = self.mixes.get_mut(mix_id.index()) {
+                mix.set_bit(id);
+            }
         }
 
-        self.buffers.iter_mut().find(|b| b.mix_id == mix_id)
+        buf.buffers.get_mut(id as usize)
     }
 }
 
@@ -351,22 +403,14 @@ impl Port {
     #[inline]
     #[tracing::instrument(skip(self, f, buffers), fields(port_id = ?self.id, mix_id = ?buffers.mix_id), ret(level = Level::TRACE))]
     pub(crate) fn replace_buffers(&mut self, mut buffers: Buffers, mut f: impl FnMut(Buffers)) {
-        buffers.reset();
-
         // Fox INVALID mix id, the provided buffer applies to all mixes.
         if buffers.mix_id == MixId::INVALID {
-            if let Some(buf) = self.port_buffers.global_buffers.replace(buffers) {
-                f(buf);
-            }
-
             for buf in self.port_buffers.buffers.drain(..) {
                 f(buf);
             }
-        } else {
-            if let Some(buf) = self.port_buffers.global_buffers.take() {
-                f(buf);
-            }
 
+            self.port_buffers.buffers.push(buffers);
+        } else {
             for buf in self
                 .port_buffers
                 .buffers
@@ -462,7 +506,7 @@ impl Ports {
             id,
             modified: true,
             name: String::new(),
-            port_buffers: PortBuffers::default(),
+            port_buffers: PortBuffers::new(direction),
             io_clock: None,
             io_position: None,
             io_buffers: Vec::new(),

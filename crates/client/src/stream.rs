@@ -1329,6 +1329,11 @@ impl Stream {
                 }
             }
             id::IoType::BUFFERS => {
+                /// Free everything on the specified mix since the I/O area has
+                /// changed and there are no other recourses for freeing
+                /// reserved buffers.
+                port.port_buffers.free_all(mix_id);
+
                 if let Some(mem_id) = mem_id {
                     let region = self.memory.map(mem_id, offset, size)?.cast()?;
                     port.io_buffers.push(PortIoBuffer { mix_id, region });
