@@ -2,7 +2,7 @@
 
 /// Get the current monotonic time in nanoseconds.
 pub fn get_monotonic_nsec() -> u64 {
-    const NSEC_PER_SEC: u64 = 1000000000u64;
+    const NSEC_PER_SEC: u64 = 1_000_000_000u64;
 
     let mut time_spec = libc::timespec {
         tv_sec: 0,

@@ -79,7 +79,7 @@ impl ExampleApplication {
             }
         }
 
-        let now = utils::get_monotonic_nsec();
+        let then = utils::get_monotonic_nsec();
 
         if let Some(this) = &node.activation {
             unsafe {
@@ -207,15 +207,13 @@ impl ExampleApplication {
                 if status & Status::NEED_DATA && target_id > 0 {
                     port.buffers.free(target_id as u32, buf.mix_id);
                 }
-            }
 
-            for buf in &mut port.io_buffers {
                 let Some(buffer) = port.buffers.next(buf.mix_id) else {
                     self.no_output_buffer += 1;
                     continue;
                 };
 
-                let mut accumulator = *self.accumulators.entry(port.id).or_insert(0.0);
+                let mut accumulator = *self.accumulators.entry(port.id).or_default();
 
                 let _ = &buffer.metas[0];
                 let data = &mut buffer.datas[0];
@@ -249,15 +247,10 @@ impl ExampleApplication {
                 };
             }
 
-            let accumulator = self.accumulators.entry(port.id).or_insert(0.0);
+            let accumulator = self.accumulators.entry(port.id).or_default();
 
-            for _ in 0..duration {
-                *accumulator += M_PI_M2 * TONE / format.rate as f32;
-
-                if *accumulator >= M_PI_M2 {
-                    *accumulator -= M_PI_M2;
-                }
-            }
+            *accumulator += (M_PI_M2 * TONE / format.rate as f32) * (duration as f32);
+            *accumulator %= M_PI_M2;
         }
 
         for a in &node.peer_activations {
@@ -278,7 +271,8 @@ impl ExampleApplication {
             }
         }
 
-        self.timing_sum += now - utils::get_monotonic_nsec();
+        let now = utils::get_monotonic_nsec();
+        self.timing_sum += now.saturating_sub(then);
         self.timing_count += 1;
         Ok(())
     }
@@ -364,7 +358,7 @@ impl ExampleApplication {
         if self.timing_count > 0 {
             let average_timing =
                 Duration::from_nanos((self.timing_sum as f64 / self.timing_count as f64) as u64);
-            tracing::warn!(?average_timing);
+            tracing::warn!(self.timing_count, self.timing_sum, ?average_timing);
             self.timing_count = 0;
             self.timing_sum = 0;
         }
