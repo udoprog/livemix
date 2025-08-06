@@ -1144,14 +1144,7 @@ impl Stream {
             .read::<(Direction, PortId, MixId, u32, u32)>()
             .context("reading header")?;
 
-        // NB: Special case for MixId::INVALID, I have no idea why it's reported
-        // like this since it uses MixId(0) in port_set_io call, but we correct
-        // it here.
-        let mix_id = if mix_id == MixId::INVALID {
-            MixId::ZERO
-        } else {
-            mix_id
-        };
+        tracing::warn!(?direction, ?port_id, ?mix_id, "UseBuffers");
 
         let mut buffers = Vec::new();
 
@@ -1235,6 +1228,7 @@ impl Stream {
 
         let buffers = Buffers {
             direction,
+            port_id,
             mix_id,
             flags,
             buffers,
@@ -1276,10 +1270,19 @@ impl Stream {
         let size = st.field()?.read_sized::<usize>()?;
         let port = node.ports.get_mut(direction, port_id)?;
 
-        let span = tracing::info_span!("client_node_port_set_io", ?direction, ?port_id, ?id);
-        let _span = span.enter();
-
         let mem_id = u32::try_from(mem_id).ok();
+
+        tracing::warn!(?direction, ?port_id, ?mix_id, ?id, ?mem_id, "SetIO");
+
+        let span = tracing::info_span!(
+            "client_node_port_set_io",
+            ?direction,
+            ?port_id,
+            ?mix_id,
+            ?id,
+            ?mem_id
+        );
+        let _span = span.enter();
 
         match id {
             id::IoType::CLOCK => {
@@ -1323,13 +1326,14 @@ impl Stream {
                 if let Some(mem_id) = mem_id {
                     let region = self.memory.map(mem_id, offset, size)?.cast()?;
                     port.io_buffers.push(PortIoBuffer { mix_id, region });
+                    port.port_buffers.reset(mix_id);
                 } else {
                     for buf in port.io_buffers.extract_if(.., |b| b.mix_id == mix_id) {
                         self.memory.free(buf.region);
+                        // Need to reset the relevant buffer to make sure it's free.
+                        port.port_buffers.reset(buf.mix_id);
                     }
                 }
-
-                port.buffers.reset(mix_id);
             }
             id => {
                 tracing::warn!(?id, "Unsupported IO type in port set IO");
@@ -1386,6 +1390,8 @@ impl Stream {
         let mix_id = st.read::<MixId>()?;
         let peer_id = st.read::<i32>()?;
         let peer_id = u32::try_from(peer_id).ok().map(PortId::new);
+
+        tracing::warn!(?direction, ?port_id, ?mix_id, ?peer_id, "SetMixInfo");
 
         let mut props = st.read::<Struct<_>>()?;
         let n_items = props.read::<u32>()?;

@@ -155,6 +155,8 @@ where
 /// A set of allocated buffers for a port.
 #[derive(Default)]
 pub struct PortBuffers {
+    /// The global buffer in place, which applies to all mixes.
+    global_buffers: Option<Buffers>,
     /// The buffers associated with the port.
     buffers: Vec<Buffers>,
 }
@@ -162,21 +164,21 @@ pub struct PortBuffers {
 impl PortBuffers {
     /// Reset port buffers.
     pub fn reset(&mut self, mix_id: MixId) {
-        if let Some(buf) = self.buffers.iter_mut().find(|b| b.mix_id == mix_id) {
+        if let Some(buf) = self.find_buf_mut(mix_id) {
             buf.reset();
         }
     }
 
     /// Free the given buffer by id.
     pub fn free(&mut self, id: u32, mix_id: MixId) {
-        if let Some(buf) = self.buffers.iter_mut().find(|b| b.mix_id == mix_id) {
+        if let Some(buf) = self.find_buf_mut(mix_id) {
             buf.available.set_bit(id);
         }
     }
 
     /// Get the next free buffer in the set.
     pub fn next(&mut self, mix_id: MixId) -> Option<&mut Buffer> {
-        let buf = self.buffers.iter_mut().find(|b| b.mix_id == mix_id)?;
+        let buf = self.find_buf_mut(mix_id)?;
         let id = buf.available.iter_ones().next()?;
         buf.available.clear_bit(id);
         buf.buffers.get_mut(id as usize)
@@ -185,8 +187,16 @@ impl PortBuffers {
     /// Just get the specified buffer by id.
     pub fn get_mut(&mut self, mix_id: MixId, id: u32) -> Option<&mut Buffer> {
         let index = usize::try_from(id).ok()?;
-        let buf = self.buffers.iter_mut().find(|b| b.mix_id == mix_id)?;
+        let buf = self.find_buf_mut(mix_id)?;
         buf.buffers.get_mut(index)
+    }
+
+    fn find_buf_mut(&mut self, mix_id: MixId) -> Option<&mut Buffers> {
+        if let Some(buf) = &mut self.global_buffers {
+            Some(buf)
+        } else {
+            self.buffers.iter_mut().find(|b| b.mix_id == mix_id)
+        }
     }
 }
 
@@ -210,7 +220,7 @@ pub struct Port {
     /// The name of the port.
     pub name: String,
     /// List of available buffers for the port.
-    pub buffers: PortBuffers,
+    pub port_buffers: PortBuffers,
     /// The IO clock region for the port.
     pub io_clock: Option<Region<ffi::IoClock>>,
     /// The IO position region for the port.
@@ -341,16 +351,32 @@ impl Port {
     #[inline]
     #[tracing::instrument(skip(self, f, buffers), fields(port_id = ?self.id, mix_id = ?buffers.mix_id), ret(level = Level::TRACE))]
     pub(crate) fn replace_buffers(&mut self, mut buffers: Buffers, mut f: impl FnMut(Buffers)) {
-        for buf in self
-            .buffers
-            .buffers
-            .extract_if(.., |b| b.mix_id == buffers.mix_id)
-        {
-            f(buf);
-        }
-
         buffers.reset();
-        self.buffers.buffers.push(buffers);
+
+        // Fox INVALID mix id, the provided buffer applies to all mixes.
+        if buffers.mix_id == MixId::INVALID {
+            if let Some(buf) = self.port_buffers.global_buffers.replace(buffers) {
+                f(buf);
+            }
+
+            for buf in self.port_buffers.buffers.drain(..) {
+                f(buf);
+            }
+        } else {
+            if let Some(buf) = self.port_buffers.global_buffers.take() {
+                f(buf);
+            }
+
+            for buf in self
+                .port_buffers
+                .buffers
+                .extract_if(.., |b| b.mix_id == buffers.mix_id)
+            {
+                f(buf);
+            }
+
+            self.port_buffers.buffers.push(buffers);
+        }
     }
 }
 
@@ -436,7 +462,7 @@ impl Ports {
             id,
             modified: true,
             name: String::new(),
-            buffers: PortBuffers::default(),
+            port_buffers: PortBuffers::default(),
             io_clock: None,
             io_position: None,
             io_buffers: Vec::new(),

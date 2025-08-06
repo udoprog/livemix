@@ -2,11 +2,13 @@ use alloc::vec::Vec;
 
 use bittle::BitsMut;
 use protocol::consts;
+use protocol::consts::Direction;
 use protocol::ffi;
 use protocol::flags;
 use protocol::id;
 
 use crate::MixId;
+use crate::PortId;
 use crate::memory::Region;
 
 #[derive(Debug)]
@@ -39,7 +41,8 @@ pub struct Buffer {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Buffers {
-    pub direction: consts::Direction,
+    pub direction: Direction,
+    pub port_id: PortId,
     pub mix_id: MixId,
     pub flags: u32,
     pub buffers: Vec<Buffer>,

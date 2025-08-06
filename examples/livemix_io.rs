@@ -141,7 +141,7 @@ impl ExampleApplication {
 
                 let id = unsafe { volatile!(buf.region, buffer_id).read() };
 
-                let Some(buffer) = port.buffers.get_mut(buf.mix_id, id as u32) else {
+                let Some(buffer) = port.port_buffers.get_mut(buf.mix_id, id as u32) else {
                     bail!("Input no buffer with id {id} for port {}", port.id);
                 };
 
@@ -205,10 +205,10 @@ impl ExampleApplication {
                 let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
 
                 if status & Status::NEED_DATA && target_id > 0 {
-                    port.buffers.free(target_id as u32, buf.mix_id);
+                    port.port_buffers.free(target_id as u32, buf.mix_id);
                 }
 
-                let Some(buffer) = port.buffers.next(buf.mix_id) else {
+                let Some(buffer) = port.port_buffers.next(buf.mix_id) else {
                     self.no_output_buffer += 1;
                     continue;
                 };
