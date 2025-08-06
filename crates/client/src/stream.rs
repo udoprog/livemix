@@ -1,6 +1,7 @@
 use core::ffi::CStr;
 use core::fmt;
 use core::mem;
+use core::mem::MaybeUninit;
 use core::slice;
 
 use core::time::Duration;
@@ -80,7 +81,7 @@ pub struct Stream {
     process_set: IdSet,
     read_to_client: HashMap<Token, ClientNodeId>,
     write_to_client: HashMap<Token, ClientNodeId>,
-    fds: VecDeque<ReceivedFd>,
+    fds: Vec<ReceivedFd>,
     ops: VecDeque<Op>,
     memory: Memory,
     add_interest: VecDeque<(RawFd, Token, Interest)>,
@@ -128,7 +129,7 @@ impl Stream {
             process_set: IdSet::new(),
             read_to_client: HashMap::new(),
             write_to_client: HashMap::new(),
-            fds: VecDeque::with_capacity(16),
+            fds: Vec::with_capacity(16),
             ops: VecDeque::from([Op::CoreHello]),
             memory: Memory::new(),
             add_interest: VecDeque::new(),
@@ -193,12 +194,12 @@ impl Stream {
         let mut added = 0usize;
 
         for fd in fds {
-            self.fds.push_back(ReceivedFd { fd: Some(fd) });
+            self.fds.push(ReceivedFd { fd: Some(fd) });
             added += 1;
         }
 
         if added > 0 {
-            tracing::trace!(added, fds = self.fds.len());
+            tracing::trace!(added, fds = ?self.fds);
         }
     }
 
@@ -374,13 +375,19 @@ impl Stream {
         if self.header.n_fds() > 0 {
             let n_fds = self.header.n_fds() as usize;
 
+            ensure!(
+                n_fds <= self.fds.len(),
+                "Header specifies more file descriptors ({n_fds}) than is stored ({})",
+                self.fds.len()
+            );
+
             if n_fds > 0 {
                 tracing::trace!(n_fds, "Freeing file descriptors");
-            }
 
-            for fd in self.fds.drain(..n_fds) {
-                if let Some(fd) = fd.fd {
-                    tracing::warn!("Unused file descriptor dropped: {fd:?}");
+                for fd in self.fds.drain(..n_fds) {
+                    if let Some(fd) = fd.fd {
+                        tracing::warn!("Unused file descriptor dropped: {fd:?}");
+                    }
                 }
             }
         }
