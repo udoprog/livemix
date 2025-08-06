@@ -4,9 +4,59 @@ use core::fmt;
 
 use crate::consts;
 use crate::flags;
+use crate::flags::ActivationFlags;
 
 /** the maximum number of segments visible in the future */
 const IO_POSITION_MAX_SEGMENTS: usize = 8;
+
+pod::macros::flags! {
+    /// Describes `SPA_IO_VIDEO_SIZE_FLAG_*`
+    #[examples = [VALID]]
+    #[not_set = []]
+    #[module = protocol::ffi]
+    pub struct IoVideoSizeFlags(u32) {
+        NONE;
+        /// The value of the struct is valid.
+        VALID = 1 << 0;
+    }
+
+
+    /// Describes `SPA_IO_SEGMENT_BAR_FLAG_*`
+    #[examples = [VALID]]
+    #[not_set = []]
+    #[module = protocol::ffi]
+    pub struct IoSegmentBarFlags(u32) {
+        NONE;
+        /// The value of the struct is valid.
+        VALID = 1 << 0;
+    }
+
+    /// Describes `SPA_IO_SEGMENT_FLAG_*`
+    #[examples = [LOOPING]]
+    #[not_set = [NO_POSITION]]
+    #[module = protocol::ffi]
+    pub struct IoSegmentFlags(u32) {
+        NONE;
+        /// after the duration, the segment repeats.
+        LOOPING = 1 << 0;
+        /// position is invalid. The position can be invalid after a seek, for
+        /// example, when the exact mapping of the extra segment info (bar,
+        /// video, ...) to position has not been determined yet.
+        NO_POSITION = 1 << 1;
+    }
+
+    /// Describes `SPA_IO_SEGMENT_VIDEO_FLAG_*`
+    #[examples = [VALID]]
+    #[not_set = [DROP_FRAME]]
+    #[module = protocol::ffi]
+    pub struct IoSegmentVideoFlags(u32) {
+        NONE;
+        VALID = 1 << 0;
+        DROP_FRAME = 1 << 1;
+        PULL_DOWN = 1 << 2;
+        INTERLACED = 1 << 3;
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
@@ -71,7 +121,7 @@ pub struct IoPosition {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IoVideoSize {
     /// optional flags
-    pub flags: u32,
+    pub flags: IoVideoSizeFlags,
     /// video stride in bytes
     pub stride: u32,
     /// the video size
@@ -105,7 +155,7 @@ pub struct IoVideoSize {
 pub struct IoSegment {
     pub version: u32,
     /// extra flags
-    pub flags: u32,
+    pub flags: IoSegmentFlags,
     /// value of running time when this info is active. Can be in the future for
     /// pending changes. It does not have to be in exact multiples of the clock
     /// duration.
@@ -132,7 +182,7 @@ pub struct IoSegment {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IoSegmentVideo {
     /// flags
-    pub flags: u32,
+    pub flags: IoSegmentVideoFlags,
     /// offset in segment
     pub offset: u32,
     pub framerate: Fraction,
@@ -173,7 +223,7 @@ pub struct Rectangle {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct IoSegmentBar {
     /// extra flags
-    pub flags: u32,
+    pub flags: IoSegmentBarFlags,
     /// offset in segment of this beat
     pub offset: u32,
     /// time signature numerator
@@ -230,7 +280,7 @@ pub struct NodeActivation {
     /// The current node driver id.
     pub driver_id: u32,
     /// Extra flags.
-    pub flags: u32,
+    pub flags: ActivationFlags,
     /// Contains current position and segment info extra info is updated by
     /// nodes that have  themselves as owner in the segment structs.
     pub position: IoPosition,

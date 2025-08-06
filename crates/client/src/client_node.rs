@@ -121,10 +121,10 @@ pub struct ClientNode {
     pub peer_activations: Vec<PeerActivation>,
     /// Ports associated with the client node.
     pub ports: Ports,
-    pub(super) read_fd: Option<EventFd>,
-    pub(super) write_token: Token,
-    pub(super) write_fd: Option<EventFd>,
+    pub read_fd: Option<EventFd>,
     pub(super) read_token: Token,
+    pub write_fd: Option<EventFd>,
+    pub(super) write_token: Token,
     pub(super) params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
     pub io_clock: Option<Region<ffi::IoClock>>,
     pub io_control: Option<Region<[u8]>>,

@@ -242,7 +242,8 @@ impl ExampleApplication {
             }
         }
 
-        let was_awake = unsafe { status.compare_exchange(Activation::AWAKE, Activation::FINISHED) };
+        let was_awake =
+            unsafe { status.compare_exchange(Activation::AWAKE, Activation::NOT_TRIGGERED) };
 
         if was_awake {
             for a in &node.peer_activations {
@@ -277,6 +278,17 @@ impl ExampleApplication {
                     let flags = volatile!(na, flags).read();
                     tracing::warn!(?state, ?driver_id, ?active_driver_id, ?flags);
                 }
+            }
+
+            tracing::warn!(?node.read_fd);
+
+            for peer in &node.peer_activations {
+                tracing::warn!(?peer.peer_id, ?peer.signal_fd);
+
+                let activation = unsafe { peer.region.read() };
+
+                tracing::warn!(?peer.peer_id, ?peer.signal_fd);
+                tracing::warn!(?activation);
             }
         }
 

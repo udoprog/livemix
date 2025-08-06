@@ -310,7 +310,7 @@ impl Stream {
 
                     let was_inactive = unsafe {
                         atomic!(a, status)
-                            .compare_exchange(Activation::INACTIVE, Activation::FINISHED)
+                            .compare_exchange(Activation::INACTIVE, Activation::NOT_TRIGGERED)
                     };
 
                     if was_inactive {
@@ -379,13 +379,13 @@ impl Stream {
             );
 
             if n_fds > 0 {
-                tracing::trace!(n_fds, "Freeing file descriptors");
-
                 for fd in self.fds.drain(..n_fds) {
                     if let Some(fd) = fd.fd {
                         tracing::warn!("Unused file descriptor dropped: {fd:?}");
                     }
                 }
+
+                tracing::trace!(n_fds, fds_after = ?self.fds, "Freed file descriptors");
             }
         }
 
@@ -1212,6 +1212,7 @@ impl Stream {
         }
 
         tracing::warn!(
+            target = "io",
             ?direction,
             ?port_id,
             ?mix_id,
@@ -1265,7 +1266,15 @@ impl Stream {
 
         let mem_id = u32::try_from(mem_id).ok();
 
-        tracing::warn!(?direction, ?port_id, ?mix_id, ?id, ?mem_id, "SetIO");
+        tracing::warn!(
+            target = "io",
+            ?direction,
+            ?port_id,
+            ?mix_id,
+            ?id,
+            ?mem_id,
+            "SetIO"
+        );
 
         let span = tracing::info_span!(
             "client_node_port_set_io",

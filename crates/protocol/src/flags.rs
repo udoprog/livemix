@@ -367,6 +367,18 @@ pod::macros::flags! {
         #[constant = pipewire_sys::PW_CORE_CHANGE_MASK_PROPS]
         PROPS = 1 << 0;
     }
+
+    /// Describes `PW_NODE_ACTIVATION_FLAG_*`.
+    #[examples = [PROFILER]]
+    #[not_set = [ASYNC]]
+    #[module = protocol::flags]
+    pub struct ActivationFlags(u32) {
+        NONE;
+        /// the profiler is running.
+        PROFILER = 1 << 0;
+        /// The node is async.
+        ASYNC = 1 << 1;
+    }
 }
 
 impl ParamFlag {
