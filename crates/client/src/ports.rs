@@ -193,10 +193,10 @@ impl PortBuffers {
 
     fn find_buf_mut(&mut self, mix_id: MixId) -> Option<&mut Buffers> {
         if let Some(buf) = &mut self.global_buffers {
-            Some(buf)
-        } else {
-            self.buffers.iter_mut().find(|b| b.mix_id == mix_id)
+            return Some(buf);
         }
+
+        self.buffers.iter_mut().find(|b| b.mix_id == mix_id)
     }
 }
 

@@ -204,7 +204,7 @@ impl ExampleApplication {
                 let status = unsafe { volatile!(buf.region, status).read() };
                 let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
 
-                if status & Status::NEED_DATA && target_id > 0 {
+                if status & Status::NEED_DATA && target_id >= 0 {
                     port.port_buffers.free(target_id as u32, buf.mix_id);
                 }
 

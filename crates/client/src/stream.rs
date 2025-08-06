@@ -1144,8 +1144,6 @@ impl Stream {
             .read::<(Direction, PortId, MixId, u32, u32)>()
             .context("reading header")?;
 
-        tracing::warn!(?direction, ?port_id, ?mix_id, "UseBuffers");
-
         let mut buffers = Vec::new();
 
         for id in 0..n_buffers {
@@ -1225,6 +1223,14 @@ impl Stream {
                 datas,
             });
         }
+
+        tracing::warn!(
+            ?direction,
+            ?port_id,
+            ?mix_id,
+            buffers = buffers.len(),
+            "UseBuffers"
+        );
 
         let buffers = Buffers {
             direction,
@@ -1326,12 +1332,9 @@ impl Stream {
                 if let Some(mem_id) = mem_id {
                     let region = self.memory.map(mem_id, offset, size)?.cast()?;
                     port.io_buffers.push(PortIoBuffer { mix_id, region });
-                    port.port_buffers.reset(mix_id);
                 } else {
                     for buf in port.io_buffers.extract_if(.., |b| b.mix_id == mix_id) {
                         self.memory.free(buf.region);
-                        // Need to reset the relevant buffer to make sure it's free.
-                        port.port_buffers.reset(buf.mix_id);
                     }
                 }
             }
