@@ -27,7 +27,7 @@ mod ports;
 pub use self::ports::{MixId, Port, PortId, PortParam, Ports};
 
 mod activation;
-pub use self::activation::Activation;
+pub use self::activation::PeerActivation;
 
 pub mod events;
 pub mod ptr;

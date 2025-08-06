@@ -24,7 +24,7 @@ use protocol::EventFd;
 use protocol::Poll;
 use protocol::Prop;
 use protocol::buf::RecvBuf;
-use protocol::consts::{self, ActivationStatus, Direction};
+use protocol::consts::{self, Activation, Direction};
 use protocol::ffi;
 use protocol::flags;
 use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
@@ -36,7 +36,7 @@ use protocol::{Connection, Properties, prop};
 use slab::Slab;
 use tracing::Level;
 
-use crate::activation::Activation;
+use crate::activation::PeerActivation;
 use crate::buffer::{self, Buffer};
 use crate::events::RemoveNodeParamEvent;
 use crate::events::{RemovePortParamEvent, SetNodeParamEvent, SetPortParamEvent, StreamEvent};
@@ -228,11 +228,9 @@ impl Stream {
                     }
                 }
                 Op::NodeCreated { node_id } => {
-                    return Ok(Some(StreamEvent::NodeCreated(node_id)));
-                }
-                Op::NodeActive { node_id } => {
                     let node = self.client_nodes.get(node_id)?;
                     self.c.client_node_set_active(node.id, true)?;
+                    return Ok(Some(StreamEvent::NodeCreated(node_id)));
                 }
                 Op::NodeUpdate { node_id, what } => {
                     let node = self.client_nodes.get_mut(node_id)?;
@@ -306,27 +304,26 @@ impl Stream {
                 Op::NodeStart { node_id } => {
                     let node = self.client_nodes.get(node_id)?;
 
-                    if let Some(a) = &node.activation {
-                        if unsafe {
-                            atomic!(a, status).compare_exchange(
-                                ActivationStatus::INACTIVE,
-                                ActivationStatus::NOT_TRIGGERED,
-                            )
-                        } {
-                            tracing::info!("Starting node");
-                        }
-                    } else {
-                        tracing::error!(
-                            ?node_id,
-                            "Cannot start node, missing activation for client"
-                        );
+                    let Some(a) = &node.activation else {
+                        continue;
+                    };
+
+                    let was_inactive = unsafe {
+                        atomic!(a, status)
+                            .compare_exchange(Activation::INACTIVE, Activation::NOT_TRIGGERED)
+                    };
+
+                    if was_inactive {
+                        let state = unsafe { volatile!(a, state[0]).read() };
+                        let client_version = unsafe { volatile!(a, client_version).read() };
+                        tracing::info!(?state, ?client_version, "Starting node");
                     }
                 }
                 Op::NodePause { node_id } => {
                     let node = self.client_nodes.get(node_id)?;
 
                     if let Some(a) = &node.activation {
-                        unsafe { atomic!(a, status).store(ActivationStatus::INACTIVE) };
+                        unsafe { atomic!(a, status).store(Activation::INACTIVE) };
                     } else {
                         tracing::error!(
                             ?node_id,
@@ -874,7 +871,6 @@ impl Stream {
             match *kind {
                 Kind::Registry => {}
                 Kind::ClientNode(index) => {
-                    self.ops.push_back(Op::NodeActive { node_id: index });
                     self.ops.push_back(Op::NodeUpdate {
                         node_id: index,
                         what: None,
@@ -951,15 +947,6 @@ impl Stream {
 
         if let Some(a) = node.activation.replace(region) {
             self.memory.free(a);
-        }
-
-        // Set node as not triggered.
-        if let Some(activation) = &node.activation {
-            let old = unsafe { atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED) };
-
-            if old != ActivationStatus::INACTIVE {
-                tracing::warn!("Expected node to be INACTIVE, but was {old:?}",);
-            }
         }
 
         tracing::debug!(?node_id, ?read_fd, ?write_fd, mem_id, offset, size);
@@ -1382,8 +1369,8 @@ impl Stream {
         let signal_fd = EventFd::from(signal_fd);
         let region = self.memory.map(mem_id, offset, size)?.cast()?;
 
-        node.peer_activations
-            .push(unsafe { Activation::new(peer_id, signal_fd, region) });
+        let peer = unsafe { PeerActivation::new(peer_id, signal_fd, region) };
+        node.peer_activations.push(peer);
         Ok(())
     }
 
@@ -1491,9 +1478,6 @@ enum Op {
     },
     ConstructNode,
     NodeCreated {
-        node_id: ClientNodeId,
-    },
-    NodeActive {
         node_id: ClientNodeId,
     },
     NodeUpdate {

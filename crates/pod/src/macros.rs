@@ -222,6 +222,7 @@ macro_rules! __consts {
                 $(
                     $(#[doc = $field_doc:literal])*
                     $(#[display = $display:literal])?
+                    $(#[constant = $value_mod:ident :: $value_constant:ident])?
                     $field:ident = $field_value:expr;
                 )*
             }
@@ -294,6 +295,21 @@ macro_rules! __consts {
                 }
             }
         )*
+
+        #[cfg(all(test, feature = "test-pipewire-sys"))]
+        #[test]
+        fn test_sys_consts() {
+            $($(
+                $(
+                    assert_eq! {
+                        $ty::$field.into_raw(), $value_mod::$value_constant as $repr,
+                        "{}::{} != {}::{}",
+                        stringify!($ty), stringify!($flag),
+                        stringify!($value_mod), stringify!($value_constant)
+                    };
+                )*
+            )*)*
+        }
     };
 
     (

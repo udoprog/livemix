@@ -14,7 +14,7 @@ use client::{ClientNode, MixId, Port, PortId, PortParam, Stream, utils};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
-use protocol::consts::{ActivationStatus, Direction};
+use protocol::consts::{Activation, Direction};
 use protocol::flags::Status;
 use protocol::id::{
     self, AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
@@ -53,43 +53,30 @@ struct ExampleApplication {
     failed_signals: usize,
     timing_sum: u64,
     timing_count: usize,
-    debug_activations: bool,
 }
 
 impl ExampleApplication {
     #[tracing::instrument(skip(self, node))]
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
-
-        if self.debug_activations && self.tick % 100 == 0 {
-            if let Some(a) = &node.activation {
-                unsafe {
-                    let pending = atomic!(a, state[0].pending).load();
-                    let required = atomic!(a, state[0].required).load();
-                    tracing::warn!(?pending, ?required, "this");
-                }
-            }
-
-            for a in &node.peer_activations {
-                unsafe {
-                    let pending = atomic!(a.region, state[0].pending).load();
-                    let required = atomic!(a.region, state[0].required).load();
-                    tracing::warn!(?a.peer_id, ?pending, ?required);
-                }
-            }
-        }
-
         let then = utils::get_monotonic_nsec();
 
-        if let Some(this) = &node.activation {
-            unsafe {
-                let pending = atomic!(this, state[0].pending).load();
-                let status = atomic!(this, status).load();
+        let Some(na) = &node.activation else {
+            return Ok(());
+        };
 
-                if pending != 0 || status != ActivationStatus::TRIGGERED {
-                    self.not_self_triggered += 1;
-                }
+        let status;
+
+        unsafe {
+            status = atomic!(na, status);
+
+            if !status.compare_exchange(Activation::TRIGGERED, Activation::AWAKE) {
+                self.not_self_triggered += 1;
+                return Ok(());
             }
+
+            let awake_time = volatile!(na, awake_time).replace(then);
+            volatile!(na, prev_awake_time).write(awake_time);
         }
 
         for a in &node.peer_activations {
@@ -97,19 +84,10 @@ impl ExampleApplication {
                 let pending = atomic!(a.region, state[0].pending).load();
                 let status = atomic!(a.region, status).load();
 
-                if pending == 0 || status != ActivationStatus::NOT_TRIGGERED {
+                if pending == 0 || status != Activation::NOT_TRIGGERED {
                     self.non_ready_peers += 1;
                     self.non_ready_peers_bitset.set(a.peer_id);
                 }
-            }
-        }
-
-        if let Some(activation) = &node.activation {
-            let previous_status =
-                unsafe { atomic!(activation, status).swap(ActivationStatus::AWAKE) };
-
-            if previous_status != ActivationStatus::TRIGGERED {
-                self.not_triggered += 1;
             }
         }
 
@@ -264,33 +242,45 @@ impl ExampleApplication {
             }
         }
 
-        for a in &node.peer_activations {
-            unsafe {
-                let signaled = a.signal()?;
-                self.failed_signals += usize::from(!signaled);
-            }
-        }
+        let was_awake =
+            unsafe { status.compare_exchange(Activation::AWAKE, Activation::NOT_TRIGGERED) };
 
-        // Set activation to NOT_TRIGGERED indicating we are ready to be
-        // scheduled again.
-        if let Some(activation) = &node.activation {
-            let previous_status =
-                unsafe { atomic!(activation, status).swap(ActivationStatus::NOT_TRIGGERED) };
-
-            if previous_status != ActivationStatus::AWAKE {
-                tracing::warn!(?previous_status, "Expected AWAKE");
+        if was_awake {
+            for a in &node.peer_activations {
+                unsafe {
+                    let signaled = a.trigger()?;
+                    self.failed_signals += usize::from(!signaled);
+                }
             }
         }
 
         let now = utils::get_monotonic_nsec();
         self.timing_sum += now.saturating_sub(then);
         self.timing_count += 1;
+
+        unsafe {
+            let prev_finish_time = volatile!(na, finish_time).replace(then);
+            volatile!(na, prev_finish_time).write(prev_finish_time);
+        }
+
         Ok(())
     }
 
     /// Process client.
     #[tracing::instrument(skip_all)]
-    pub fn tick(&mut self, _stream: &mut Stream) -> Result<()> {
+    pub fn tick(&mut self, stream: &mut Stream) -> Result<()> {
+        for node in stream.nodes() {
+            if let Some(na) = node.activation.as_ref() {
+                unsafe {
+                    let state = volatile!(na, state[0]).read();
+                    let driver_id = volatile!(na, driver_id).read();
+                    let active_driver_id = volatile!(na, active_driver_id).read();
+                    let flags = volatile!(na, flags).read();
+                    tracing::warn!(?state, ?driver_id, ?active_driver_id, ?flags);
+                }
+            }
+        }
+
         for (&(port_id, mix_id), b) in &mut self.inputs {
             if b.format.format != AudioFormat::F32P {
                 b.buf.clear();
@@ -412,7 +402,6 @@ fn main() -> Result<()> {
         failed_signals: 0,
         timing_sum: 0,
         timing_count: 0,
-        debug_activations: false,
     };
 
     loop {

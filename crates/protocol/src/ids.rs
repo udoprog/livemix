@@ -21,9 +21,9 @@ impl IdSet {
     /// # Examples
     ///
     /// ```
-    /// use protocol::ids::Ids;
+    /// use protocol::ids::IdSet;
     ///
-    /// let mut ids = Ids::new();
+    /// let mut ids = IdSet::new();
     ///
     /// assert_eq!(ids.alloc(), Some(0));
     /// assert_eq!(ids.alloc(), Some(1));
@@ -44,9 +44,9 @@ impl IdSet {
     /// # Examples
     ///
     /// ```
-    /// use protocol::ids::Ids;
+    /// use protocol::ids::IdSet;
     ///
-    /// let mut ids = Ids::new();
+    /// let mut ids = IdSet::new();
     ///
     /// assert_eq!(ids.alloc(), Some(0));
     /// assert_eq!(ids.alloc(), Some(1));
@@ -69,9 +69,9 @@ impl IdSet {
     /// # Examples
     ///
     /// ```
-    /// use protocol::ids::Ids;
+    /// use protocol::ids::IdSet;
     ///
-    /// let mut ids = Ids::new();
+    /// let mut ids = IdSet::new();
     ///
     /// assert_eq!(ids.alloc(), Some(0));
     /// assert_eq!(ids.alloc(), Some(1));
@@ -91,9 +91,9 @@ impl IdSet {
     /// # Examples
     ///
     /// ```
-    /// use protocol::ids::Ids;
+    /// use protocol::ids::IdSet;
     ///
-    /// let mut ids = Ids::new();
+    /// let mut ids = IdSet::new();
     ///
     /// assert_eq!(ids.alloc(), Some(0));
     /// assert_eq!(ids.alloc(), Some(1));

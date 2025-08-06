@@ -55,7 +55,7 @@ pod::macros::consts! {
     /// * AWAKE -> FINISHED (node completed processing and triggered the peers)
     #[example = NOT_TRIGGERED]
     #[module = protocol::consts]
-    pub struct ActivationStatus(u32) {
+    pub struct Activation(u32) {
         UNKNOWN;
         NOT_TRIGGERED = 0;
         TRIGGERED = 1;

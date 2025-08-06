@@ -2,7 +2,7 @@ use core::time::Duration;
 
 use anyhow::Result;
 use protocol::EventFd;
-use protocol::consts::ActivationStatus;
+use protocol::consts::Activation;
 use protocol::ffi;
 use tracing::Level;
 
@@ -18,14 +18,14 @@ pub enum Version {
 }
 
 #[derive(Debug)]
-pub struct Activation {
+pub struct PeerActivation {
     pub peer_id: u32,
     pub signal_fd: EventFd,
     pub region: Region<ffi::NodeActivation>,
     pub version: Version,
 }
 
-impl Activation {
+impl PeerActivation {
     /// Construct a new activation record.
     ///
     /// # Safety
@@ -54,36 +54,12 @@ impl Activation {
         }
     }
 
-    /// Wait until peer is pending.
-    pub unsafe fn wait_until_pending(&self) -> bool {
-        let pending = unsafe { atomic!(self.region, state[0].pending) };
-        let status = unsafe { atomic!(self.region, status) };
-
-        let mut logged = false;
-        let mut retry = 16;
-
-        // Wait until the pending count is non-zero.
-        loop {
-            let pending = unsafe { pending.load() };
-            let status = unsafe { status.load() };
-
-            if pending > 0 && status == ActivationStatus::NOT_TRIGGERED || retry == 0 {
-                return true;
-            }
-
-            std::thread::yield_now();
-            retry -= 1;
-        }
-
-        false
-    }
-
     /// Signal the activation.
     ///
     /// # Safety
     ///
     /// The caller is responsible for ensuring that this is a valid activation record.
-    pub unsafe fn signal(&self) -> Result<bool> {
+    pub unsafe fn trigger(&self) -> Result<bool> {
         let nsec = utils::get_monotonic_nsec();
 
         let signaled = match self.version {
@@ -101,7 +77,7 @@ impl Activation {
                 return Ok(false);
             }
 
-            atomic!(self.region, status).store(ActivationStatus::TRIGGERED);
+            atomic!(self.region, status).store(Activation::TRIGGERED);
             volatile!(self.region, signal_time).write(nsec);
 
             if !self.signal_fd.write(1)? {
@@ -120,7 +96,7 @@ impl Activation {
             }
 
             let changed = atomic!(self.region, status)
-                .compare_exchange(ActivationStatus::NOT_TRIGGERED, ActivationStatus::TRIGGERED);
+                .compare_exchange(Activation::NOT_TRIGGERED, Activation::TRIGGERED);
 
             if !changed {
                 return Ok(false);

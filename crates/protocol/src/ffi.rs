@@ -191,7 +191,7 @@ pub struct IoSegmentBar {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct NodeActivation {
-    pub status: consts::ActivationStatus,
+    pub status: consts::Activation,
     /// * unsigned int version:1;
     /// * A sync is pending.
     ///   `unsigned int pending_sync:1;`

@@ -71,7 +71,7 @@ mod sealed_into_atomic {
     use protocol::flags;
 
     pub trait Sealed {}
-    impl Sealed for consts::ActivationStatus {}
+    impl Sealed for consts::Activation {}
     impl Sealed for flags::Status {}
     impl Sealed for u32 {}
     impl Sealed for u64 {}
@@ -90,7 +90,7 @@ where
     fn from_repr(repr: Self::Repr) -> Self;
 }
 
-impl IntoAtomic for consts::ActivationStatus {
+impl IntoAtomic for consts::Activation {
     type Repr = u32;
     type Atomic = AtomicU32;
 

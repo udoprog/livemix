@@ -13,7 +13,7 @@ use protocol::{EventFd, ffi};
 use slab::Slab;
 
 use crate::memory::Region;
-use crate::{Activation, Ports};
+use crate::{PeerActivation, Ports};
 
 /// Collection of data related to client nodes.
 pub struct ClientNodes {
@@ -118,7 +118,7 @@ pub struct ClientNode {
     /// Activation record for this node.
     pub activation: Option<Region<ffi::NodeActivation>>,
     /// Activation records for dependent nodes.
-    pub peer_activations: Vec<Activation>,
+    pub peer_activations: Vec<PeerActivation>,
     /// Ports associated with the client node.
     pub ports: Ports,
     pub(super) read_fd: Option<EventFd>,
