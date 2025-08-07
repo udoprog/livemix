@@ -1212,7 +1212,7 @@ impl Stream {
         }
 
         tracing::warn!(
-            target = "io",
+            name: "io",
             ?direction,
             ?port_id,
             ?mix_id,
@@ -1267,7 +1267,7 @@ impl Stream {
         let mem_id = u32::try_from(mem_id).ok();
 
         tracing::warn!(
-            target = "io",
+            name: "io",
             ?direction,
             ?port_id,
             ?mix_id,
