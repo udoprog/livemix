@@ -3,6 +3,7 @@ use core::mem::{self, MaybeUninit};
 use core::ptr;
 
 use std::env;
+use std::ffi::OsStr;
 use std::io;
 use std::io::Write;
 use std::os::fd::{AsRawFd, RawFd};
@@ -20,7 +21,7 @@ use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
 
 const ENVIRONS: &[&str] = &["PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR", "USERPROFILE"];
-const SOCKET: &str = "pipewire-0";
+const DEFAULT_PIPEWIRE_REMOTE: &str = "pipewire-0";
 
 const MAX_SEND_SIZE: usize = 4096;
 
@@ -45,13 +46,23 @@ impl Connection {
     #[tracing::instrument]
     pub fn open() -> Result<Self, Error> {
         let socket = 'socket: {
+            let owned;
+
+            let pipewire_remote = match env::var_os("PIPEWIRE_REMOTE") {
+                Some(pipewire_remote) => {
+                    owned = pipewire_remote;
+                    &owned
+                }
+                None => OsStr::new(DEFAULT_PIPEWIRE_REMOTE),
+            };
+
             for environ in ENVIRONS.iter().copied() {
                 let Some(path) = env::var_os(environ) else {
                     continue;
                 };
 
                 let mut path = PathBuf::from(path);
-                path.push(SOCKET);
+                path.push(pipewire_remote);
 
                 match UnixStream::connect(&path) {
                     Ok(socket) => {

@@ -302,15 +302,15 @@ impl Stream {
                     }
                 }
                 Op::NodeStart { node_id } => {
-                    let node = self.client_nodes.get(node_id)?;
+                    let node = self.client_nodes.get_mut(node_id)?;
 
-                    let Some(a) = &node.activation else {
+                    let Some(a) = &mut node.activation else {
                         continue;
                     };
 
                     let was_inactive = unsafe {
                         atomic!(a, status)
-                            .compare_exchange(Activation::INACTIVE, Activation::NOT_TRIGGERED)
+                            .compare_exchange(Activation::INACTIVE, Activation::FINISHED)
                     };
 
                     if was_inactive {
@@ -320,9 +320,9 @@ impl Stream {
                     }
                 }
                 Op::NodePause { node_id } => {
-                    let node = self.client_nodes.get(node_id)?;
+                    let node = self.client_nodes.get_mut(node_id)?;
 
-                    if let Some(a) = &node.activation {
+                    if let Some(a) = &mut node.activation {
                         unsafe { atomic!(a, status).store(Activation::INACTIVE) };
                     } else {
                         tracing::error!(
@@ -435,7 +435,7 @@ impl Stream {
                 let n_fds = self
                     .c
                     .recv_with_fds(recv, &mut fds[..])
-                    .context("Failed to receive file descriptors")?;
+                    .context("Receive errored")?;
 
                 // SAFETY: We must trust the file descriptor we have
                 // just received.
@@ -935,7 +935,7 @@ impl Stream {
 
         let node = self.client_nodes.get_mut(node_id)?;
 
-        if let Some(a) = node.activation.take() {
+        if let Some(a) = node.take_activation() {
             self.memory.free(a);
         }
 
@@ -943,9 +943,12 @@ impl Stream {
             return Ok(());
         };
 
-        let region = self.memory.map(mem_id, offset, size)?.cast()?;
+        let region = self
+            .memory
+            .map(mem_id, offset, size)?
+            .cast::<ffi::NodeActivation>()?;
 
-        if let Some(a) = node.activation.replace(region) {
+        if let Some(a) = node.replace_activation(region) {
             self.memory.free(a);
         }
 
@@ -1034,17 +1037,20 @@ impl Stream {
                 }
             }
             id::IoType::POSITION => {
-                let Ok(mem_id) = u32::try_from(mem_id) else {
-                    if let Some(region) = node.io_position.take() {
-                        self.memory.free(region);
-                    }
+                if let Some(region) = node.take_io_position() {
+                    self.memory.free(region);
+                }
 
+                let Ok(mem_id) = u32::try_from(mem_id) else {
                     return Ok(());
                 };
 
-                let region = self.memory.map(mem_id, offset, size)?.cast()?;
+                let region = self
+                    .memory
+                    .map(mem_id, offset, size)?
+                    .cast::<ffi::IoPosition>()?;
 
-                if let Some(region) = node.io_position.replace(region) {
+                if let Some(region) = node.replace_io_position(region) {
                     self.memory.free(region);
                 }
             }
@@ -1255,13 +1261,9 @@ impl Stream {
     ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let direction = Direction::from_raw(st.field()?.read_sized::<u32>()?);
-        let port_id = st.field()?.read::<PortId>()?;
-        let mix_id = st.field()?.read::<MixId>()?;
-        let id = st.field()?.read_sized::<id::IoType>()?;
-        let mem_id = st.field()?.read_sized::<i32>()?;
-        let offset = st.field()?.read_sized::<usize>()?;
-        let size = st.field()?.read_sized::<usize>()?;
+        let (direction, port_id, mix_id, id, mem_id, offset, size) =
+            st.read::<(Direction, PortId, MixId, id::IoType, i32, usize, usize)>()?;
+
         let port = node.ports.get_mut(direction, port_id)?;
 
         let mem_id = u32::try_from(mem_id).ok();

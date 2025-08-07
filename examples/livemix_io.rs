@@ -68,7 +68,7 @@ impl ExampleApplication {
         self.tick = self.tick.wrapping_add(1);
         let then = utils::get_monotonic_nsec();
 
-        let Some(na) = &node.activation else {
+        let Some(na) = &mut node.activation else {
             return Ok(());
         };
 
@@ -98,13 +98,14 @@ impl ExampleApplication {
             }
         }
 
-        let Some(io_position) = &node.io_position else {
+        let duration;
+
+        if let Some(io_position) = &mut node.io_position {
+            duration = unsafe { volatile!(io_position, clock.duration).read() };
+        } else {
             tracing::error!("Missing IO position");
             return Ok(());
-        };
-
-        let clock = unsafe { volatile!(io_position, clock).read() };
-        let duration = clock.duration;
+        }
 
         for port in node.ports.inputs_mut() {
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
@@ -249,8 +250,7 @@ impl ExampleApplication {
             }
         }
 
-        let was_awake =
-            unsafe { status.compare_exchange(Activation::AWAKE, Activation::NOT_TRIGGERED) };
+        let was_awake = unsafe { status.compare_exchange(Activation::AWAKE, Activation::FINISHED) };
 
         if was_awake {
             for a in &node.peer_activations {
@@ -283,20 +283,18 @@ impl ExampleApplication {
     /// Process client.
     #[tracing::instrument(skip_all)]
     pub fn tick(&mut self, stream: &mut Stream) -> Result<()> {
-        for node in stream.nodes() {
-            if let Some(na) = node.activation.as_ref() {
+        for this in stream.nodes() {
+            if let Some(na) = this.activation.as_ref() {
                 unsafe {
                     let state = volatile!(na, state[0]).read();
                     let driver_id = volatile!(na, driver_id).read();
                     let active_driver_id = volatile!(na, active_driver_id).read();
                     let flags = volatile!(na, flags).read();
-                    tracing::warn!(?state, ?driver_id, ?active_driver_id, ?flags);
+                    tracing::warn!(?this.read_fd, ?state, ?driver_id, ?active_driver_id, ?flags);
                 }
             }
 
-            tracing::warn!(?node.read_fd);
-
-            for peer in &node.peer_activations {
+            for peer in &this.peer_activations {
                 let activation = unsafe { peer.region.read() };
                 tracing::warn!(?peer.peer_id, ?peer.signal_fd, activation.status = ?activation.status, activation.state = ?activation.state[0]);
             }

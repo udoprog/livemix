@@ -12,7 +12,9 @@ use protocol::poll::Token;
 use protocol::{EventFd, ffi};
 use slab::Slab;
 
+use crate::activation;
 use crate::memory::Region;
+use crate::ptr::volatile;
 use crate::{PeerActivation, Ports};
 
 /// Collection of data related to client nodes.
@@ -156,6 +158,62 @@ impl ClientNode {
             io_position: None,
             modified: true,
         })
+    }
+
+    /// Replace the activation area for this node.
+    #[inline]
+    pub(crate) fn take_activation(&mut self) -> Option<Region<ffi::NodeActivation>> {
+        let old = self.activation.take();
+        self.update_activation_record();
+        old
+    }
+
+    /// Replace the activation area for this node.
+    #[inline]
+    pub(crate) fn replace_activation(
+        &mut self,
+        activation: Region<ffi::NodeActivation>,
+    ) -> Option<Region<ffi::NodeActivation>> {
+        let old = self.activation.replace(activation);
+        self.update_activation_record();
+        old
+    }
+
+    /// Take the IO position for this node.
+    pub(crate) fn take_io_position(&mut self) -> Option<Region<ffi::IoPosition>> {
+        let old = self.io_position.take();
+        self.update_activation_record();
+        old
+    }
+
+    /// Replace the activation area for this node.
+    #[inline]
+    pub(crate) fn replace_io_position(
+        &mut self,
+        io_position: Region<ffi::IoPosition>,
+    ) -> Option<Region<ffi::IoPosition>> {
+        let old = self.io_position.replace(io_position);
+        self.update_activation_record();
+        old
+    }
+
+    /// It is important to update some fields in the activation area when the node is in a certain state.
+    fn update_activation_record(&mut self) {
+        // NB: Do nothing if there is no activation area.
+        let Some(a) = &mut self.activation else {
+            return;
+        };
+
+        let active_driver_id = unsafe { volatile!(a, active_driver_id) };
+
+        let Some(io_position) = &mut self.io_position else {
+            // NB: This is equivalent to SPA_ID_INVALID.
+            active_driver_id.write(u32::MAX);
+            return;
+        };
+
+        let id = unsafe { volatile!(io_position, clock.id).read() };
+        active_driver_id.write(id);
     }
 
     /// Set a parameter for the node.
