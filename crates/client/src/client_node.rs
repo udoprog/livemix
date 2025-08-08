@@ -7,14 +7,17 @@ use std::vec::Vec;
 
 use anyhow::{Result, bail};
 use pod::{AsSlice, DynamicBuf, Object};
+use protocol::consts::Activation;
 use protocol::id::Param;
 use protocol::poll::Token;
 use protocol::{EventFd, ffi};
 use slab::Slab;
 
+use crate::Stats;
 use crate::activation;
 use crate::memory::Region;
-use crate::ptr::volatile;
+use crate::ptr::{atomic, volatile};
+use crate::utils;
 use crate::{PeerActivation, Ports};
 
 /// Collection of data related to client nodes.
@@ -132,6 +135,8 @@ pub struct ClientNode {
     pub io_control: Option<Region<[u8]>>,
     pub io_position: Option<Region<ffi::IoPosition>>,
     pub(super) modified: bool,
+    then: u64,
+    stats: Stats,
 }
 
 impl ClientNode {
@@ -157,7 +162,74 @@ impl ClientNode {
             io_clock: None,
             io_position: None,
             modified: true,
+            then: 0,
+            stats: Stats::default(),
         })
+    }
+
+    /// Start processing for this node.
+    pub fn start_process(&mut self) -> Result<()> {
+        self.then = utils::get_monotonic_nsec();
+
+        let Some(na) = &mut self.activation else {
+            bail!("Missing activation area for node {}", self.id);
+        };
+
+        unsafe {
+            if !atomic!(na, status).compare_exchange(Activation::TRIGGERED, Activation::AWAKE) {
+                self.stats.not_self_triggered += 1;
+                return Ok(());
+            }
+
+            let awake_time = volatile!(na, awake_time).replace(self.then);
+            volatile!(na, prev_awake_time).write(awake_time);
+        }
+
+        Ok(())
+    }
+
+    /// End processing for this node.
+    pub fn end_process(&mut self) -> Result<()> {
+        let Some(na) = &mut self.activation else {
+            bail!("Missing activation area for node {}", self.id);
+        };
+
+        let now = utils::get_monotonic_nsec();
+
+        unsafe {
+            let was_awake = unsafe {
+                atomic!(na, status).compare_exchange(Activation::AWAKE, Activation::FINISHED)
+            };
+
+            if was_awake {
+                for a in &mut self.peer_activations {
+                    unsafe {
+                        let signaled = a.trigger(now)?;
+
+                        if signaled {
+                            self.stats.signal_ok += 1;
+                            self.stats.signal_ok_set.set(a.peer_id);
+                        } else {
+                            self.stats.signal_error += 1;
+                            self.stats.signal_error_set.set(a.peer_id);
+                        }
+                    }
+                }
+            }
+
+            self.stats.timing_sum += now.saturating_sub(self.then);
+            self.stats.timing_count += 1;
+
+            let prev_finish_time = volatile!(na, finish_time).replace(self.then);
+            volatile!(na, prev_finish_time).write(prev_finish_time);
+        }
+
+        Ok(())
+    }
+
+    /// Access statistics mutably for this node.
+    pub fn stats_mut(&mut self) -> &mut Stats {
+        &mut self.stats
     }
 
     /// Replace the activation area for this node.

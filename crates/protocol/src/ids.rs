@@ -1,6 +1,6 @@
 //! Helper to allocate identifiers for protocol objects.
 
-use core::fmt;
+use core::{fmt, ops::BitOrAssign};
 
 use bittle::{Bits, BitsMut};
 
@@ -134,5 +134,12 @@ impl fmt::Debug for IdSet {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.layer.iter_ones()).finish()
+    }
+}
+
+impl BitOrAssign for IdSet {
+    #[inline]
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.layer.bitor_assign(rhs.layer);
     }
 }

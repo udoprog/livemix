@@ -32,3 +32,6 @@ pub use self::activation::PeerActivation;
 pub mod events;
 pub mod ptr;
 pub mod utils;
+
+mod stats;
+pub use self::stats::Stats;

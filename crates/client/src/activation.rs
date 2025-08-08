@@ -59,9 +59,7 @@ impl PeerActivation {
     /// # Safety
     ///
     /// The caller is responsible for ensuring that this is a valid activation record.
-    pub unsafe fn trigger(&self) -> Result<bool> {
-        let nsec = utils::get_monotonic_nsec();
-
+    pub unsafe fn trigger(&mut self, nsec: u64) -> Result<bool> {
         let signaled = match self.version {
             Version::V0 => unsafe { self.signal_v0(nsec)? },
             Version::V1 => unsafe { self.signal_v1(nsec)? },

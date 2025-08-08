@@ -9,18 +9,17 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
-use client::ptr::{atomic, volatile};
-use client::{ClientNode, MixId, Port, PortId, PortParam, Stream, utils};
+use client::ptr::volatile;
+use client::{ClientNode, MixId, Port, PortId, PortParam, Stats, Stream};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
-use protocol::consts::{Activation, Direction};
+use protocol::consts::Direction;
 use protocol::flags::Status;
 use protocol::id::{
     self, AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
     ParamBuffers, ParamIo, ParamMeta,
 };
-use protocol::ids::IdSet;
 use protocol::poll::{Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd, ffi, flags, object};
 
@@ -35,25 +34,6 @@ struct InputBuffer {
     buf: Vec<f32>,
 }
 
-#[derive(Default)]
-struct Stats {
-    /// At the beginning of processing we check whether or not peers have a
-    /// pending value greater than 0, and have a status of NOT_TRIGGERED.
-    ///
-    /// If that is not the case, we increment this counter add add the peer to the bitset.
-    non_ready: usize,
-    non_ready_set: IdSet,
-    not_input_have_data: usize,
-    not_self_triggered: usize,
-    no_output_buffer: usize,
-    failed: usize,
-    failed_set: IdSet,
-    succeeded: usize,
-    succeeded_set: IdSet,
-    timing_sum: u64,
-    timing_count: usize,
-}
-
 struct ExampleApplication {
     tick: usize,
     formats: HashMap<(Direction, PortId), object::AudioFormat>,
@@ -66,37 +46,7 @@ impl ExampleApplication {
     #[tracing::instrument(skip(self, node))]
     fn process(&mut self, node: &mut ClientNode) -> Result<()> {
         self.tick = self.tick.wrapping_add(1);
-        let then = utils::get_monotonic_nsec();
-
-        let Some(na) = &mut node.activation else {
-            return Ok(());
-        };
-
-        let status;
-
-        unsafe {
-            status = atomic!(na, status);
-
-            if !status.compare_exchange(Activation::TRIGGERED, Activation::AWAKE) {
-                self.stats.not_self_triggered += 1;
-                return Ok(());
-            }
-
-            let awake_time = volatile!(na, awake_time).replace(then);
-            volatile!(na, prev_awake_time).write(awake_time);
-        }
-
-        for a in &node.peer_activations {
-            unsafe {
-                let pending = atomic!(a.region, state[0].pending).load();
-                let status = atomic!(a.region, status).load();
-
-                if pending == 0 || status != Activation::NOT_TRIGGERED {
-                    self.stats.non_ready += 1;
-                    self.stats.non_ready_set.set(a.peer_id);
-                }
-            }
-        }
+        node.start_process()?;
 
         let duration;
 
@@ -121,7 +71,7 @@ impl ExampleApplication {
                 let status = unsafe { volatile!(buf.region, status).read() };
 
                 if !(status & Status::HAVE_DATA) {
-                    self.stats.not_input_have_data += 1;
+                    self.stats.no_input_buffer += 1;
                     continue;
                 }
 
@@ -250,54 +200,15 @@ impl ExampleApplication {
             }
         }
 
-        let was_awake = unsafe { status.compare_exchange(Activation::AWAKE, Activation::FINISHED) };
-
-        if was_awake {
-            for a in &node.peer_activations {
-                unsafe {
-                    let signaled = a.trigger()?;
-
-                    if signaled {
-                        self.stats.succeeded += 1;
-                        self.stats.succeeded_set.set(a.peer_id);
-                    } else {
-                        self.stats.failed += 1;
-                        self.stats.failed_set.set(a.peer_id);
-                    }
-                }
-            }
-        }
-
-        let now = utils::get_monotonic_nsec();
-        self.stats.timing_sum += now.saturating_sub(then);
-        self.stats.timing_count += 1;
-
-        unsafe {
-            let prev_finish_time = volatile!(na, finish_time).replace(then);
-            volatile!(na, prev_finish_time).write(prev_finish_time);
-        }
-
+        node.end_process()?;
         Ok(())
     }
 
     /// Process client.
     #[tracing::instrument(skip_all)]
     pub fn tick(&mut self, stream: &mut Stream) -> Result<()> {
-        for this in stream.nodes() {
-            if let Some(na) = this.activation.as_ref() {
-                unsafe {
-                    let state = volatile!(na, state[0]).read();
-                    let driver_id = volatile!(na, driver_id).read();
-                    let active_driver_id = volatile!(na, active_driver_id).read();
-                    let flags = volatile!(na, flags).read();
-                    tracing::warn!(?this.read_fd, ?state, ?driver_id, ?active_driver_id, ?flags);
-                }
-            }
-
-            for peer in &this.peer_activations {
-                let activation = unsafe { peer.region.read() };
-                tracing::warn!(?peer.peer_id, ?peer.signal_fd, activation.status = ?activation.status, activation.state = ?activation.state[0]);
-            }
+        for this in stream.nodes_mut() {
+            self.stats.merge(this.stats_mut());
         }
 
         for (&(port_id, mix_id), b) in &mut self.inputs {
@@ -348,45 +259,7 @@ impl ExampleApplication {
             }
         }
 
-        let stats = &mut self.stats;
-
-        if stats.non_ready > 0 {
-            tracing::warn!(stats.non_ready, ?stats.non_ready_set);
-            stats.non_ready = 0;
-            stats.non_ready_set.clear();
-        }
-
-        if stats.failed > 0 || stats.succeeded > 0 {
-            tracing::warn!(stats.failed, stats.succeeded, ?stats.failed_set, ?stats.succeeded_set);
-            stats.failed = 0;
-            stats.failed_set.clear();
-            stats.succeeded = 0;
-            stats.succeeded_set.clear();
-        }
-
-        if stats.not_input_have_data > 0 {
-            tracing::warn!(stats.not_input_have_data);
-            stats.not_input_have_data = 0;
-        }
-
-        if stats.not_self_triggered > 0 {
-            tracing::warn!(stats.not_self_triggered);
-            stats.not_self_triggered = 0;
-        }
-
-        if stats.no_output_buffer > 0 {
-            tracing::warn!(stats.no_output_buffer);
-            stats.no_output_buffer = 0;
-        }
-
-        if stats.timing_count > 0 {
-            let average_timing =
-                Duration::from_nanos((stats.timing_sum as f64 / stats.timing_count as f64) as u64);
-            tracing::warn!(stats.timing_count, stats.timing_sum, ?average_timing);
-            stats.timing_count = 0;
-            stats.timing_sum = 0;
-        }
-
+        self.stats.report();
         Ok(())
     }
 }
