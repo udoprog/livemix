@@ -186,8 +186,23 @@ impl PortBuffers {
 }
 
 impl PortBuffers {
+    /// Get the next input buffer.
+    pub fn next_input<'io>(&mut self, mix: &'io mut PortMix) -> Option<PortInputBuffer<'io, '_>> {
+        let status = unsafe { volatile!(mix.region, status).read() };
+
+        if !(status & Status::HAVE_DATA) {
+            return None;
+        }
+
+        let id = unsafe { volatile!(mix.region, buffer_id).read() };
+
+        let buffer = self.get_mut(mix.mix_id, id as u32)?;
+
+        Some(PortInputBuffer { io: mix, buffer })
+    }
+
     /// Just get the specified buffer by id.
-    pub fn get_mut(&mut self, mix_id: MixId, buffer_id: u32) -> Option<&mut Buffer> {
+    pub(crate) fn get_mut(&mut self, mix_id: MixId, buffer_id: u32) -> Option<&mut Buffer> {
         let index = usize::try_from(buffer_id).ok()?;
 
         self.buffers
@@ -198,7 +213,7 @@ impl PortBuffers {
     }
 
     /// The given mix id has been removed, so clear any reservations that are present on it.
-    pub fn free_all(&mut self, mix_id: MixId) {
+    pub(crate) fn free_all(&mut self, mix_id: MixId) {
         debug_assert_ne!(mix_id, MixId::INVALID);
 
         let Some(mix) = self.mixes.get_mut(mix_id.index()) else {
@@ -238,9 +253,12 @@ impl PortBuffers {
     }
 
     /// Get the next free buffer in the set.
-    pub fn next<'io>(&mut self, io: &'io mut PortIoBuffers) -> Option<PortOutputBuffer<'io, '_>> {
+    pub fn next_output<'mix>(
+        &mut self,
+        mixes: &'mix mut PortMixes,
+    ) -> Option<PortOutputBuffer<'mix, '_>> {
         // Recycle buffers before we try and acquire a new one.
-        for buf in &mut io.buffers {
+        for buf in &mut mixes.buffers {
             let status = unsafe { volatile!(buf.region, status).read() };
             let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
 
@@ -257,7 +275,7 @@ impl PortBuffers {
 
         buf.available.set_bit(id);
 
-        for io_buffer in &io.buffers {
+        for io_buffer in &mixes.buffers {
             if let Some(mix) = self.mixes.get_mut(io_buffer.mix_id.index()) {
                 mix.set_bit(id);
             }
@@ -267,7 +285,7 @@ impl PortBuffers {
         let port_buffers = NonNull::from(self);
 
         Some(PortOutputBuffer {
-            io,
+            io: mixes,
             port_buffers,
             buf: b,
             _marker: PhantomData,
@@ -275,9 +293,37 @@ impl PortBuffers {
     }
 }
 
+/// An allocated input buffer.
+#[must_use = "In order for the input buffer to be used again, `need_data` must be called"]
+pub struct PortInputBuffer<'io, 'buf> {
+    /// The IO buffers for the port.
+    io: &'io mut PortMix,
+    /// The buffer that is being read.
+    buffer: &'buf mut Buffer,
+}
+
+impl PortInputBuffer<'_, '_> {
+    /// Access the underlying buffer mutably.
+    pub fn buffer_mut(&mut self) -> &mut Buffer {
+        &mut self.buffer
+    }
+
+    /// The mix the input buffer is associated with.
+    pub fn mix_id(&self) -> MixId {
+        self.io.mix_id
+    }
+
+    /// Mark the input buffer as needing more data.
+    pub fn need_data(self) -> Result<()> {
+        unsafe { volatile!(self.io.region, status).replace(flags::Status::NEED_DATA) };
+        Ok(())
+    }
+}
+
 /// An output buffer related to a port.
+#[must_use = "In order for the output buffer to be used, `have_data` must be called"]
 pub struct PortOutputBuffer<'io, 'buf> {
-    io: &'io mut PortIoBuffers,
+    io: &'io mut PortMixes,
     port_buffers: NonNull<PortBuffers>,
     pub buf: NonNull<Buffer>,
     _marker: PhantomData<&'buf mut PortBuffers>,
@@ -318,17 +364,24 @@ impl PortOutputBuffer<'_, '_> {
 /// The IO area for a port.
 ///
 /// This is keyed by mix, since it might refer to multiple links.
-pub struct PortIoBuffer {
+pub struct PortMix {
     /// The mix identifier.
-    pub mix_id: MixId,
+    pub(crate) mix_id: MixId,
     /// The memory region.
-    pub region: Region<ffi::IoBuffers>,
+    pub(crate) region: Region<ffi::IoBuffers>,
 }
 
 /// The IO buffers for a port.
 #[derive(Default)]
-pub struct PortIoBuffers {
-    pub buffers: Vec<PortIoBuffer>,
+pub struct PortMixes {
+    pub buffers: Vec<PortMix>,
+}
+
+impl PortMixes {
+    /// Iterate over port mixes.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut PortMix> {
+        self.buffers.iter_mut()
+    }
 }
 
 /// The definition of a port.
@@ -347,7 +400,7 @@ pub struct Port {
     /// The IO position region for the port.
     pub io_position: Option<Region<ffi::IoPosition>>,
     /// The IO buffers region for the port.
-    pub io_buffers: PortIoBuffers,
+    pub mixes: PortMixes,
     /// The audio format of the port.
     pub format: Option<object::AudioFormat>,
     /// The mix information for the port.
@@ -578,7 +631,7 @@ impl Ports {
             port_buffers: PortBuffers::new(direction),
             io_clock: None,
             io_position: None,
-            io_buffers: PortIoBuffers::default(),
+            mixes: PortMixes::default(),
             format: None,
             param_values: BTreeMap::new(),
             param_flags: BTreeMap::new(),

@@ -1,3 +1,5 @@
+use core::mem::MaybeUninit;
+
 use alloc::vec::Vec;
 
 use bittle::BitsMut;
@@ -15,17 +17,45 @@ use crate::memory::Region;
 #[non_exhaustive]
 pub struct Meta {
     pub ty: id::Meta,
-    pub region: Region<[u8]>,
+    pub region: Region<[MaybeUninit<u8>]>,
 }
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Data {
-    pub ty: id::DataType,
-    pub region: Region<[u8]>,
+    pub(crate) ty: id::DataType,
+    pub(crate) region: Region<[MaybeUninit<u8>]>,
     pub flags: flags::DataFlag,
-    pub max_size: usize,
     pub chunk: Region<ffi::Chunk>,
+}
+
+impl Data {
+    /// Read the valid region of the data according to the associated chunk.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the region is valid.
+    pub unsafe fn valid_region(&self) -> Option<Region<[u8]>> {
+        unsafe {
+            let chunk = self.chunk.as_ref();
+            let offset = chunk.offset as usize % self.region.len();
+            let size = (chunk.size as usize - offset).min(self.region.len());
+            Some(self.region.slice(offset, size)?.cast_array_unchecked())
+        }
+    }
+
+    /// Return the uninitialized region of the data.
+    pub fn uninit_region(&self) -> Region<[MaybeUninit<u8>]> {
+        self.region.clone()
+    }
+
+    /// Write a complete chunk to the data region.
+    pub fn write_chunk(&mut self, chunk: ffi::Chunk) {
+        /// SAFETY: We assume the chunk region is valid through construction.
+        unsafe {
+            self.chunk.write(chunk);
+        }
+    }
 }
 
 #[derive(Debug)]

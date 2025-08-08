@@ -3,8 +3,7 @@
 use core::any;
 use core::fmt;
 use core::marker::PhantomData;
-use core::mem;
-use core::mem::MaybeUninit;
+use core::mem::{self, MaybeUninit};
 use core::ptr::NonNull;
 
 use core::slice;
@@ -28,7 +27,7 @@ pub(crate) struct File {
     fd: OwnedFd,
     flags: flags::MemBlock,
     users: u32,
-    region: Option<Region<[u8]>>,
+    region: Option<Region<[MaybeUninit<u8>]>>,
 }
 
 /// A region of memory which is mapped to a file descriptor.
@@ -57,7 +56,7 @@ where
     _marker: PhantomData<*mut T>,
 }
 
-impl Region<[u8]> {
+impl Region<[MaybeUninit<u8>]> {
     /// Add the given size aligned to the specified alignment to the region.
     pub fn offset(&self, offset: usize, align: usize) -> Result<Self> {
         let offset = offset.next_multiple_of(align);
@@ -68,7 +67,6 @@ impl Region<[u8]> {
 
         let ptr = unsafe {
             let ptr = self.as_ptr().wrapping_add(offset);
-
             NonNull::new_unchecked(ptr.cast_mut())
         };
 
@@ -94,6 +92,25 @@ impl<T> Region<[T]> {
             ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()).cast() },
             _marker: PhantomData,
         }
+    }
+
+    /// Slice the region to the given offset and size.
+    pub fn slice(&self, offset: usize, size: usize) -> Option<Self> {
+        if offset + size > self.size {
+            return None;
+        }
+
+        let ptr = unsafe {
+            let ptr = self.as_ptr().wrapping_add(offset);
+            NonNull::new_unchecked(ptr.cast_mut())
+        };
+
+        Some(Region {
+            file: self.file,
+            size,
+            ptr: ptr.cast(),
+            _marker: PhantomData,
+        })
     }
 
     /// Cast the region to a different type.
@@ -132,11 +149,12 @@ impl<T> Region<[T]> {
     /// Cast the region to a different type.
     #[inline]
     pub fn cast_array<U>(&self) -> Result<Region<[U]>> {
-        ensure!(
-            mem::size_of::<U>() > 0,
-            "Region<{}> array must be cast to non-zero size",
-            any::type_name::<U>()
-        );
+        const {
+            assert!(
+                mem::size_of::<U>() > 0,
+                "Region must be cast to non-zero sized types"
+            );
+        }
 
         ensure!(
             self.ptr.as_ptr().addr() % mem::align_of::<U>() == 0,
@@ -163,6 +181,23 @@ impl<T> Region<[T]> {
             ptr: self.ptr.cast(),
             _marker: PhantomData,
         })
+    }
+
+    /// Cast the array to a different type.
+    ///
+    /// The type `U` must be a sized type with the same size as `T`.
+    #[inline]
+    pub unsafe fn cast_array_unchecked<U>(&self) -> Region<[U]> {
+        const {
+            assert!(mem::size_of::<U>() == mem::size_of::<T>());
+        }
+
+        Region {
+            file: self.file,
+            size: self.size,
+            ptr: self.ptr,
+            _marker: PhantomData,
+        }
     }
 
     /// Limit the size of the region.
@@ -200,26 +235,18 @@ impl<T> Region<[T]> {
     }
 
     /// Coerce the memory region into a reference.
-    ///
-    /// # Safety
-    ///
-    /// This is basically never sound, so don't use it for other things than
-    /// debugging. The correct way to read the struct is field-wise using the
-    /// [`volatile!`] macro.
     #[inline]
-    pub unsafe fn as_slice(&self) -> &[T] {
+    pub fn as_slice(&self) -> &[T] {
+        // SAFETY: The region is unsafely constructed and if it has the type
+        // `[T]` it is assumed to be valid.
         unsafe { slice::from_raw_parts(self.as_ptr(), self.size) }
     }
 
     /// Coerce the memory region into a mutable reference.
-    ///
-    /// # Safety
-    ///
-    /// This is basically never sound, so don't use it for other things than
-    /// debugging. The correct way to read the struct is field-wise using the
-    /// [`volatile!`] macro.
     #[inline]
-    pub unsafe fn as_slice_mut(&mut self) -> &mut [T] {
+    pub fn as_slice_mut(&mut self) -> &mut [T] {
+        // SAFETY: The region is unsafely constructed and if it has the type
+        // `[T]` it is assumed to be valid.
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.size) }
     }
 }
@@ -238,8 +265,13 @@ impl<T> Region<T> {
 
     /// Read the whole region.
     ///
+    /// # Safety
+    ///
+    /// It is up to the caller to ensure that the region is accessed in a
+    /// non-contested context where it is exclusively held by the reader.
+    ///
     /// Since a region might be memory-contested among multiple threads, this
-    /// read is never guaranteed to result in data which is up-to-date or event
+    /// read is never guaranteed to result in data which is up-to-date or even
     /// partially so. We do our best regardless and make use of volatile reads
     /// to try and avoid the reading being optimized away.
     #[inline]
@@ -248,6 +280,27 @@ impl<T> Region<T> {
         T: Copy,
     {
         unsafe { self.ptr.cast::<T>().as_ptr().read_volatile() }
+    }
+
+    /// Write the whole region.
+    ///
+    /// # Safety
+    ///
+    /// It is up to the caller to ensure that the region is accessed in a
+    /// non-contested context where it is exclusively held by the reader.
+    ///
+    /// Since a region might be memory-contested among multiple threads, this
+    /// write is never guaranteed to produce data which is visibly up-to-date or
+    /// even partially so. We do our best regardless and make use of volatile
+    /// reads to try and avoid the reading being optimized away.
+    #[inline]
+    pub unsafe fn write(&self, value: T)
+    where
+        T: Copy,
+    {
+        unsafe {
+            self.ptr.cast::<T>().as_ptr().write_volatile(value);
+        }
     }
 
     /// Erase the type signature of the region.
@@ -457,7 +510,12 @@ impl Memory {
     }
 
     /// Map a memory to a region with accessible memory.
-    pub(crate) fn map(&mut self, mem_id: u32, offset: usize, size: usize) -> Result<Region<[u8]>> {
+    pub(crate) fn map(
+        &mut self,
+        mem_id: u32,
+        offset: usize,
+        size: usize,
+    ) -> Result<Region<[MaybeUninit<u8>]>> {
         let Some(file) = self
             .map
             .get_mut(&mem_id)

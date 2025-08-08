@@ -1,5 +1,5 @@
 use core::fmt;
-use core::mem;
+use core::mem::{self, MaybeUninit};
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -132,9 +132,9 @@ pub struct ClientNode {
     pub write_fd: Option<EventFd>,
     pub(super) write_token: Token,
     pub(super) params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
-    pub io_clock: Option<Region<ffi::IoClock>>,
-    pub io_control: Option<Region<[u8]>>,
-    pub io_position: Option<Region<ffi::IoPosition>>,
+    pub(crate) io_clock: Option<Region<ffi::IoClock>>,
+    pub(crate) io_control: Option<Region<[MaybeUninit<u8>]>>,
+    pub(crate) io_position: Option<Region<ffi::IoPosition>>,
     pub(super) modified: bool,
     then: u64,
     stats: Stats,
@@ -166,6 +166,11 @@ impl ClientNode {
             then: 0,
             stats: Stats::default(),
         })
+    }
+
+    pub fn duration(&self) -> Option<u64> {
+        let io_position = &mut self.io_position.as_ref()?;
+        Some(unsafe { volatile!(io_position, clock.duration).read() })
     }
 
     /// Start processing for this node.

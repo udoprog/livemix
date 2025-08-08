@@ -2,26 +2,25 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::BufWriter;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
-use client::ptr::volatile;
 use client::{ClientNode, MixId, Port, PortId, PortParam, Stats, Stream};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
 use protocol::consts::Direction;
-use protocol::flags::Status;
+use protocol::flags::ChunkFlags;
 use protocol::id::{
     self, AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
     ParamBuffers, ParamIo, ParamMeta,
 };
 use protocol::poll::{Interest, PollEvent};
-use protocol::{Connection, Poll, TimerFd, ffi, flags, object};
+use protocol::{Connection, Poll, TimerFd, ffi, object};
 
 const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
@@ -48,14 +47,9 @@ impl ExampleApplication {
         self.tick = self.tick.wrapping_add(1);
         node.start_process()?;
 
-        let duration;
-
-        if let Some(io_position) = &mut node.io_position {
-            duration = unsafe { volatile!(io_position, clock.duration).read() };
-        } else {
-            tracing::error!("Missing IO position");
-            return Ok(());
-        }
+        let Some(duration) = node.duration() else {
+            bail!("Clock duration is not configured on node")
+        };
 
         for port in node.ports.inputs_mut() {
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
@@ -67,24 +61,13 @@ impl ExampleApplication {
                 continue;
             }
 
-            for buf in &mut port.io_buffers.buffers {
-                let status = unsafe { volatile!(buf.region, status).read() };
-
-                if !(status & Status::HAVE_DATA) {
+            for mix in port.mixes.iter_mut() {
+                let Some(mut ib) = port.port_buffers.next_input(mix) else {
                     self.stats.no_input_buffer += 1;
                     continue;
-                }
-
-                let id = unsafe { volatile!(buf.region, buffer_id).read() };
-
-                let Some(buffer) = port.port_buffers.get_mut(buf.mix_id, id as u32) else {
-                    bail!("Input no buffer with id {id} for port {}", port.id);
                 };
 
-                let _ = &buffer.metas[0];
-                let data = &buffer.datas[0];
-
-                let b = match self.inputs.entry((port.id, buf.mix_id)) {
+                let b = match self.inputs.entry((port.id, ib.mix_id())) {
                     Entry::Occupied(mut e) => {
                         if e.get().format != *format {
                             e.get_mut().buf.clear();
@@ -99,29 +82,28 @@ impl ExampleApplication {
                     }),
                 };
 
-                let samples;
+                let buffer = ib.buffer_mut();
+                let _ = &buffer.metas[0];
+                let data = &buffer.datas[0];
 
                 unsafe {
-                    let chunk = data.chunk.as_ref();
-                    let offset = chunk.offset as usize % data.max_size;
-                    let size = (chunk.size as usize - offset).min(data.max_size);
+                    let Some(region) = data.valid_region() else {
+                        bail!("No valid memory region");
+                    };
 
-                    samples = size / mem::size_of::<f32>();
+                    let region = region.cast_array::<f32>()?;
 
-                    b.buf.reserve(samples);
+                    b.buf.reserve(region.len());
 
                     b.buf
                         .as_mut_ptr()
                         .add(b.buf.len())
-                        .copy_from_nonoverlapping(
-                            data.region.as_ptr().wrapping_add(offset).cast::<f32>(),
-                            samples,
-                        );
+                        .copy_from_nonoverlapping(region.as_ptr(), region.len());
 
-                    b.buf.set_len(b.buf.len() + samples);
+                    b.buf.set_len(b.buf.len() + region.len());
                 }
 
-                unsafe { volatile!(buf.region, status).replace(flags::Status::NEED_DATA) };
+                ib.need_data()?;
             }
         }
 
@@ -135,7 +117,7 @@ impl ExampleApplication {
                 continue;
             }
 
-            let Some(mut ob) = port.port_buffers.next(&mut port.io_buffers) else {
+            let Some(mut ob) = port.port_buffers.next_output(&mut port.mixes) else {
                 self.stats.no_output_buffer += 1;
                 continue;
             };
@@ -147,28 +129,25 @@ impl ExampleApplication {
             let _ = &b.metas[0];
             let data = &mut b.datas[0];
 
-            // 128 seems to be the number of samples expected by the peer I'm
-            // using so YMMV.
-            let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
+            let mut region = data.uninit_region().cast_array::<MaybeUninit<f32>>()?;
+            let samples = region.len().min(duration as usize);
 
-            unsafe {
-                let chunk = data.chunk.as_mut();
+            for d in region.as_slice_mut().iter_mut().take(samples) {
+                d.write(accumulator.sin() * DEFAULT_VOLUME);
+                *accumulator += M_PI_M2 * TONE / format.rate as f32;
 
-                let mut region = data.region.cast_array::<f32>()?;
-
-                for d in region.as_slice_mut().iter_mut().take(samples) {
-                    *d = accumulator.sin() * DEFAULT_VOLUME;
-                    *accumulator += M_PI_M2 * TONE / format.rate as f32;
-
-                    if *accumulator >= M_PI_M2 {
-                        *accumulator -= M_PI_M2;
-                    }
+                if *accumulator >= M_PI_M2 {
+                    *accumulator -= M_PI_M2;
                 }
-
-                chunk.size = (samples * mem::size_of::<f32>()) as u32;
-                chunk.offset = 0;
-                chunk.stride = 4;
             }
+
+            data.write_chunk(ffi::Chunk {
+                size: u32::try_from(samples.saturating_mul(mem::size_of::<f32>()))
+                    .unwrap_or(u32::MAX),
+                offset: 0,
+                stride: 4,
+                flags: ChunkFlags::NONE,
+            });
 
             ob.have_data()?;
         }

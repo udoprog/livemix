@@ -40,7 +40,7 @@ use crate::activation::PeerActivation;
 use crate::buffer::{self, Buffer};
 use crate::events::RemoveNodeParamEvent;
 use crate::events::{RemovePortParamEvent, SetNodeParamEvent, SetPortParamEvent, StreamEvent};
-use crate::ports::PortIoBuffer;
+use crate::ports::PortMix;
 use crate::ports::PortParam;
 use crate::ptr::{atomic, volatile};
 use crate::{
@@ -1159,7 +1159,7 @@ impl Stream {
 
                 metas.push(buffer::Meta {
                     ty,
-                    region: region.size(size)?,
+                    region: region.clone(),
                 });
 
                 region = region.offset(size, 8)?;
@@ -1201,7 +1201,6 @@ impl Stream {
                     ty,
                     region,
                     flags,
-                    max_size,
                     chunk,
                 });
             }
@@ -1334,15 +1333,9 @@ impl Stream {
 
                 if let Some(mem_id) = mem_id {
                     let region = self.memory.map(mem_id, offset, size)?.cast()?;
-                    port.io_buffers
-                        .buffers
-                        .push(PortIoBuffer { mix_id, region });
+                    port.mixes.buffers.push(PortMix { mix_id, region });
                 } else {
-                    for buf in port
-                        .io_buffers
-                        .buffers
-                        .extract_if(.., |b| b.mix_id == mix_id)
-                    {
+                    for buf in port.mixes.buffers.extract_if(.., |b| b.mix_id == mix_id) {
                         self.memory.free(buf.region);
                     }
                 }
