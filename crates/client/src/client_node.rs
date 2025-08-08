@@ -8,6 +8,7 @@ use std::vec::Vec;
 use anyhow::{Result, bail};
 use pod::{AsSlice, DynamicBuf, Object};
 use protocol::consts::Activation;
+use protocol::flags::Status;
 use protocol::id::Param;
 use protocol::poll::Token;
 use protocol::{EventFd, ffi};

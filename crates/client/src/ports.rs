@@ -1,5 +1,7 @@
 use core::fmt;
+use core::marker::PhantomData;
 use core::mem;
+use core::ptr::NonNull;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -21,7 +23,7 @@ use pod::Readable;
 use pod::Writable;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::consts::{self, Direction};
-use protocol::flags::ParamFlag;
+use protocol::flags::{ParamFlag, Status};
 use protocol::id::{
     self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
     ParamMeta,
@@ -30,6 +32,7 @@ use protocol::{ffi, flags, object};
 use tracing::Level;
 
 use crate::buffer::Buffer;
+use crate::ptr::volatile;
 use crate::{Buffers, Region};
 
 /// The identifier of a port.
@@ -218,7 +221,7 @@ impl PortBuffers {
     }
 
     /// Free the given buffer by id.
-    pub fn free(&mut self, mix_id: MixId, buffer_id: u32) {
+    fn free(&mut self, mix_id: MixId, buffer_id: u32) {
         if let Some(mix) = self.mixes.get_mut(mix_id.index()) {
             mix.clear_bit(buffer_id);
         }
@@ -235,7 +238,17 @@ impl PortBuffers {
     }
 
     /// Get the next free buffer in the set.
-    pub fn next(&mut self, mixes: impl IntoIterator<Item = MixId>) -> Option<&mut Buffer> {
+    pub fn next<'io>(&mut self, io: &'io mut PortIoBuffers) -> Option<PortOutputBuffer<'io, '_>> {
+        // Recycle buffers before we try and acquire a new one.
+        for buf in &mut io.buffers {
+            let status = unsafe { volatile!(buf.region, status).read() };
+            let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
+
+            if status & Status::NEED_DATA && target_id >= 0 {
+                self.free(buf.mix_id, target_id as u32);
+            }
+        }
+
         let buf = self.buffers.first_mut()?;
         debug_assert_eq!(buf.mix_id, MixId::INVALID);
 
@@ -244,13 +257,61 @@ impl PortBuffers {
 
         buf.available.set_bit(id);
 
-        for mix_id in mixes {
-            if let Some(mix) = self.mixes.get_mut(mix_id.index()) {
+        for io_buffer in &io.buffers {
+            if let Some(mix) = self.mixes.get_mut(io_buffer.mix_id.index()) {
                 mix.set_bit(id);
             }
         }
 
-        Some(b)
+        let b = NonNull::from(b);
+        let port_buffers = NonNull::from(self);
+
+        Some(PortOutputBuffer {
+            io,
+            port_buffers,
+            buf: b,
+            _marker: PhantomData,
+        })
+    }
+}
+
+/// An output buffer related to a port.
+pub struct PortOutputBuffer<'io, 'buf> {
+    io: &'io mut PortIoBuffers,
+    port_buffers: NonNull<PortBuffers>,
+    pub buf: NonNull<Buffer>,
+    _marker: PhantomData<&'buf mut PortBuffers>,
+}
+
+impl PortOutputBuffer<'_, '_> {
+    /// Access the underlying buffer.
+    pub fn buffer_mut(&mut self) -> &mut Buffer {
+        // SAFETY: Returning this mutable reference prevents calling `have_data`
+        // which requires mixed access again.
+        unsafe { self.buf.as_mut() }
+    }
+
+    /// Mark the output buffer as having data.
+    pub fn have_data(mut self) -> Result<()> {
+        let id = unsafe { self.buf.as_ref().id };
+        let port_buffers = unsafe { self.port_buffers.as_mut() };
+
+        // Recycle buffers.
+        for buf in &mut self.io.buffers {
+            let status = unsafe { volatile!(buf.region, status).read() };
+
+            if !(status & Status::NEED_DATA) && !(status & Status::OK) {
+                port_buffers.free(buf.mix_id, id);
+                continue;
+            }
+
+            unsafe {
+                volatile!(buf.region, buffer_id).replace(id as i32);
+                volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
+            };
+        }
+
+        Ok(())
     }
 }
 
@@ -262,6 +323,12 @@ pub struct PortIoBuffer {
     pub mix_id: MixId,
     /// The memory region.
     pub region: Region<ffi::IoBuffers>,
+}
+
+/// The IO buffers for a port.
+#[derive(Default)]
+pub struct PortIoBuffers {
+    pub buffers: Vec<PortIoBuffer>,
 }
 
 /// The definition of a port.
@@ -280,7 +347,7 @@ pub struct Port {
     /// The IO position region for the port.
     pub io_position: Option<Region<ffi::IoPosition>>,
     /// The IO buffers region for the port.
-    pub io_buffers: Vec<PortIoBuffer>,
+    pub io_buffers: PortIoBuffers,
     /// The audio format of the port.
     pub format: Option<object::AudioFormat>,
     /// The mix information for the port.
@@ -511,7 +578,7 @@ impl Ports {
             port_buffers: PortBuffers::new(direction),
             io_clock: None,
             io_position: None,
-            io_buffers: Vec::new(),
+            io_buffers: PortIoBuffers::default(),
             format: None,
             param_values: BTreeMap::new(),
             param_flags: BTreeMap::new(),

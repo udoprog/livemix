@@ -67,7 +67,7 @@ impl ExampleApplication {
                 continue;
             }
 
-            for buf in &mut port.io_buffers {
+            for buf in &mut port.io_buffers.buffers {
                 let status = unsafe { volatile!(buf.region, status).read() };
 
                 if !(status & Status::HAVE_DATA) {
@@ -126,16 +126,6 @@ impl ExampleApplication {
         }
 
         for port in node.ports.outputs_mut() {
-            // Recycle buffers.
-            for buf in &mut port.io_buffers {
-                let status = unsafe { volatile!(buf.region, status).read() };
-                let target_id = unsafe { volatile!(buf.region, buffer_id).read() };
-
-                if status & Status::NEED_DATA && target_id >= 0 {
-                    port.port_buffers.free(buf.mix_id, target_id as u32);
-                }
-            }
-
             let Some(format) = self.formats.get(&(port.direction, port.id)) else {
                 continue;
             };
@@ -145,59 +135,42 @@ impl ExampleApplication {
                 continue;
             }
 
-            let buf_id = {
-                let mixes = port.io_buffers.iter().map(|b| b.mix_id);
-
-                let Some(buffer) = port.port_buffers.next(mixes) else {
-                    self.stats.no_output_buffer += 1;
-                    continue;
-                };
-
-                let accumulator = self.accumulators.entry(port.id).or_default();
-
-                let _ = &buffer.metas[0];
-                let data = &mut buffer.datas[0];
-
-                // 128 seems to be the number of samples expected by the peer I'm
-                // using so YMMV.
-                let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
-
-                unsafe {
-                    let chunk = data.chunk.as_mut();
-
-                    let mut region = data.region.cast_array::<f32>()?;
-
-                    for d in region.as_slice_mut().iter_mut().take(samples) {
-                        *d = accumulator.sin() * DEFAULT_VOLUME;
-                        *accumulator += M_PI_M2 * TONE / format.rate as f32;
-
-                        if *accumulator >= M_PI_M2 {
-                            *accumulator -= M_PI_M2;
-                        }
-                    }
-
-                    chunk.size = (samples * mem::size_of::<f32>()) as u32;
-                    chunk.offset = 0;
-                    chunk.stride = 4;
-                }
-
-                buffer.id
+            let Some(mut ob) = port.port_buffers.next(&mut port.io_buffers) else {
+                self.stats.no_output_buffer += 1;
+                continue;
             };
 
-            // Recycle buffers.
-            for buf in &mut port.io_buffers {
-                let status = unsafe { volatile!(buf.region, status).read() };
+            let accumulator = self.accumulators.entry(port.id).or_default();
 
-                if !(status & Status::NEED_DATA) && !(status & Status::OK) {
-                    port.port_buffers.free(buf.mix_id, buf_id);
-                    continue;
+            let b = ob.buffer_mut();
+
+            let _ = &b.metas[0];
+            let data = &mut b.datas[0];
+
+            // 128 seems to be the number of samples expected by the peer I'm
+            // using so YMMV.
+            let samples = (data.region.len() / mem::size_of::<f32>()).min(duration as usize);
+
+            unsafe {
+                let chunk = data.chunk.as_mut();
+
+                let mut region = data.region.cast_array::<f32>()?;
+
+                for d in region.as_slice_mut().iter_mut().take(samples) {
+                    *d = accumulator.sin() * DEFAULT_VOLUME;
+                    *accumulator += M_PI_M2 * TONE / format.rate as f32;
+
+                    if *accumulator >= M_PI_M2 {
+                        *accumulator -= M_PI_M2;
+                    }
                 }
 
-                unsafe {
-                    volatile!(buf.region, buffer_id).replace(buf_id as i32);
-                    volatile!(buf.region, status).replace(flags::Status::HAVE_DATA);
-                };
+                chunk.size = (samples * mem::size_of::<f32>()) as u32;
+                chunk.offset = 0;
+                chunk.stride = 4;
             }
+
+            ob.have_data()?;
         }
 
         node.end_process()?;

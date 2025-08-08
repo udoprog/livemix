@@ -1334,9 +1334,15 @@ impl Stream {
 
                 if let Some(mem_id) = mem_id {
                     let region = self.memory.map(mem_id, offset, size)?.cast()?;
-                    port.io_buffers.push(PortIoBuffer { mix_id, region });
+                    port.io_buffers
+                        .buffers
+                        .push(PortIoBuffer { mix_id, region });
                 } else {
-                    for buf in port.io_buffers.extract_if(.., |b| b.mix_id == mix_id) {
+                    for buf in port
+                        .io_buffers
+                        .buffers
+                        .extract_if(.., |b| b.mix_id == mix_id)
+                    {
                         self.memory.free(buf.region);
                     }
                 }
