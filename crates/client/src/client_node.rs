@@ -198,7 +198,7 @@ impl ClientNode {
 
     /// Start processing for this node.
     pub fn start_process(&mut self) -> Result<()> {
-        self.then = utils::get_monotonic_nsec();
+        self.then = utils::get_monotonic_nsec()?;
 
         let Some(na) = &mut self.activation else {
             bail!("Missing activation area for node {}", self.id);
@@ -223,7 +223,7 @@ impl ClientNode {
             bail!("Missing activation area for node {}", self.id);
         };
 
-        let now = utils::get_monotonic_nsec();
+        let now = utils::get_monotonic_nsec()?;
 
         unsafe {
             let was_awake = unsafe {

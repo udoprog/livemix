@@ -309,14 +309,14 @@ impl Client {
         id: LocalId,
         direction: consts::Direction,
         port_id: PortId,
-        properties: &mut Properties,
-        parameters: &mut Parameters,
+        props: &mut Properties,
+        params: &mut Parameters,
     ) -> Result<()> {
         let mut pod = pod::dynamic();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
 
-        if parameters.values().len() > 0 {
+        if params.values().len() > 0 {
             change_mask |= flags::ClientNodePortUpdate::PARAMS;
         }
 
@@ -325,8 +325,8 @@ impl Client {
         let mut port_change_mask = flags::PortChangeMask::NONE;
         port_change_mask |= flags::PortChangeMask::FLAGS;
 
-        let props_modified = properties.take_modified();
-        let params_modified = parameters.take_modified();
+        let props_modified = props.take_modified();
+        let params_modified = params.take_modified();
 
         if props_modified {
             port_change_mask |= flags::PortChangeMask::PROPS;
@@ -344,9 +344,9 @@ impl Client {
             st.write(change_mask)?;
 
             // Parameters.
-            st.write(parameters.values().map(|p| p.len()).sum::<usize>() as u32)?;
+            st.write(params.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
-            for params in parameters.values() {
+            for params in params.values() {
                 for param in params {
                     st.field().write(param.value.as_ref())?;
                 }
@@ -361,9 +361,9 @@ impl Client {
 
                     // Properties.
                     if props_modified {
-                        st.field().write_sized(properties.len() as u32)?;
+                        st.field().write_sized(props.len() as u32)?;
 
-                        for pair in properties.iter() {
+                        for pair in props.iter() {
                             st.write(pair)?;
                         }
                     } else {
@@ -372,9 +372,9 @@ impl Client {
 
                     // Parameters.
                     if params_modified {
-                        st.write(parameters.flags().len() as u32)?;
+                        st.write(params.flags().len() as u32)?;
 
-                        for (id, flag) in parameters.flags() {
+                        for (id, flag) in params.flags() {
                             st.write((id, flag))?;
                         }
                     } else {

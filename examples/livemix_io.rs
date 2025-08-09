@@ -345,6 +345,14 @@ fn main() -> Result<()> {
         poll.poll(&mut events)?;
 
         while let Some(e) = events.pop() {
+            if e.interest.is_error() || e.interest.is_hup() {
+                bail!(
+                    "File descriptor with token {:?} and interest {:?} unexpectedly errored or huped",
+                    e.token,
+                    e.interest
+                );
+            }
+
             if e.token == timer_token {
                 if e.interest.is_read() {
                     timer.read().context("reading the timer")?;

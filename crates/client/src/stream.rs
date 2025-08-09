@@ -8,8 +8,8 @@ use core::time::Duration;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ffi::CString;
 use std::fs::File;
-use std::os::fd::FromRawFd;
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::io;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::time::SystemTime;
 
 use alloc::borrow::ToOwned;
@@ -45,6 +45,7 @@ use crate::events::{
 use crate::ports::PortMix;
 use crate::ports::PortParam;
 use crate::ptr::{atomic, volatile};
+use crate::utils;
 use crate::{
     Buffers, Client, ClientNode, ClientNodeId, ClientNodes, GlobalId, LocalId, Memory, MixId,
     PortId, Ports, Region,
@@ -394,6 +395,17 @@ impl Stream {
         }
 
         while let Some((fd, token, interest)) = self.add_interest() {
+            /// Test with fcntl that the file descriptor *is* non-blocking when
+            /// building with debug assertions.
+            if cfg!(debug_assertions) {
+                let is_non_blocking = utils::is_nonblocking(fd)?;
+
+                ensure!(
+                    is_non_blocking,
+                    "File descriptor {fd:?} is not non-blocking"
+                );
+            }
+
             tracing::trace!(?fd, ?token, ?interest, "Adding interest");
             poll.add(fd, token, interest)?;
         }
