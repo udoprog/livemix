@@ -72,14 +72,15 @@ impl PeerActivation {
     unsafe fn signal_v0(&self, nsec: u64) -> Result<bool> {
         unsafe {
             if !self.decrement_pending() {
-                return Ok(false);
+                // NB: Normal way of exiting, the peer is just not ready yet.
+                return Ok(true);
             }
 
             atomic!(self.region, status).store(Activation::TRIGGERED);
             volatile!(self.region, signal_time).write(nsec);
 
             if !self.signal_fd.write(1)? {
-                tracing::error!("Failed to signal activation");
+                return Ok(false);
             }
 
             Ok(true)
@@ -90,7 +91,8 @@ impl PeerActivation {
     unsafe fn signal_v1(&self, nsec: u64) -> Result<bool> {
         unsafe {
             if !self.decrement_pending() {
-                return Ok(false);
+                // NB: Normal way of exiting, the peer is just not ready yet.
+                return Ok(true);
             }
 
             let changed = atomic!(self.region, status)
@@ -103,13 +105,13 @@ impl PeerActivation {
             volatile!(self.region, signal_time).write(nsec);
 
             if !self.signal_fd.write(1)? {
-                tracing::error!("Failed to signal activation");
+                return Ok(false);
             }
 
             Ok(true)
         }
     }
-    #[allow(unused)]
+
     unsafe fn decrement_pending(&self) -> bool {
         let value = unsafe { atomic!(self.region, state[0].pending).fetch_sub(1) };
         value == 1
