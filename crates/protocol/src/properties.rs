@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use core::fmt;
 use core::mem;
 
@@ -10,7 +11,7 @@ use crate::Prop;
 /// Collection of properties.
 #[derive(Default)]
 pub struct Properties {
-    properties: BTreeMap<&'static Prop, String>,
+    properties: BTreeMap<String, String>,
     modified: bool,
 }
 
@@ -40,24 +41,37 @@ impl Properties {
 
     /// Iterate over the properties in the collection.
     pub fn iter(&self) -> impl Iterator<Item = (&Prop, &str)> {
-        self.properties.iter().map(|(k, v)| (*k, v.as_str()))
+        self.properties
+            .iter()
+            .map(|(k, v)| (Prop::new(k.as_str()), v.as_str()))
     }
 
     /// Insert a property into the collection.
-    pub fn insert(&mut self, key: &'static Prop, value: impl AsRef<str>) {
-        self.properties.insert(key, String::from(value.as_ref()));
+    pub fn insert(&mut self, key: impl AsRef<Prop>, value: impl AsRef<str>) {
+        self.properties.insert(
+            String::from(key.as_ref().as_str()),
+            String::from(value.as_ref()),
+        );
         self.modified = true;
     }
 
     /// Remove and return a property by its key.
-    pub fn remove(&mut self, key: &'static Prop) -> Option<String> {
+    pub fn remove<K>(&mut self, key: &K) -> Option<String>
+    where
+        K: ?Sized + Ord,
+        String: Borrow<K>,
+    {
         let value = self.properties.remove(key);
         self.modified |= value.is_some();
         value
     }
 
     /// Get the value of a property by its key.
-    pub fn get(&self, key: &Prop) -> Option<&str> {
+    pub fn get<K>(&self, key: &K) -> Option<&str>
+    where
+        K: ?Sized + Ord,
+        String: Borrow<K>,
+    {
         self.properties.get(key).map(|s| s.as_str())
     }
 }

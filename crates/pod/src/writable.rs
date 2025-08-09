@@ -1,3 +1,4 @@
+use crate::macros::{tuple_types, tuple_values};
 use crate::{Error, PodSink};
 
 /// Helper trait to more easily write value to a [`Builder`].
@@ -98,25 +99,19 @@ impl Writable for () {
     }
 }
 
-macro_rules! encode_into_tuple {
-    ($count:expr $(, $ident:ident, $var:ident)*) => {
+macro_rules! impl_writable {
+    ($count:literal $(, $ident:ident, $var:ident)*) => {
         /// Implementation of [`Writable`] for tuples, which will be encoded as a struct.
         ///
         /// # Examples
         ///
         /// ```
-        /// use pod::Builder;
-        ///
-        /// let mut pod = Builder::array();
-        /// pod.as_mut().write_struct(|st| st.write((10i32, "hello world", [1u32, 2u32])))?;
+        /// let mut pod = pod::array();
+        #[doc = concat!(" pod.as_mut().write_struct(|st| st.write(", tuple_values!($($var),*), "))?;")]
         ///
         /// let mut pod = pod.as_ref();
         /// let mut st = pod.read_struct()?;
-        ///
-        /// assert_eq!(st.field()?.read_sized::<i32>()?, 10i32);
-        /// assert_eq!(st.field()?.read_unsized::<str>()?, "hello world");
-        /// assert_eq!(st.field()?.read_sized::<u32>()?, 1);
-        /// assert_eq!(st.field()?.read_sized::<u32>()?, 2);
+        #[doc = concat!(" assert_eq!(st.read::<", tuple_types!($($var),*), ">()?, ", tuple_values!($($var),*), ");")]
         /// assert!(st.is_empty());
         /// # Ok::<_, pod::Error>(())
         /// ```
@@ -134,4 +129,4 @@ macro_rules! encode_into_tuple {
     };
 }
 
-crate::macros::repeat_tuple!(encode_into_tuple);
+crate::macros::repeat_tuple!(impl_writable);

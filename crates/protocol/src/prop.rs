@@ -1,19 +1,8 @@
-use core::ffi::CStr;
+use core::{borrow::Borrow, cmp::Ordering};
+
+use alloc::string::String;
 
 use pod::{PodSink, UnsizedWritable, Writable};
-
-/// The key of a property.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-#[repr(transparent)]
-pub struct Prop(CStr);
-
-impl Prop {
-    /// Create a new property.
-    pub(crate) const fn new(name: &CStr) -> &Self {
-        // SAFETY: A property is repr transparent over a `CStr`.
-        unsafe { &*(name as *const CStr as *const Prop) }
-    }
-}
 
 macro_rules! properties {
     ($($name:ident = $value:literal;)*) => {
@@ -24,48 +13,98 @@ macro_rules! properties {
 
         impl Prop {
             /// Lookup property.
-            pub fn get(name: &CStr) -> Option<&'static Self> {
-                $(
-                    if name == $value {
-                        return Some($name);
-                    }
-                )*
-
-                None
+            pub fn get(name: &str) -> Option<&'static Self> {
+                match name {
+                    $($value => Some($name),)*
+                    _ => None,
+                }
             }
         }
     };
 }
 
+properties! {
+    APPLICATION_NAME = "application.name";
+    NODE_NAME = "node.name";
+    NODE_DESCRIPTION = "node.description";
+    MEDIA_CLASS = "media.class";
+    MEDIA_TYPE = "media.type";
+    MEDIA_CATEGORY = "media.category";
+    MEDIA_ROLE = "media.role";
+    PORT_NAME = "port.name";
+    FORMAT_DSP = "format.dsp";
+}
+
+/// The key of a property.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[repr(transparent)]
+pub struct Prop(str);
+
+impl Prop {
+    /// Construct a new property.
+    pub(crate) const fn new(name: &str) -> &Self {
+        // SAFETY: A property is repr transparent over a `str`.
+        unsafe { &*(name as *const str as *const Prop) }
+    }
+
+    /// Get the string of the property.
+    pub(crate) const fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl PartialEq<str> for Prop {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        &self.0 == other
+    }
+}
+
+impl PartialOrd<str> for Prop {
+    #[inline]
+    fn partial_cmp(&self, other: &str) -> Option<Ordering> {
+        Some(self.as_str().cmp(other))
+    }
+}
+
+impl AsRef<Prop> for Prop {
+    #[inline]
+    fn as_ref(&self) -> &Prop {
+        self
+    }
+}
+
+impl Borrow<str> for Prop {
+    #[inline]
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Borrow<Prop> for String {
+    #[inline]
+    fn borrow(&self) -> &Prop {
+        Prop::new(self.as_str())
+    }
+}
+
 impl UnsizedWritable for Prop {
-    const TYPE: pod::Type = CStr::TYPE;
+    const TYPE: pod::Type = str::TYPE;
 
     #[inline]
     fn size(&self) -> Option<usize> {
-        CStr::size(&self.0)
+        str::size(&self.0)
     }
 
     #[inline]
     fn write_unsized(&self, writer: impl pod::Writer) -> Result<(), pod::Error> {
-        CStr::write_unsized(&self.0, writer)
+        str::write_unsized(&self.0, writer)
     }
 }
 
 impl Writable for Prop {
     #[inline]
     fn write_into(&self, pod: &mut impl PodSink) -> Result<(), pod::Error> {
-        CStr::write_into(&self.0, pod)
+        str::write_into(&self.0, pod)
     }
-}
-
-properties! {
-    APPLICATION_NAME = c"application.name";
-    NODE_NAME = c"node.name";
-    NODE_DESCRIPTION = c"node.description";
-    MEDIA_CLASS = c"media.class";
-    MEDIA_TYPE = c"media.type";
-    MEDIA_CATEGORY = c"media.category";
-    MEDIA_ROLE = c"media.role";
-    PORT_NAME = c"port.name";
-    FORMAT_DSP = c"format.dsp";
 }

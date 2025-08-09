@@ -828,6 +828,80 @@ macro_rules! __encode_into_unsized {
 
 pub(crate) use __encode_into_unsized as encode_into_unsized;
 
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __tuple_values {
+    ($_0:tt) => {
+        "(1,)"
+    };
+    ($_0:tt, $_1:tt) => {
+        "(1, \"hello world!\")"
+    };
+    ($_0:tt, $_1:tt, $_2:tt) => {
+        "(1, \"hello world!\", 3)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt) => {
+        "(1, \"hello world!\", 3, 4)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt) => {
+        "(1, \"hello world!\", 3, 4, 5)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt) => {
+        "(1, \"hello world!\", 3, 4, 5, 6)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt) => {
+        "(1, \"hello world!\", 3, 4, 5, 6, 7)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt, $_7:tt) => {
+        "(1, \"hello world!\", 3, 4, 5, 6, 7, 8)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt, $_7:tt, $_8:tt) => {
+        "(1, \"hello world!\", 3, 4, 5, 6, 7, 8, 9)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt, $_7:tt, $_8:tt, $_9:tt) => {
+        "(1, \"hello world!\", 3, 4, 5, 6, 7, 8, 9, 10)"
+    };
+}
+
+pub(crate) use __tuple_values as tuple_values;
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __tuple_types {
+    ($_0:tt) => {
+        "(i32,)"
+    };
+    ($_0:tt, $_1:tt) => {
+        "(i32, &str)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt) => {
+        "(i32, &str, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt) => {
+        "(i32, &str, i32, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt) => {
+        "(i32, &str, i32, i32, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt) => {
+        "(i32, &str, i32, i32, i32, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt) => {
+        "(i32, &str, i32, i32, i32, i32, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt, $_7:tt) => {
+        "(i32, &str, i32, i32, i32, i32, i32, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt, $_7:tt, $_8:tt) => {
+        "(i32, &str, i32, i32, i32, i32, i32, i32, i32)"
+    };
+    ($_0:tt, $_1:tt, $_2:tt, $_3:tt, $_4:tt, $_5:tt, $_6:tt, $_7:tt, $_8:tt, $_9:tt) => {
+        "(i32, &str, i32, i32, i32, i32, i32, i32, i32, i32)"
+    };
+}
+
+pub(crate) use __tuple_types as tuple_types;
+
 macro_rules! __repeat_tuple {
     ($macro:path) => {
         $macro!(1, A, a);

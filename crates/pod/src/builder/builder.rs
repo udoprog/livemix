@@ -480,8 +480,9 @@ where
 
     /// Write an array with the given sized type.
     ///
-    /// To encode an array with unsized types, use [`Pod::write_unsized_array`]
-    /// where a length in bytes must be specified for every element.
+    /// To encode an array with unsized types, use
+    /// [`Builder::write_unsized_array`] where a length in bytes must be
+    /// specified for every element.
     ///
     /// # Errors
     ///

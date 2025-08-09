@@ -68,7 +68,7 @@ pub struct Stream {
     connection_token: Token,
     core: CoreState,
     client: ClientState,
-    registries: Slab<RegistryState>,
+    registries: Slab<RegistryEntry>,
     id_to_registry: BTreeMap<u32, usize>,
     factories: BTreeMap<String, usize>,
     globals: GlobalMap,
@@ -81,7 +81,7 @@ pub struct Stream {
     process_set: IdSet,
     read_to_client: HashMap<Token, ClientNodeId>,
     write_to_client: HashMap<Token, ClientNodeId>,
-    fds: Vec<ReceivedFd>,
+    fds: VecDeque<Option<OwnedFd>>,
     ops: VecDeque<Op>,
     memory: Memory,
     add_interest: VecDeque<(RawFd, Token, Interest)>,
@@ -123,7 +123,7 @@ impl Stream {
             process_set: IdSet::new(),
             read_to_client: HashMap::new(),
             write_to_client: HashMap::new(),
-            fds: Vec::with_capacity(16),
+            fds: VecDeque::with_capacity(16),
             ops: VecDeque::from([Op::CoreHello]),
             memory: Memory::new(),
             add_interest: VecDeque::new(),
@@ -180,21 +180,6 @@ impl Stream {
         }
 
         None
-    }
-
-    /// Add file descriptors.
-    #[tracing::instrument(skip(self, fds))]
-    pub fn add_fds(&mut self, fds: impl IntoIterator<Item = OwnedFd>) {
-        let mut added = 0usize;
-
-        for fd in fds {
-            self.fds.push(ReceivedFd { fd: Some(fd) });
-            added += 1;
-        }
-
-        if added > 0 {
-            tracing::trace!(added, fds = ?self.fds);
-        }
     }
 
     #[tracing::instrument(skip(self))]
@@ -382,8 +367,8 @@ impl Stream {
 
             if n_fds > 0 {
                 for fd in self.fds.drain(..n_fds) {
-                    if let Some(fd) = fd.fd {
-                        tracing::warn!("Unused file descriptor dropped: {fd:?}");
+                    if let Some(fd) = fd {
+                        tracing::warn!("Dropping unused file descriptor: {fd:?}");
                     }
                 }
 
@@ -437,15 +422,19 @@ impl Stream {
                 let n_fds = self
                     .c
                     .recv_with_fds(recv, &mut fds[..])
-                    .context("Receive errored")?;
+                    .context("receive error")?;
 
-                // SAFETY: We must trust the file descriptor we have
-                // just received.
-                let iter = fds[..n_fds]
-                    .iter_mut()
-                    .map(|fd| unsafe { OwnedFd::from_raw_fd(mem::take(fd)) });
+                for (i, fd) in fds.into_iter().take(n_fds).enumerate() {
+                    let fd = if fd == -1 {
+                        tracing::error!("Received file descriptor #{i} is invalid -1");
+                        None
+                    } else {
+                        // SAFETY: We assume the received file descriptors are valid.
+                        Some(unsafe { OwnedFd::from_raw_fd(fd) })
+                    };
 
-                self.add_fds(iter);
+                    self.fds.push_back(fd);
+                }
             }
 
             if e.interest.is_write() {
@@ -502,15 +491,15 @@ impl Stream {
             );
         }
 
-        let Some(received) = self.fds.get_mut(index) else {
+        let Some(fd) = self.fds.get_mut(index) else {
             bail!(
                 "Received file descriptor not in stored range 0-{}: {fd:?}",
                 self.fds.len()
             );
         };
 
-        let Some(fd) = received.fd.take() else {
-            bail!("Received file descriptor already taken: {fd:?}");
+        let Some(fd) = fd.take() else {
+            bail!("Received file descriptor already used: {fd:?}");
         };
 
         Ok(Some(fd))
@@ -843,7 +832,7 @@ impl Stream {
 
         let index = self.registries.vacant_key();
 
-        let mut registry = RegistryState {
+        let mut registry = RegistryEntry {
             id,
             permissions,
             ty,
@@ -1457,7 +1446,7 @@ struct ClientState {
 }
 
 #[derive(Default, Debug)]
-struct RegistryState {
+struct RegistryEntry {
     id: u32,
     permissions: i32,
     ty: String,
@@ -1469,11 +1458,6 @@ struct RegistryState {
 enum Kind {
     Registry,
     ClientNode(ClientNodeId),
-}
-
-#[derive(Debug)]
-struct ReceivedFd {
-    fd: Option<OwnedFd>,
 }
 
 #[derive(Debug)]
