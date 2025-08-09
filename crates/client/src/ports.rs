@@ -22,12 +22,14 @@ use pod::PodStream;
 use pod::Readable;
 use pod::Writable;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
+use protocol::Properties;
 use protocol::consts::{self, Direction};
 use protocol::flags::{ParamFlag, Status};
 use protocol::id;
 use protocol::{ffi, flags, object};
 use tracing::Level;
 
+use crate::Parameters;
 use crate::buffer::Buffer;
 use crate::ptr::volatile;
 use crate::{Buffers, Region};
@@ -401,8 +403,6 @@ pub struct Port {
     pub direction: Direction,
     /// Identifier of the port, unique per direction.
     pub id: PortId,
-    /// The name of the port.
-    pub name: String,
     /// List of available buffers for the port.
     pub port_buffers: PortBuffers,
     /// The IO clock region for the port.
@@ -417,125 +417,15 @@ pub struct Port {
     ///
     /// This tells you the peers are connected to the port.
     pub mix_info: PortMixInfo,
-    modified: bool,
-    param_values: BTreeMap<id::Param, Vec<PortParam<DynamicBuf>>>,
-    param_flags: BTreeMap<id::Param, ParamFlag>,
+    pub properties: Properties,
+    pub parameters: Parameters,
 }
 
 impl Port {
     /// Take the modified state of the port.
     #[inline]
-    pub(crate) fn take_modified(&mut self) -> bool {
-        mem::take(&mut self.modified)
-    }
-
-    /// Set a parameter flag.
-    fn set_flag(&mut self, id: id::Param, flag: flags::ParamFlag) {
-        match self.param_flags.entry(id) {
-            Entry::Vacant(e) => {
-                e.insert(flag);
-            }
-            Entry::Occupied(e) => {
-                if e.get().contains(flag) {
-                    return;
-                }
-
-                *e.into_mut() |= flag;
-            }
-        }
-
-        self.modified = true;
-    }
-
-    /// Set a parameter flag.
-    pub fn set_read(&mut self, id: id::Param) {
-        self.set_flag(id, flags::ParamFlag::READ);
-    }
-
-    /// Set that a parameter is writable.
-    pub fn set_write(&mut self, id: id::Param) {
-        self.set_flag(id, flags::ParamFlag::WRITE);
-    }
-
-    /// Set a parameter on the port to the given values.
-    #[inline]
-    pub fn set_param(
-        &mut self,
-        id: id::Param,
-        values: impl IntoIterator<Item = PortParam<impl AsSlice>, IntoIter: ExactSizeIterator>,
-    ) -> Result<()> {
-        let mut iter = values.into_iter();
-        let mut params = Vec::with_capacity(iter.len());
-
-        for param in iter {
-            params.push(PortParam::with_flags(
-                param.value.as_ref().to_owned()?,
-                param.flags,
-            ));
-        }
-
-        self.param_values.insert(id, params);
-        self.set_flag(id, flags::ParamFlag::READ);
-        self.modified = true;
-        Ok(())
-    }
-
-    /// Push a parameter.
-    ///
-    /// This will append the value to the existing set of parameters of the
-    /// given type.
-    #[inline]
-    pub fn push_param<S, V>(&mut self, value: V) -> Result<()>
-    where
-        S: AsSlice,
-        PortParam<S>: From<V>,
-    {
-        let value = PortParam::from(value);
-        let id = value.value.object_id();
-
-        self.param_values
-            .entry(id)
-            .or_default()
-            .push(PortParam::with_flags(
-                value.value.as_ref().to_owned()?,
-                value.flags,
-            ));
-
-        self.set_flag(id, flags::ParamFlag::READ);
-        self.modified = true;
-        Ok(())
-    }
-
-    /// Remove a parameter from the port and return the values of the removed
-    /// parameter if it exists.
-    #[inline]
-    pub fn remove_param(&mut self, id: id::Param) -> Option<Vec<PortParam>> {
-        let param = self.param_values.remove(&id)?;
-
-        // If we remove a parameter it is no longer readable.
-        let flag = self.param_flags.entry(id).or_default();
-        *flag ^= flags::ParamFlag::READ;
-
-        self.modified = true;
-        Some(param)
-    }
-
-    /// Get the values of a parameter.
-    pub fn get_param(&self, id: id::Param) -> &[PortParam<DynamicBuf>] {
-        self.param_values
-            .get(&id)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-    }
-
-    /// Get parameters from the port.
-    pub(crate) fn param_values(&self) -> &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>> {
-        &self.param_values
-    }
-
-    /// Get parameters from the port.
-    pub(crate) fn param_flags(&self) -> &BTreeMap<id::Param, flags::ParamFlag> {
-        &self.param_flags
+    pub(crate) fn is_modified(&mut self) -> bool {
+        self.properties.is_modified() || self.parameters.is_modified()
     }
 
     /// Replace the current set of buffers for this port.
@@ -593,6 +483,16 @@ impl PortMixInfo {
     }
 }
 
+macro_rules! get_direction_mut {
+    ($self:expr, $dir:expr) => {
+        match $dir {
+            Direction::INPUT => Ok(&mut $self.input_ports),
+            Direction::OUTPUT => Ok(&mut $self.output_ports),
+            dir => Err(anyhow::anyhow!("Unknown port direction: {dir}")),
+        }
+    };
+}
+
 #[derive(Default)]
 pub struct Ports {
     input_ports: Vec<Port>,
@@ -632,7 +532,7 @@ impl Ports {
     /// Insert a new port in the specified direction and return the inserted
     /// port for configuration.
     pub fn insert(&mut self, direction: Direction) -> Result<&mut Port> {
-        let ports = self.get_direction_mut(direction)?;
+        let ports = get_direction_mut!(self, direction)?;
 
         let Ok(id) = u32::try_from(ports.len()) else {
             bail!("Too many ports in {direction:?} direction");
@@ -643,15 +543,13 @@ impl Ports {
         let mut port = Port {
             direction,
             id,
-            modified: true,
-            name: String::new(),
             port_buffers: PortBuffers::new(direction),
             io_clock: None,
             io_position: None,
             mixes: PortMixes::default(),
             format: None,
-            param_values: BTreeMap::new(),
-            param_flags: BTreeMap::new(),
+            properties: Properties::new(),
+            parameters: Parameters::new(),
             mix_info: PortMixInfo::default(),
         };
 
@@ -672,7 +570,7 @@ impl Ports {
 
     /// Get a port mutably.
     pub fn get_mut(&mut self, direction: Direction, id: PortId) -> Result<&mut Port> {
-        let ports = self.get_direction_mut(direction)?;
+        let ports = get_direction_mut!(self, direction)?;
 
         let Some(port) = ports.get_mut(id.index()) else {
             bail!("Port {id} not found in {direction:?} ports");
@@ -686,15 +584,6 @@ impl Ports {
         match dir {
             Direction::INPUT => Ok(&self.input_ports),
             Direction::OUTPUT => Ok(&self.output_ports),
-            dir => panic!("Unknown port direction: {dir:?}"),
-        }
-    }
-
-    #[inline]
-    fn get_direction_mut(&mut self, dir: Direction) -> Result<&mut Vec<Port>> {
-        match dir {
-            Direction::INPUT => Ok(&mut self.input_ports),
-            Direction::OUTPUT => Ok(&mut self.output_ports),
             dir => panic!("Unknown port direction: {dir:?}"),
         }
     }

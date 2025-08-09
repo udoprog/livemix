@@ -1,6 +1,7 @@
 #![no_std]
 // TODO: REMOVE THIS ONCE THE CRATE IS READY
 #![allow(unused)]
+#![allow(clippy::enum_variant_names)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -35,3 +36,6 @@ pub mod utils;
 
 mod stats;
 pub use self::stats::Stats;
+
+mod parameters;
+pub use self::parameters::Parameters;

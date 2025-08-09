@@ -1,4 +1,5 @@
 use core::fmt;
+use core::mem;
 
 use alloc::string::String;
 
@@ -10,6 +11,7 @@ use crate::Prop;
 #[derive(Default)]
 pub struct Properties {
     properties: BTreeMap<&'static Prop, String>,
+    modified: bool,
 }
 
 impl Properties {
@@ -17,7 +19,18 @@ impl Properties {
     pub fn new() -> Self {
         Self {
             properties: BTreeMap::new(),
+            modified: false,
         }
+    }
+
+    /// Test if the properties collection has been modified.
+    pub fn is_modified(&self) -> bool {
+        self.modified
+    }
+
+    /// Take the modification state of the properties.
+    pub fn take_modified(&mut self) -> bool {
+        mem::take(&mut self.modified)
     }
 
     /// Get the number of properties in the collection.
@@ -31,13 +44,16 @@ impl Properties {
     }
 
     /// Insert a property into the collection.
-    pub fn insert(&mut self, key: &'static Prop, value: String) {
-        self.properties.insert(key, value);
+    pub fn insert(&mut self, key: &'static Prop, value: impl AsRef<str>) {
+        self.properties.insert(key, String::from(value.as_ref()));
+        self.modified = true;
     }
 
     /// Remove and return a property by its key.
     pub fn remove(&mut self, key: &'static Prop) -> Option<String> {
-        self.properties.remove(key)
+        let value = self.properties.remove(key);
+        self.modified |= value.is_some();
+        value
     }
 
     /// Get the value of a property by its key.

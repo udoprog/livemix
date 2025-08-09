@@ -185,7 +185,9 @@ impl<T> Region<[T]> {
 
     /// Cast the array to a different type.
     ///
-    /// The type `U` must be a sized type with the same size as `T`.
+    /// # Safety
+    ///
+    /// The type `U` must be inhabitable by the type `T`.
     #[inline]
     pub unsafe fn cast_array_unchecked<U>(&self) -> Region<[U]> {
         const {
@@ -218,8 +220,15 @@ impl<T> Region<[T]> {
     }
 
     /// Get the length of the region in count of `mem::size_of::<T>()` elements.
+    #[inline]
     pub fn len(&self) -> usize {
         self.size
+    }
+
+    /// Check if the region is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
     }
 
     /// Get a pointer to the memory region.
@@ -358,8 +367,8 @@ where
     #[inline]
     fn clone(&self) -> Self {
         Self {
-            file: self.file.clone(),
-            size: self.size.clone(),
+            file: self.file,
+            size: self.size,
             ptr: self.ptr,
             _marker: self._marker,
         }

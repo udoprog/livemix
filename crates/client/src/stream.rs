@@ -89,7 +89,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    pub fn new(connection: Connection) -> Result<Self> {
+    pub fn new(connection: Connection, properties: Properties) -> Result<Self> {
         let mut ids = IdSet::new();
 
         // Well-known identifiers.
@@ -98,13 +98,7 @@ impl Stream {
 
         let mut client = ClientState::default();
 
-        client
-            .properties
-            .insert(prop::APPLICATION_NAME, String::from("livemix"));
-
-        client
-            .properties
-            .insert(prop::NODE_NAME, String::from("livemix_node"));
+        client.properties = properties;
 
         let mut tokens = IdSet::new();
         let connection_token = Token::new(tokens.alloc().context("no more tokens")? as u64);
@@ -228,19 +222,29 @@ impl Stream {
                     }
                 }
                 Op::NodeCreated { node_id } => {
-                    let node = self.client_nodes.get(node_id)?;
+                    let node = self.client_nodes.get_mut(node_id)?;
                     self.c.client_node_set_active(node.id, true)?;
+                    self.ops.push_back(Op::NodeUpdate {
+                        node_id,
+                        what: None,
+                    });
                     return Ok(Some(StreamEvent::NodeCreated(node_id)));
                 }
                 Op::NodeUpdate { node_id, what } => {
                     let node = self.client_nodes.get_mut(node_id)?;
 
                     if node.take_modified() {
-                        self.c.client_node_update(node.id, 4, 4, &node.params)?;
+                        self.c.client_node_update(
+                            node.id,
+                            node.max_input_ports,
+                            node.max_output_ports,
+                            &mut node.properties,
+                            &node.parameters,
+                        )?;
                     }
 
                     for port in node.ports.inputs_mut() {
-                        if !port.take_modified() {
+                        if !port.is_modified() {
                             continue;
                         }
 
@@ -248,14 +252,13 @@ impl Stream {
                             node.id,
                             Direction::INPUT,
                             port.id,
-                            &port.name,
-                            port.param_values(),
-                            port.param_flags(),
+                            &mut port.properties,
+                            &mut port.parameters,
                         )?;
                     }
 
                     for port in node.ports.outputs_mut() {
-                        if !port.take_modified() {
+                        if !port.is_modified() {
                             continue;
                         }
 
@@ -263,9 +266,8 @@ impl Stream {
                             node.id,
                             Direction::OUTPUT,
                             port.id,
-                            &port.name,
-                            port.param_values(),
-                            port.param_flags(),
+                            &mut port.properties,
+                            &mut port.parameters,
                         )?;
                     }
 
@@ -840,22 +842,24 @@ impl Stream {
         let n_items = props.read::<u32>()?;
 
         let index = self.registries.vacant_key();
-        let mut registry = RegistryState::default();
 
-        registry.id = id;
-        registry.permissions = permissions;
-        registry.ty = ty;
-        registry.version = version;
+        let mut registry = RegistryState {
+            id,
+            permissions,
+            ty,
+            version,
+            properties: BTreeMap::new(),
+        };
 
         for _ in 0..n_items {
             let (key, value) = props.read::<(&str, &str)>()?;
             registry.properties.insert(key.to_owned(), value.to_owned());
         }
 
-        if registry.ty == consts::INTERFACE_FACTORY {
-            if let Some(name) = registry.properties.get("factory.name") {
-                self.factories.insert(name.clone(), index);
-            }
+        if registry.ty == consts::INTERFACE_FACTORY
+            && let Some(name) = registry.properties.get("factory.name")
+        {
+            self.factories.insert(name.clone(), index);
         }
 
         tracing::trace!(id, ?registry, "Registry global event");
@@ -977,11 +981,12 @@ impl Stream {
 
         let what = if let Some(obj) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            node.set_param(id, [obj.read_object()?.to_owned()?]);
+            node.parameters
+                .set_param(id, [obj.read_object()?.to_owned()?]);
             NodeUpdateWhat::SetNodeParam(id)
         } else {
             tracing::trace!(?id, "remove");
-            node.remove_param(id);
+            node.parameters.remove_param(id);
             NodeUpdateWhat::RemoveNodeParam(id)
         };
 
@@ -1110,16 +1115,17 @@ impl Stream {
 
         let what = if let Some(param) = st.field()?.read_option()? {
             tracing::trace!(?id, flags, object = ?param.as_ref().read_object()?, "set");
-            port.set_param(id, [PortParam::with_flags(param.read_object()?, flags)])?;
+            port.parameters
+                .set_param(id, [PortParam::with_flags(param.read_object()?, flags)])?;
             NodeUpdateWhat::SetPortParam(direction, port_id, id)
         } else {
             tracing::trace!(?id, flags, "remove");
-            _ = port.remove_param(id);
+            _ = port.parameters.remove_param(id);
             NodeUpdateWhat::RemovePortParam(direction, port_id, id)
         };
 
         self.ops.push_back(Op::NodeUpdate {
-            node_id: node_id,
+            node_id,
             what: Some(what),
         });
         Ok(())

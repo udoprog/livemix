@@ -8,17 +8,18 @@ use std::vec::Vec;
 use anyhow::{Result, bail};
 use pod::{AsSlice, DynamicBuf, Object};
 use protocol::consts::Activation;
-use protocol::flags::Status;
-use protocol::id::Param;
+use protocol::ffi;
+use protocol::flags::{self, Status};
+use protocol::id::{self, Param};
 use protocol::poll::Token;
-use protocol::{EventFd, ffi};
+use protocol::{EventFd, Properties};
 use slab::Slab;
 
-use crate::Stats;
 use crate::activation;
 use crate::memory::Region;
 use crate::ptr::{atomic, volatile};
 use crate::utils;
+use crate::{Parameters, Stats};
 use crate::{PeerActivation, Ports};
 
 /// Collection of data related to client nodes.
@@ -135,13 +136,16 @@ pub struct ClientNode {
     /// Ports associated with the client node.
     pub ports: Ports,
     pub read_fd: Option<EventFd>,
+    pub properties: Properties,
+    pub parameters: Parameters,
     pub(super) read_token: Token,
     pub write_fd: Option<EventFd>,
     pub(super) write_token: Token,
-    pub(super) params: BTreeMap<Param, Vec<Object<DynamicBuf>>>,
     pub(crate) io_clock: Option<Region<ffi::IoClock>>,
     pub(crate) io_control: Option<Region<[MaybeUninit<u8>]>>,
     pub(crate) io_position: Option<Region<ffi::IoPosition>>,
+    pub(crate) max_input_ports: u32,
+    pub(crate) max_output_ports: u32,
     pub(super) modified: bool,
     then: u64,
     stats: Stats,
@@ -154,8 +158,6 @@ impl ClientNode {
         write_token: Token,
         read_token: Token,
     ) -> Result<Self> {
-        let mut params = BTreeMap::new();
-
         Ok(Self {
             id,
             ports,
@@ -163,16 +165,31 @@ impl ClientNode {
             read_fd: None,
             write_token,
             read_token,
+            properties: Properties::new(),
+            parameters: Parameters::new(),
             activation: None,
             peer_activations: Vec::new(),
-            params,
             io_control: None,
             io_clock: None,
             io_position: None,
+            max_input_ports: 0,
+            max_output_ports: 0,
             modified: true,
             then: 0,
             stats: Stats::default(),
         })
+    }
+
+    /// Set max input ports.
+    pub fn set_max_input_ports(&mut self, value: u32) {
+        self.max_input_ports = value;
+        self.modified = true;
+    }
+
+    /// Set max output ports.
+    pub fn set_max_output_ports(&mut self, value: u32) {
+        self.max_output_ports = value;
+        self.modified = true;
     }
 
     pub fn duration(&self) -> Option<u64> {
@@ -299,32 +316,6 @@ impl ClientNode {
 
         let id = unsafe { volatile!(io_position, clock.id).read() };
         active_driver_id.write(id);
-    }
-
-    /// Set a parameter for the node.
-    #[inline]
-    pub fn set_param(
-        &mut self,
-        param: Param,
-        values: impl IntoIterator<Item = Object<impl AsSlice>, IntoIter: ExactSizeIterator>,
-    ) -> Result<()> {
-        let mut iter = values.into_iter();
-        let mut params = Vec::with_capacity(iter.len());
-
-        for pod in iter {
-            params.push(pod.as_ref().to_owned()?);
-        }
-
-        self.params.insert(param, params);
-        self.modified = true;
-        Ok(())
-    }
-
-    /// Remove a parameter for the node.
-    #[inline]
-    pub fn remove_param(&mut self, param: Param) {
-        self.params.remove(&param);
-        self.modified = true;
     }
 
     /// Take and return the modified state of the node.

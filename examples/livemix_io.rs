@@ -15,9 +15,10 @@ use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
 use protocol::consts::Direction;
 use protocol::flags::ChunkFlags;
-use protocol::id;
 use protocol::poll::{Interest, PollEvent};
+use protocol::prop;
 use protocol::{Connection, Poll, TimerFd, ffi, object, param};
+use protocol::{Properties, id};
 
 const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
@@ -225,7 +226,10 @@ fn main() -> Result<()> {
     timer.set_nonblocking(true)?;
     timer.set_interval(Duration::from_secs(10))?;
 
-    let mut stream = client::Stream::new(c)?;
+    let mut properties = Properties::new();
+    properties.insert(prop::APPLICATION_NAME, "livemix");
+
+    let mut stream = client::Stream::new(c, properties)?;
 
     let timer_token = stream.token()?;
     poll.add(timer.as_raw_fd(), timer_token, Interest::READ)?;
@@ -249,12 +253,41 @@ fn main() -> Result<()> {
                 StreamEvent::NodeCreated(node) => {
                     let node = stream.node_mut(node)?;
 
+                    node.properties.insert(prop::NODE_NAME, "livemix10");
+                    node.properties
+                        .insert(prop::NODE_DESCRIPTION, "this is a description");
+
+                    node.properties.insert(prop::NODE_DESCRIPTION, "livemix");
+                    node.properties.insert(prop::NODE_NAME, "livemix_node");
+                    node.properties.insert(prop::MEDIA_CLASS, "Audio/Duplex");
+                    node.properties.insert(prop::MEDIA_TYPE, "Audio");
+                    node.properties.insert(prop::MEDIA_CATEGORY, "Duplex");
+                    node.properties.insert(prop::MEDIA_ROLE, "DSP");
+
+                    node.parameters.set_write(id::Param::ENUM_FORMAT);
+                    node.parameters.set_write(id::Param::FORMAT);
+                    node.parameters.set_write(id::Param::PROP_INFO);
+                    node.parameters.set_write(id::Param::PROPS);
+                    node.parameters.set_write(id::Param::ENUM_PORT_CONFIG);
+                    node.parameters.set_write(id::Param::PORT_CONFIG);
+                    node.parameters.set_write(id::Param::LATENCY);
+                    node.parameters.set_write(id::Param::PROCESS_LATENCY);
+                    node.parameters.set_write(id::Param::TAG);
+
                     let port = node.ports.insert(Direction::INPUT)?;
-                    port.name = String::from("input");
+
+                    port.properties.insert(prop::PORT_NAME, "input");
+                    port.properties
+                        .insert(prop::FORMAT_DSP, "32 bit float mono audio");
+
                     add_port_params(port)?;
 
                     let port = node.ports.insert(Direction::OUTPUT)?;
-                    port.name = String::from("output");
+
+                    port.properties.insert(prop::PORT_NAME, "output");
+                    port.properties
+                        .insert(prop::FORMAT_DSP, "32 bit float mono audio");
+
                     add_port_params(port)?;
                 }
                 StreamEvent::Process(node) => {
@@ -268,7 +301,7 @@ fn main() -> Result<()> {
                             let node = stream.node(ev.node_id)?;
                             let port = node.ports.get(ev.direction, ev.port_id)?;
 
-                            if let [param] = port.get_param(ev.param) {
+                            if let [param] = port.parameters.get_param(ev.param) {
                                 let format = param.value.as_ref().read::<object::Format>()?;
 
                                 match format.media_type {
@@ -326,7 +359,7 @@ fn main() -> Result<()> {
 fn add_port_params(port: &mut Port) -> Result<()> {
     let mut pod = pod::array();
 
-    port.push_param(pod.clear_mut().embed_object(
+    port.parameters.push_param(pod.clear_mut().embed_object(
         id::ObjectType::FORMAT,
         id::Param::ENUM_FORMAT,
         |obj| {
@@ -355,27 +388,31 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         },
     )?)?;
 
-    port.push_param(pod.clear_mut().embed(param::Meta {
-        ty: id::Meta::HEADER,
-        size: mem::size_of::<ffi::MetaHeader>(),
-    })?)?;
+    port.parameters
+        .push_param(pod.clear_mut().embed(param::Meta {
+            ty: id::Meta::HEADER,
+            size: mem::size_of::<ffi::MetaHeader>(),
+        })?)?;
 
-    port.push_param(pod.clear_mut().embed(param::Io {
-        ty: id::IoType::BUFFERS,
-        size: mem::size_of::<ffi::IoBuffers>(),
-    })?)?;
+    port.parameters
+        .push_param(pod.clear_mut().embed(param::Io {
+            ty: id::IoType::BUFFERS,
+            size: mem::size_of::<ffi::IoBuffers>(),
+        })?)?;
 
-    port.push_param(pod.clear_mut().embed(param::Io {
-        ty: id::IoType::CLOCK,
-        size: mem::size_of::<ffi::IoClock>(),
-    })?)?;
+    port.parameters
+        .push_param(pod.clear_mut().embed(param::Io {
+            ty: id::IoType::CLOCK,
+            size: mem::size_of::<ffi::IoClock>(),
+        })?)?;
 
-    port.push_param(pod.clear_mut().embed(param::Io {
-        ty: id::IoType::POSITION,
-        size: mem::size_of::<ffi::IoPosition>(),
-    })?)?;
+    port.parameters
+        .push_param(pod.clear_mut().embed(param::Io {
+            ty: id::IoType::POSITION,
+            size: mem::size_of::<ffi::IoPosition>(),
+        })?)?;
 
-    port.push_param(pod.clear_mut().embed_object(
+    port.parameters.push_param(pod.clear_mut().embed_object(
         id::ObjectType::PARAM_BUFFERS,
         id::Param::BUFFERS,
         |obj| {
@@ -401,6 +438,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         },
     )?)?;
 
-    port.set_write(id::Param::FORMAT);
+    port.parameters.set_write(id::Param::FORMAT);
     Ok(())
 }

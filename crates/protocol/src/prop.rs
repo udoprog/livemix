@@ -61,4 +61,11 @@ impl Writable for Prop {
 properties! {
     APPLICATION_NAME = c"application.name";
     NODE_NAME = c"node.name";
+    NODE_DESCRIPTION = c"node.description";
+    MEDIA_CLASS = c"media.class";
+    MEDIA_TYPE = c"media.type";
+    MEDIA_CATEGORY = c"media.category";
+    MEDIA_ROLE = c"media.role";
+    PORT_NAME = c"port.name";
+    FORMAT_DSP = c"format.dsp";
 }

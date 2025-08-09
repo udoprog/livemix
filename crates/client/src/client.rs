@@ -15,8 +15,8 @@ use protocol::poll::{ChangeInterest, Interest};
 use protocol::{Connection, Properties};
 use tracing::Level;
 
-use crate::PortId;
 use crate::ports::PortParam;
+use crate::{Parameters, PortId};
 
 #[derive(Debug)]
 pub struct Client {
@@ -141,15 +141,6 @@ impl Client {
         version: u32,
         new_id: u32,
     ) -> Result<()> {
-        const PROPS: &[(&str, &str)] = &[
-            ("node.description", "livemix"),
-            ("node.name", "livemix_node"),
-            ("media.class", "Audio/Duplex"),
-            ("media.type", "Audio"),
-            ("media.category", "Duplex"),
-            ("media.role", "DSP"),
-        ];
-
         let mut pod = pod::array();
 
         pod.as_mut().write_struct(|st| {
@@ -158,8 +149,7 @@ impl Client {
             st.field().write_sized(version)?;
 
             st.field().write_struct(|props| {
-                props.field().write_sized(PROPS.len() as u32)?;
-                props.write(PROPS)?;
+                props.field().write_sized(0u32)?;
                 Ok(())
             })?;
 
@@ -223,28 +213,15 @@ impl Client {
     }
 
     /// Update client node.
-    #[tracing::instrument(skip(self, params), fields(params = ?params.keys()), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     pub fn client_node_update(
         &mut self,
         id: u32,
         max_input_ports: u32,
         max_output_ports: u32,
-        params: &BTreeMap<id::Param, Vec<Object<impl AsSlice>>>,
+        properties: &mut Properties,
+        parameters: &Parameters,
     ) -> Result<()> {
-        const PARAMS: &[(id::Param, flags::ParamFlag)] = &[
-            (id::Param::ENUM_FORMAT, flags::ParamFlag::READWRITE),
-            (id::Param::FORMAT, flags::ParamFlag::READWRITE),
-            (id::Param::PROP_INFO, flags::ParamFlag::WRITE),
-            (id::Param::PROPS, flags::ParamFlag::WRITE),
-            (id::Param::ENUM_PORT_CONFIG, flags::ParamFlag::WRITE),
-            (id::Param::PORT_CONFIG, flags::ParamFlag::WRITE),
-            (id::Param::LATENCY, flags::ParamFlag::WRITE),
-            (id::Param::PROCESS_LATENCY, flags::ParamFlag::WRITE),
-            (id::Param::TAG, flags::ParamFlag::WRITE),
-        ];
-
-        const PROPS: &[(&str, &str)] = &[("node.name", "livemix_node")];
-
         let mut pod = pod::dynamic();
 
         let mut change_mask = flags::ClientNodeUpdate::NONE;
@@ -252,9 +229,14 @@ impl Client {
         change_mask |= flags::ClientNodeUpdate::INFO;
 
         let mut node_change_mask = flags::NodeChangeMask::FLAGS;
-        node_change_mask |= flags::NodeChangeMask::PROPS;
 
-        if !PARAMS.is_empty() {
+        let props_modified = properties.take_modified();
+
+        if props_modified {
+            node_change_mask |= flags::NodeChangeMask::PROPS;
+        }
+
+        if !parameters.flags.is_empty() {
             node_change_mask |= flags::NodeChangeMask::PARAMS;
         }
 
@@ -264,11 +246,11 @@ impl Client {
             st.field().write_sized(change_mask)?;
 
             st.field()
-                .write_sized(params.values().map(|p| p.len()).sum::<usize>() as u32)?;
+                .write_sized(parameters.values.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
-            for (_, params) in params {
+            for params in parameters.values.values() {
                 for param in params {
-                    st.field().write(param.as_ref())?;
+                    st.field().write(param.value.as_ref())?;
                 }
             }
 
@@ -279,11 +261,23 @@ impl Client {
                     st.field().write_sized(node_change_mask)?;
                     st.field().write_sized(node_flags)?;
 
-                    st.field().write_sized(PROPS.len() as u32)?;
-                    st.write(PROPS)?;
+                    if props_modified {
+                        st.field().write_sized(properties.len() as u32)?;
 
-                    st.field().write_sized(PARAMS.len() as u32)?;
-                    st.write(PARAMS)?;
+                        for (key, value) in properties.iter() {
+                            st.write((key, value))?;
+                        }
+                    } else {
+                        st.field().write(0u32)?;
+                    }
+
+                    st.field().write_sized(parameters.flags.len() as u32)?;
+
+                    for (key, value) in &parameters.flags {
+                        st.write(key)?;
+                        st.write(value)?;
+                    }
+
                     Ok(())
                 })?;
             } else {
@@ -299,21 +293,20 @@ impl Client {
     }
 
     /// Update client node port.
-    #[tracing::instrument(skip(self, param_values), fields(param_values = ?param_values.keys()), ret(level = Level::TRACE))]
+    #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     pub fn client_node_port_update(
         &mut self,
         id: u32,
         direction: consts::Direction,
         port_id: PortId,
-        name: &str,
-        param_values: &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>>,
-        param_flags: &BTreeMap<id::Param, flags::ParamFlag>,
+        properties: &mut Properties,
+        parameters: &mut Parameters,
     ) -> Result<()> {
         let mut pod = pod::dynamic();
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
 
-        if !param_values.is_empty() {
+        if !parameters.values.is_empty() {
             change_mask |= flags::ClientNodePortUpdate::PARAMS;
         }
 
@@ -321,9 +314,15 @@ impl Client {
 
         let mut port_change_mask = flags::PortChangeMask::NONE;
         port_change_mask |= flags::PortChangeMask::FLAGS;
-        port_change_mask |= flags::PortChangeMask::PROPS;
 
-        if !param_flags.is_empty() {
+        let props_modified = properties.take_modified();
+        let params_modified = parameters.take_modified();
+
+        if props_modified {
+            port_change_mask |= flags::PortChangeMask::PROPS;
+        }
+
+        if params_modified {
             port_change_mask |= flags::PortChangeMask::PARAMS;
         }
 
@@ -335,9 +334,15 @@ impl Client {
             st.write(change_mask)?;
 
             // Parameters.
-            st.write(param_values.iter().map(|(_, p)| p.len()).sum::<usize>() as u32)?;
+            st.write(
+                parameters
+                    .values
+                    .iter()
+                    .map(|(_, p)| p.len())
+                    .sum::<usize>() as u32,
+            )?;
 
-            for (_, params) in param_values {
+            for params in parameters.values.values() {
                 for param in params {
                     st.field().write(param.value.as_ref())?;
                 }
@@ -351,15 +356,25 @@ impl Client {
                     st.field().write((0u32, 0u32))?;
 
                     // Properties.
-                    st.write(2u32)?;
-                    st.write(("port.name", name))?;
-                    st.write(("format.dsp", "32 bit float mono audio"))?;
+                    if props_modified {
+                        st.field().write_sized(properties.len() as u32)?;
+
+                        for (key, value) in properties.iter() {
+                            st.write((key, value))?;
+                        }
+                    } else {
+                        st.write(0u32)?;
+                    }
 
                     // Parameters.
-                    st.write(param_flags.len() as u32)?;
+                    if params_modified {
+                        st.write(parameters.flags.len() as u32)?;
 
-                    for (id, flag) in param_flags {
-                        st.write((id, *flag))?;
+                        for (id, flag) in &parameters.flags {
+                            st.write((id, flag))?;
+                        }
+                    } else {
+                        st.write(0u32)?;
                     }
 
                     Ok(())
