@@ -328,11 +328,11 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         id::ObjectType::FORMAT,
         id::Param::ENUM_FORMAT,
         |obj| {
-            obj.property(id::FormatKey::MEDIA_TYPE)
+            obj.property(id::Format::MEDIA_TYPE)
                 .write(id::MediaType::AUDIO)?;
-            obj.property(id::FormatKey::MEDIA_SUB_TYPE)
+            obj.property(id::Format::MEDIA_SUB_TYPE)
                 .write(id::MediaSubType::DSP)?;
-            obj.property(id::FormatKey::AUDIO_FORMAT).write_choice(
+            obj.property(id::Format::AUDIO_FORMAT).write_choice(
                 ChoiceType::ENUM,
                 Type::ID,
                 |choice| {
@@ -343,8 +343,8 @@ fn add_port_params(port: &mut Port) -> Result<()> {
                     ))
                 },
             )?;
-            obj.property(id::FormatKey::AUDIO_CHANNELS).write(1)?;
-            obj.property(id::FormatKey::AUDIO_RATE).write_choice(
+            obj.property(id::Format::AUDIO_CHANNELS).write(1)?;
+            obj.property(id::Format::AUDIO_RATE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |c| c.write((DEFAULT_RATE as u32, 44100, 48000)),
@@ -377,15 +377,15 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         id::ObjectType::PARAM_BUFFERS,
         id::Param::BUFFERS,
         |obj| {
-            obj.property(id::ParamBuffersKey::BUFFERS).write_choice(
+            obj.property(id::ParamBuffers::BUFFERS).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| choice.write((1, 1, 32)),
             )?;
 
-            obj.property(id::ParamBuffersKey::BLOCKS).write(1i32)?;
+            obj.property(id::ParamBuffers::BLOCKS).write(1i32)?;
 
-            obj.property(id::ParamBuffersKey::SIZE).write_choice(
+            obj.property(id::ParamBuffers::SIZE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| {
@@ -393,7 +393,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
                 },
             )?;
 
-            obj.property(id::ParamBuffersKey::STRIDE)
+            obj.property(id::ParamBuffers::STRIDE)
                 .write(mem::size_of::<f32>())?;
             Ok(())
         },

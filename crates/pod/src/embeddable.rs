@@ -16,55 +16,55 @@ use crate::{BuildPod, Builder, Error, Writer};
 ///
 /// ```
 /// use pod::{Readable, Writable};
-/// use protocol::id::{FormatKey, ObjectType, Param, MediaSubType, MediaType, AudioFormat};
+/// use protocol::id;
 ///
 /// #[derive(Debug, PartialEq, Readable, Writable)]
-/// #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
+/// #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
 /// struct RawFormat {
-///     #[pod(property(key = FormatKey::MEDIA_TYPE))]
-///     media_type: MediaType,
-///     #[pod(property(key = FormatKey::MEDIA_SUB_TYPE))]
-///     media_sub_type: MediaSubType,
-///     #[pod(property(key = FormatKey::AUDIO_FORMAT))]
-///     audio_format: AudioFormat,
-///     #[pod(property(key = FormatKey::AUDIO_CHANNELS))]
+///     #[pod(property(key = id::Format::MEDIA_TYPE))]
+///     media_type: id::MediaType,
+///     #[pod(property(key = id::Format::MEDIA_SUB_TYPE))]
+///     media_sub_type: id::MediaSubType,
+///     #[pod(property(key = id::Format::AUDIO_FORMAT))]
+///     audio_format: id::AudioFormat,
+///     #[pod(property(key = id::Format::AUDIO_CHANNELS))]
 ///     channels: u32,
-///     #[pod(property(key = FormatKey::AUDIO_RATE))]
+///     #[pod(property(key = id::Format::AUDIO_RATE))]
 ///     audio_rate: u32,
 /// }
 ///
 /// let mut pod = pod::array();
 /// let object = pod.as_mut().embed(RawFormat {
-///     media_type: MediaType::AUDIO,
-///     media_sub_type: MediaSubType::DSP,
-///     audio_format: AudioFormat::F32P,
+///     media_type: id::MediaType::AUDIO,
+///     media_sub_type: id::MediaSubType::DSP,
+///     audio_format: id::AudioFormat::F32P,
 ///     channels: 2,
 ///     audio_rate: 48000,
 /// })?;
 ///
-/// assert_eq!(object.object_type::<ObjectType>(), ObjectType::FORMAT);
-/// assert_eq!(object.object_id::<Param>(), Param::FORMAT);
+/// assert_eq!(object.object_type::<id::ObjectType>(), id::ObjectType::FORMAT);
+/// assert_eq!(object.object_id::<id::Param>(), id::Param::FORMAT);
 ///
 /// let mut obj = object.as_ref();
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key::<FormatKey>(), FormatKey::MEDIA_TYPE);
-/// assert_eq!(p.value().read::<MediaType>()?, MediaType::AUDIO);
+/// assert_eq!(p.key::<id::Format>(), id::Format::MEDIA_TYPE);
+/// assert_eq!(p.value().read::<id::MediaType>()?, id::MediaType::AUDIO);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key::<FormatKey>(), FormatKey::MEDIA_SUB_TYPE);
-/// assert_eq!(p.value().read::<MediaSubType>()?, MediaSubType::DSP);
+/// assert_eq!(p.key::<id::Format>(), id::Format::MEDIA_SUB_TYPE);
+/// assert_eq!(p.value().read::<id::MediaSubType>()?, id::MediaSubType::DSP);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key::<FormatKey>(), FormatKey::AUDIO_FORMAT);
-/// assert_eq!(p.value().read::<AudioFormat>()?, AudioFormat::F32P);
+/// assert_eq!(p.key::<id::Format>(), id::Format::AUDIO_FORMAT);
+/// assert_eq!(p.value().read::<id::AudioFormat>()?, id::AudioFormat::F32P);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key::<FormatKey>(), FormatKey::AUDIO_CHANNELS);
+/// assert_eq!(p.key::<id::Format>(), id::Format::AUDIO_CHANNELS);
 /// assert_eq!(p.value().read::<u32>()?, 2);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key::<FormatKey>(), FormatKey::AUDIO_RATE);
+/// assert_eq!(p.key::<id::Format>(), id::Format::AUDIO_RATE);
 /// assert_eq!(p.value().read::<u32>()?, 48000);
 /// # Ok::<_, pod::Error>(())
 /// ```

@@ -10,9 +10,9 @@ use crate::id;
 #[derive(Readable, Writable)]
 #[pod(object(type = id::ObjectType::PARAM_IO, id = id::Param::IO))]
 pub struct Io {
-    #[pod(property(key = id::ParamIoKey::ID))]
+    #[pod(property(key = id::ParamIo::ID))]
     pub ty: id::IoType,
-    #[pod(property(key = id::ParamIoKey::SIZE))]
+    #[pod(property(key = id::ParamIo::SIZE))]
     pub size: usize,
 }
 
@@ -22,8 +22,8 @@ pub struct Io {
 #[derive(Readable, Writable)]
 #[pod(object(type = id::ObjectType::PARAM_META, id = id::Param::META))]
 pub struct Meta {
-    #[pod(property(key = id::ParamMetaKey::TYPE))]
+    #[pod(property(key = id::ParamMeta::TYPE))]
     pub ty: id::Meta,
-    #[pod(property(key = id::ParamMetaKey::SIZE))]
+    #[pod(property(key = id::ParamMeta::SIZE))]
     pub size: usize,
 }

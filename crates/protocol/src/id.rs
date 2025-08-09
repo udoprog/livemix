@@ -350,7 +350,7 @@ pod::macros::id! {
     /// Represents `enum spa_format`.
     #[example = MEDIA_TYPE]
     #[module = protocol::id]
-    pub struct FormatKey {
+    pub struct Format {
         UNKNOWN,
         /// media type (Id enum spa_media_type).
         #[constant = libspa_sys::SPA_FORMAT_mediaType]
@@ -658,7 +658,7 @@ pod::macros::id! {
     /// Equivalent to `enum spa_param_buffers`.
     #[example = DATA_TYPE]
     #[module = protocol::id]
-    pub struct ParamBuffersKey {
+    pub struct ParamBuffers {
         UNKNOWN,
         /// Number of buffers (Int).
         #[constant = libspa_sys::SPA_PARAM_BUFFERS_buffers]
@@ -688,7 +688,7 @@ pod::macros::id! {
     /// Equivalent to `enum spa_param_meta`.
     #[example = TYPE]
     #[module = protocol::id]
-    pub struct ParamMetaKey {
+    pub struct ParamMeta {
         UNKNOWN,
         /// The type of the parameter, one of enum spa_param_meta (Id enum spa_param_meta).
         #[constant = libspa_sys::SPA_PARAM_META_type]
@@ -703,7 +703,7 @@ pod::macros::id! {
     /// This corresponds to `enum spa_param_io`.
     #[example = SIZE]
     #[module = protocol::id]
-    pub struct ParamIoKey {
+    pub struct ParamIo {
         UNKNOWN,
         /// type ID, uniquely identifies the io area (Id enum spa_io_type).
         #[constant = libspa_sys::SPA_PARAM_IO_id]

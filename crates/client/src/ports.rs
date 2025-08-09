@@ -25,8 +25,8 @@ use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::consts::{self, Direction};
 use protocol::flags::{ParamFlag, Status};
 use protocol::id::{
-    self, AudioFormat, FormatKey, MediaSubType, MediaType, ObjectType, Param, ParamBuffersKey,
-    ParamIoKey, ParamMetaKey,
+    self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
+    ParamMeta,
 };
 use protocol::{ffi, flags, object};
 use tracing::Level;

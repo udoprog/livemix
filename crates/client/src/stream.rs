@@ -27,7 +27,7 @@ use protocol::buf::RecvBuf;
 use protocol::consts::{self, Activation, Direction};
 use protocol::ffi;
 use protocol::flags;
-use protocol::id::{self, AudioFormat, FormatKey, MediaSubType, MediaType, ObjectType, Param};
+use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
 use protocol::ids::IdSet;
 use protocol::op::{self, ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
 use protocol::poll::{ChangeInterest, Interest, PollEvent, Token};
