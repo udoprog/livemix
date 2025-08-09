@@ -43,6 +43,10 @@ impl<B, P> Builder<B, P> {
 impl Builder<DynamicBuf> {
     /// Construct a new [`Builder`] with a dynamically sized buffer.
     ///
+    /// Consider using [`pod::dynamic()`] instead.
+    ///
+    /// [`pod::dynamic()`]: crate::dynamic
+    ///
     /// # Examples
     ///
     /// ```
@@ -103,7 +107,11 @@ where
 }
 
 impl Builder<ArrayBuf> {
-    /// Construct a new [`Builder`] with a 128 word-sized array buffer.
+    /// Construct a new [`Builder`] backed by a default-sized array buffer.
+    ///
+    /// Consider using [`pod::array()`] instead.
+    ///
+    /// [`pod::array()`]: crate::array
     ///
     /// # Examples
     ///

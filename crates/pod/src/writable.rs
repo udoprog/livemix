@@ -42,7 +42,11 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Builder;
+/// let mut pod = pod::array();
+/// pod.as_mut().write([1, 2, 3])?;
+/// let pod = pod.as_ref();
+/// assert_eq!(pod.read::<[i32; 3]>()?, [1, 2, 3]);
+/// # Ok::<_, pod::Error>(())
 /// ```
 impl<T, const N: usize> Writable for [T; N]
 where
@@ -82,9 +86,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::Builder;
-///
-/// let mut pod = Builder::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().write_struct(|st| st.write(()))?;
 ///
 /// let mut pod = pod.as_ref();

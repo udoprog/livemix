@@ -35,9 +35,7 @@ where
 ///
 /// # Examples
 /// ```
-/// use pod::Builder;
-///
-/// let mut pod = Builder::array();
+/// let mut pod = pod::array();
 /// pod.as_mut().write(42u32)?;
 /// assert_eq!(pod.as_ref().read::<Option<u32>>()?, Some(42));
 /// # Ok::<_, pod::Error>(())

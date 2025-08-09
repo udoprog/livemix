@@ -12,6 +12,7 @@
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
+#[non_exhaustive]
 pub struct Rectangle {
     pub width: u32,
     pub height: u32,

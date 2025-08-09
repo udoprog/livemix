@@ -15,13 +15,9 @@ use alloc::vec::Vec;
 use anyhow::{Result, bail};
 use bittle::Bits;
 use bittle::BitsMut;
-use pod::AsSlice;
-use pod::PodItem;
-use pod::PodSink;
-use pod::PodStream;
-use pod::Readable;
-use pod::Writable;
-use pod::{ChoiceType, DynamicBuf, Object, Type};
+use pod::{
+    AsSlice, ChoiceType, DynamicBuf, Object, PodItem, PodSink, PodStream, Readable, Type, Writable,
+};
 use protocol::Properties;
 use protocol::consts::{self, Direction};
 use protocol::flags::{ParamFlags, Status};

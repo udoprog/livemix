@@ -78,6 +78,7 @@ impl Bitmap {
     ///
     /// ```
     /// use pod::Bitmap;
+    ///
     /// let bitmap = Bitmap::new(b"hello world");
     /// assert_eq!(bitmap.as_bytes(), b"hello world");
     /// ```
@@ -92,6 +93,7 @@ impl Bitmap {
     ///
     /// ```
     /// use pod::Bitmap;
+    ///
     /// let bitmap = Bitmap::new(b"hello world");
     /// assert_eq!(bitmap.as_bytes(), b"hello world");
     /// ```

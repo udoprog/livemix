@@ -12,6 +12,7 @@
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
+#[non_exhaustive]
 pub struct Fraction {
     pub num: u32,
     pub denom: u32,
