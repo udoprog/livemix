@@ -427,17 +427,17 @@ where
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.key::<u32>(), 2);
     /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.key::<u32>(), 3);
     /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().read_sized::<i32>()?, 3);
     ///
@@ -705,17 +705,17 @@ where
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 1);
+/// assert_eq!(p.key::<u32>(), 1);
 /// assert_eq!(p.flags(), 0b001);
 /// assert_eq!(p.value().read_sized::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 2);
+/// assert_eq!(p.key::<u32>(), 2);
 /// assert_eq!(p.flags(), 0b010);
 /// assert_eq!(p.value().read_sized::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 3);
+/// assert_eq!(p.key::<u32>(), 3);
 /// assert_eq!(p.flags(), 0b100);
 /// assert_eq!(p.value().read_sized::<i32>()?, 3);
 ///

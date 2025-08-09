@@ -1,6 +1,7 @@
 use core::fmt;
 use core::mem;
 
+use crate::RawId;
 #[cfg(feature = "alloc")]
 use crate::buf::{AllocError, DynamicBuf};
 use crate::error::ErrorKind;
@@ -30,14 +31,20 @@ impl<B> Object<B> {
 
     /// Get the type of the object.
     #[inline]
-    pub const fn object_type(&self) -> u32 {
-        self.object_type
+    pub fn object_type<T>(&self) -> T
+    where
+        T: RawId,
+    {
+        RawId::from_id(self.object_type)
     }
 
     /// Get the id of the object.
     #[inline]
-    pub const fn object_id(&self) -> u32 {
-        self.object_id
+    pub fn object_id<T>(&self) -> T
+    where
+        T: RawId,
+    {
+        T::from_id(self.object_id)
     }
 
     /// Get a reference to the underlying buffer.
@@ -111,17 +118,17 @@ where
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.key::<u32>(), 2);
     /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.key::<u32>(), 3);
     /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().read_sized::<i32>()?, 3);
     ///
@@ -152,17 +159,17 @@ where
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.key::<u32>(), 2);
     /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.key::<u32>(), 3);
     /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().read_sized::<i32>()?, 3);
     ///
@@ -208,17 +215,17 @@ where
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.key::<u32>(), 2);
     /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.key::<u32>(), 3);
     /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().read_sized::<i32>()?, 3);
     ///
@@ -263,17 +270,17 @@ where
     /// assert!(!obj.is_empty());
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// assert_eq!(p.flags(), 0b001);
     /// assert_eq!(p.value().read_sized::<i32>()?, 1);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 2);
+    /// assert_eq!(p.key::<u32>(), 2);
     /// assert_eq!(p.flags(), 0b010);
     /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.key::<u32>(), 3);
     /// assert_eq!(p.flags(), 0b100);
     /// assert_eq!(p.value().read_sized::<i32>()?, 3);
     ///
@@ -312,17 +319,17 @@ where
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 1);
+/// assert_eq!(p.key::<u32>(), 1);
 /// assert_eq!(p.flags(), 0b001);
 /// assert_eq!(p.value().read_sized::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 2);
+/// assert_eq!(p.key::<u32>(), 2);
 /// assert_eq!(p.flags(), 0b010);
 /// assert_eq!(p.value().read_sized::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 3);
+/// assert_eq!(p.key::<u32>(), 3);
 /// assert_eq!(p.flags(), 0b100);
 /// assert_eq!(p.value().read_sized::<i32>()?, 3);
 ///
@@ -466,8 +473,8 @@ where
         }
 
         let mut f = f.debug_struct("Object");
-        f.field("object_type", &self.object_type());
-        f.field("object_id", &self.object_id());
+        f.field("object_type", &self.object_type::<u32>());
+        f.field("object_id", &self.object_id::<u32>());
         f.field("properties", &Properties(&self));
         f.finish()
     }

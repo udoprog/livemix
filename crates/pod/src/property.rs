@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{AsSlice, PackedPod, TypedPod};
+use crate::{AsSlice, PackedPod, RawId, TypedPod};
 
 /// A property inside of an object.
 pub struct Property<B> {
@@ -30,12 +30,15 @@ impl<B> Property<B> {
     ///
     /// let mut obj = pod.as_ref().read_object()?;
     /// let p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn key(&self) -> u32 {
-        self.key
+    pub fn key<T>(&self) -> T
+    where
+        T: RawId,
+    {
+        T::from_id(self.key)
     }
 
     /// Get the flags of the property.

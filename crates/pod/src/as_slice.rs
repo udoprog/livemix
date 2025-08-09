@@ -28,7 +28,7 @@ mod sealed {
     impl Sealed for DynamicBuf {}
     impl<R> Sealed for &mut R where R: ?Sized + AsSlice {}
     impl<R> Sealed for &R where R: ?Sized + AsSlice {}
-    impl<B, T> Sealed for WriterSlice<B, T> where B: Writer {}
+    impl<B, const N: usize> Sealed for WriterSlice<B, N> where B: Writer {}
 }
 
 /// Base trait to convert something into a reader which borrows from `&self`.

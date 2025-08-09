@@ -1,6 +1,6 @@
 use crate::{Error, PodSink};
 
-/// Helper trait to more easily read values from a [`Builder`].
+/// Helper trait to more easily write value to a [`Builder`].
 ///
 /// This is used through the [`Builder::write`] and similar methods.
 ///

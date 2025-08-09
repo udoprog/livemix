@@ -13,10 +13,10 @@ fn embed_object() -> Result<(), Error> {
 
     let mut obj = obj.as_ref();
 
-    assert_eq!(obj.object_type(), 10);
-    assert_eq!(obj.object_id(), 20);
+    assert_eq!(obj.object_type::<u32>(), 10);
+    assert_eq!(obj.object_id::<u32>(), 20);
     let p = obj.property()?;
-    assert_eq!(p.key(), 1);
+    assert_eq!(p.key::<u32>(), 1);
     assert_eq!(p.value().read_sized::<i32>()?, 1);
     Ok(())
 }
@@ -35,7 +35,7 @@ fn stream_decode_choice() -> Result<(), Error> {
     let mut obj = pod.as_ref().read_object()?;
 
     let p = obj.property()?;
-    assert_eq!(p.key(), 3);
+    assert_eq!(p.key::<u32>(), 3);
     assert_eq!(p.value().read::<Id<u32>>()?, Id(77));
     Ok(())
 }

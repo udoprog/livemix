@@ -49,6 +49,5 @@ fn object() -> Result<(), Error> {
     }
 
     roundtrip!(RawFormat { channels: 2 })?;
-
     Ok(())
 }

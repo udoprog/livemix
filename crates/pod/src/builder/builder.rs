@@ -9,14 +9,15 @@ use crate::ReadPod;
 use crate::Slice;
 use crate::SplitReader;
 use crate::Struct;
+use crate::WriterSlice;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
 use crate::error::ErrorKind;
 use crate::{ArrayBuf, SizedWritable, Writable};
 use crate::{
-    AsSlice, BuildPod, ChildPod, ChoiceType, Error, PaddedPod, Pod, RawId, Type, TypedPod,
-    UnsizedWritable, Writer,
+    AsSlice, BuildPod, ChildPod, ChoiceType, Embeddable, Error, PaddedPod, Pod, RawId, Type,
+    TypedPod, UnsizedWritable, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -359,6 +360,72 @@ where
         value.write_into(&mut self)
     }
 
+    /// Conveniently encode a value into the pod and return a read handle
+    /// directly to it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pod::{Readable, Writable};
+    /// use protocol::id::{Format, ObjectType, Param, MediaSubType, MediaType, AudioFormat};
+    ///
+    /// #[derive(Debug, PartialEq, Readable, Writable)]
+    /// #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
+    /// struct RawFormat {
+    ///     #[pod(property(key = Format::MEDIA_TYPE))]
+    ///     media_type: MediaType,
+    ///     #[pod(property(key = Format::MEDIA_SUB_TYPE))]
+    ///     media_sub_type: MediaSubType,
+    ///     #[pod(property(key = Format::AUDIO_FORMAT))]
+    ///     audio_format: AudioFormat,
+    ///     #[pod(property(key = Format::AUDIO_CHANNELS))]
+    ///     channels: u32,
+    ///     #[pod(property(key = Format::AUDIO_RATE))]
+    ///     audio_rate: u32,
+    /// }
+    ///
+    /// let mut pod = pod::array();
+    /// let object = pod.as_mut().embed(RawFormat {
+    ///     media_type: MediaType::AUDIO,
+    ///     media_sub_type: MediaSubType::DSP,
+    ///     audio_format: AudioFormat::F32P,
+    ///     channels: 2,
+    ///     audio_rate: 48000,
+    /// })?;
+    ///
+    /// assert_eq!(object.object_type::<ObjectType>(), ObjectType::FORMAT);
+    /// assert_eq!(object.object_id::<Param>(), Param::FORMAT);
+    ///
+    /// let mut obj = object.as_ref();
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key::<Format>(), Format::MEDIA_TYPE);
+    /// assert_eq!(p.value().read::<MediaType>()?, MediaType::AUDIO);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key::<Format>(), Format::MEDIA_SUB_TYPE);
+    /// assert_eq!(p.value().read::<MediaSubType>()?, MediaSubType::DSP);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key::<Format>(), Format::AUDIO_FORMAT);
+    /// assert_eq!(p.value().read::<AudioFormat>()?, AudioFormat::F32P);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key::<Format>(), Format::AUDIO_CHANNELS);
+    /// assert_eq!(p.value().read::<u32>()?, 2);
+    ///
+    /// let p = obj.property()?;
+    /// assert_eq!(p.key::<Format>(), Format::AUDIO_RATE);
+    /// assert_eq!(p.value().read::<u32>()?, 48000);
+    /// # Ok::<_, pod::Error>(())
+    /// ```
+    pub fn embed<T>(self, value: T) -> Result<T::Embed<B>, Error>
+    where
+        T: Embeddable,
+    {
+        value.embed_into(self)
+    }
+
     /// Write a sized value into the pod.
     ///
     /// This is a low-level API, consider using [`Builder::write`] instead.
@@ -661,21 +728,21 @@ where
     ///
     /// let mut obj = obj.as_ref();
     ///
-    /// assert_eq!(obj.object_type(), 10);
-    /// assert_eq!(obj.object_id(), 20);
+    /// assert_eq!(obj.object_type::<u32>(), 10);
+    /// assert_eq!(obj.object_id::<u32>(), 20);
     ///
     /// let mut p = obj.property()?;
-    /// assert_eq!(p.key(), 1);
+    /// assert_eq!(p.key::<u32>(), 1);
     /// assert_eq!(p.flags(), 0);
     /// assert_eq!(p.value().read_sized::<i32>()?, 2);
     ///
     /// let mut p = obj.property()?;
-    /// assert_eq!(p.key(), 3);
+    /// assert_eq!(p.key::<u32>(), 3);
     /// assert_eq!(p.flags(), 0);
     /// assert_eq!(p.value().read_sized::<i32>()?, 4);
     ///
     /// let mut p = obj.property()?;
-    /// assert_eq!(p.key(), 5);
+    /// assert_eq!(p.key::<u32>(), 5);
     /// assert_eq!(p.flags(), 0);
     /// assert_eq!(p.value().read_sized::<i32>()?, 6);
     ///
@@ -688,7 +755,7 @@ where
         object_type: impl RawId,
         object_id: impl RawId,
         f: impl FnOnce(&mut ObjectBuilder<B, P>) -> Result<(), Error>,
-    ) -> Result<Object<impl AsSlice>, Error> {
+    ) -> Result<Object<WriterSlice<B, 16>>, Error> {
         self.kind.header(self.buf.borrow_mut())?;
         let mut encoder = ObjectBuilder::to_writer(
             self.buf,
@@ -860,17 +927,17 @@ where
 /// assert!(!obj.is_empty());
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 1);
+/// assert_eq!(p.key::<u32>(), 1);
 /// assert_eq!(p.flags(), 0b001);
 /// assert_eq!(p.value().read_sized::<i32>()?, 1);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 2);
+/// assert_eq!(p.key::<u32>(), 2);
 /// assert_eq!(p.flags(), 0b010);
 /// assert_eq!(p.value().read_sized::<i32>()?, 2);
 ///
 /// let p = obj.property()?;
-/// assert_eq!(p.key(), 3);
+/// assert_eq!(p.key::<u32>(), 3);
 /// assert_eq!(p.flags(), 0b100);
 /// assert_eq!(p.value().read_sized::<i32>()?, 3);
 ///

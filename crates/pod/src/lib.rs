@@ -47,6 +47,10 @@ pub use self::writable::Writable;
 /// See [`__derives`] for documentation.
 pub use pod_macros::Writable;
 
+mod embeddable;
+#[doc(inline)]
+pub use self::embeddable::Embeddable;
+
 mod readable;
 #[doc(inline)]
 pub use self::readable::Readable;

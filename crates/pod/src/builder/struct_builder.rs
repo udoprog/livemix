@@ -1,4 +1,4 @@
-use crate::{AsSlice, BuildPod, Builder, Error, Type, Writable, Writer, WriterSlice};
+use crate::{BuildPod, Builder, Error, Type, Writable, Writer, WriterSlice};
 
 /// An encoder for a struct.
 #[must_use = "Struct encoders must be closed to ensure all elements are initialized"]
@@ -72,7 +72,7 @@ where
     }
 
     #[inline]
-    pub(crate) fn close(mut self) -> Result<impl AsSlice, Error> {
+    pub(crate) fn close(mut self) -> Result<WriterSlice<W, 8>, Error> {
         let size = self
             .kind
             .check_size(Type::STRUCT, &self.writer, self.header)?;
@@ -80,6 +80,6 @@ where
         self.writer
             .write_at(self.header, &[size, Type::STRUCT.into_u32()])?;
 
-        Ok(WriterSlice::<_, [u32; 2]>::new(self.writer, self.header))
+        Ok(WriterSlice::new(self.writer, self.header))
     }
 }

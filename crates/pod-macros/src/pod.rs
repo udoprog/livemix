@@ -234,12 +234,12 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
             inner = quote! {
                 let mut obj = #pod_item_t::read_object(#pod_stream_t::next(pod)?)?;
 
-                if #ty != #object::object_type(&obj) {
-                    return #result::Err(#error::__invalid_object_type(#ty, obj.object_type()));
+                if #ty != #object::object_type::<u32>(&obj) {
+                    return #result::Err(#error::__invalid_object_type(#ty, obj.object_type::<u32>()));
                 }
 
-                if #id != #object::object_id(&obj) {
-                    return #result::Err(#error::__invalid_object_id(#id, obj.object_id()));
+                if #id != #object::object_id::<u32>(&obj) {
+                    return #result::Err(#error::__invalid_object_id(#id, obj.object_id::<u32>()));
                 }
 
                 #(
@@ -293,13 +293,19 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         builder,
         struct_builder,
         object_builder,
+        object,
+        embeddable_t,
+        writer_slice,
+        writer_t,
+        build_pod_t,
         ..
     } = &toks;
 
     let fields = fields(&cx, &input.data)?;
-    let accessor = fields.iter().map(|f| &f.accessor);
+    let accessor = fields.iter().map(|f| &f.accessor).collect::<Vec<_>>();
 
     let inner;
+    let impl_embeddable;
 
     match attrs.container {
         attrs::Container::Struct => {
@@ -310,7 +316,9 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                 })?;
 
                 #result::Ok(())
-            }
+            };
+
+            impl_embeddable = None;
         }
         attrs::Container::Object(attrs::Object { ty, id }) => {
             let mut keys = Vec::new();
@@ -339,7 +347,32 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                 })?;
 
                 #result::Ok(())
-            }
+            };
+
+            let (impl_generics, ty_generics, where_generics) = generics.split_for_impl();
+
+            impl_embeddable = Some(quote! {
+                #[automatically_derived]
+                impl #impl_generics #embeddable_t for #ident #ty_generics #where_generics {
+                    type Embed<W> = #object<#writer_slice<W, 16>> where W: #writer_t;
+
+                    #[inline]
+                    fn embed_into<W, P>(&self, pod: #builder<W, P>) -> #result<Self::Embed<W>, #error>
+                    where
+                        W: #writer_t,
+                        P: #build_pod_t,
+                    {
+                        #builder::embed_object(pod, #ty, #id, |obj| {
+                            #(
+                                let prop = #object_builder::property(obj, #keys);
+                                #builder::write(prop, &self.#accessor)?;
+                            )*
+
+                            #result::Ok(())
+                        })
+                    }
+                }
+            });
         }
     }
 
@@ -353,5 +386,7 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                 #inner
             }
         }
+
+        #impl_embeddable
     })
 }
