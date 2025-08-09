@@ -9,8 +9,7 @@ use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
 use crate::{
-    AsSlice, ChoiceType, Error, PackedPod, Readable, Reader, Slice, Type, TypedPod,
-    UnsizedWritable, Writer,
+    AsSlice, ChoiceType, Error, Readable, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer,
 };
 
 /// A decoder for a choice.
@@ -293,13 +292,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>, PackedPod>> {
+    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>>> {
         if self.remaining == 0 {
             return None;
         }
 
         let head = self.buf.split(self.child_size)?;
-        let pod = TypedPod::packed(head, self.child_size, self.child_type);
+        let pod = TypedPod::new(head, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }
@@ -403,10 +402,10 @@ impl<'de, B> PodStream<'de> for Choice<B>
 where
     B: Reader<'de>,
 {
-    type Item = TypedPod<Slice<'de>, PackedPod>;
+    type Item = TypedPod<Slice<'de>>;
 
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
         let Some(pod) = self.next() else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };

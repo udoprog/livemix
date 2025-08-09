@@ -985,8 +985,8 @@ where
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.as_slice(), self.kind) {
-            Ok(pod) => pod.fmt(f),
+        match TypedPod::from_reader(self.buf.as_slice()) {
+            Ok((pod, _)) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }
     }

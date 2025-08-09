@@ -634,8 +634,10 @@ where
     ///
     /// This errors if the pod does not wrap a buffer containing a valid pod.
     #[inline]
-    pub fn into_typed(self) -> Result<TypedPod<B, P>, Error> {
-        TypedPod::from_reader(self.buf, self.kind)
+    pub fn into_typed(self) -> Result<TypedPod<Slice<'de>>, Error> {
+        let (pod, buf) = TypedPod::from_reader(self.buf)?;
+        self.kind.unpad(buf)?;
+        Ok(pod)
     }
 
     /// Convert the [`Pod`] into a [`TypedPod`] mutably borrowing the current
@@ -649,11 +651,13 @@ where
     ///
     /// This errors if the pod does not wrap a buffer containing a valid pod.
     #[inline]
-    pub fn as_typed_mut(&mut self) -> Result<TypedPod<B::Mut<'_>, P>, Error>
+    pub fn as_typed_mut(&mut self) -> Result<TypedPod<Slice<'de>>, Error>
     where
         P: Copy,
     {
-        TypedPod::from_reader(self.buf.borrow_mut(), self.kind)
+        let (pod, buf) = TypedPod::from_reader(self.buf.borrow_mut())?;
+        self.kind.unpad(buf)?;
+        Ok(pod)
     }
 }
 
@@ -731,7 +735,7 @@ where
     B: Reader<'de>,
     P: ReadPod,
 {
-    type Item = TypedPod<Slice<'de>, PackedPod>;
+    type Item = TypedPod<Slice<'de>>;
 
     #[inline]
     fn next(&mut self) -> Result<Self::Item, Error> {
@@ -742,7 +746,7 @@ where
         };
 
         self.kind.unpad(self.buf.borrow_mut())?;
-        Ok(TypedPod::packed(buf, size, ty))
+        Ok(TypedPod::new(buf, size, ty))
     }
 }
 

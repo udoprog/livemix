@@ -1,17 +1,17 @@
 use core::fmt;
 
-use crate::{AsSlice, PackedPod, RawId, TypedPod};
+use crate::{AsSlice, RawId, TypedPod};
 
 /// A property inside of an object.
 pub struct Property<B> {
     key: u32,
     flags: u32,
-    value: TypedPod<B, PackedPod>,
+    value: TypedPod<B>,
 }
 
 impl<B> Property<B> {
     #[inline]
-    pub(crate) fn new(key: u32, flags: u32, value: TypedPod<B, PackedPod>) -> Self {
+    pub(crate) fn new(key: u32, flags: u32, value: TypedPod<B>) -> Self {
         Self { key, flags, value }
     }
 
@@ -83,7 +83,7 @@ impl<B> Property<B> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn value(self) -> TypedPod<B, PackedPod> {
+    pub fn value(self) -> TypedPod<B> {
         self.value
     }
 }

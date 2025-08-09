@@ -151,7 +151,7 @@ where
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        let pod = TypedPod::packed(head, size, ty);
+        let pod = TypedPod::new(head, size, ty);
         self.buf.unpad(PADDING)?;
         Ok(Control::new(control_offset, control_type, pod))
     }

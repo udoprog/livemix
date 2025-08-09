@@ -409,7 +409,7 @@ crate::macros::encode_into_sized!(Fd);
 /// ```
 impl<T> SizedWritable for &T
 where
-    T: ?Sized + SizedWritable,
+    T: SizedWritable,
 {
     const TYPE: Type = T::TYPE;
     const SIZE: usize = T::SIZE;

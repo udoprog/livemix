@@ -6,8 +6,8 @@ use crate::DynamicBuf;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Error, PADDING, PackedPod, PodItem, PodStream, Readable, Reader, Slice, Type,
-    TypedPod, UnsizedWritable, Writer,
+    AsSlice, Error, PADDING, PodItem, PodStream, Readable, Reader, Slice, Type, TypedPod,
+    UnsizedWritable, Writer,
 };
 
 /// A decoder for a struct.
@@ -113,7 +113,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn field(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+    pub fn field(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
         if self.buf.is_empty() {
             return Err(Error::new(ErrorKind::StructUnderflow));
         }
@@ -124,7 +124,7 @@ where
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        let pod = TypedPod::packed(head, size, ty);
+        let pod = TypedPod::new(head, size, ty);
         self.buf.unpad(PADDING)?;
         Ok(pod)
     }
@@ -282,7 +282,7 @@ impl<'de, B> PodStream<'de> for Struct<B>
 where
     B: Reader<'de>,
 {
-    type Item = TypedPod<Slice<'de>, PackedPod>;
+    type Item = TypedPod<Slice<'de>>;
 
     #[inline]
     fn next(&mut self) -> Result<Self::Item, Error> {

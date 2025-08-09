@@ -9,7 +9,7 @@ use crate::Readable;
 use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
-use crate::{AsSlice, Error, PackedPod, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer};
+use crate::{AsSlice, Error, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer};
 
 /// A decoder for an array.
 ///
@@ -207,8 +207,7 @@ where
     ///
     /// let mut count = 0;
     ///
-    /// while !array.is_empty() {
-    ///     let pod = array.next().unwrap();
+    /// while let Some(pod) = array.next() {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -218,13 +217,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>, PackedPod>> {
+    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>>> {
         if self.remaining == 0 {
             return None;
         }
 
         let tail = self.buf.split(self.child_size)?;
-        let pod = TypedPod::packed(tail, self.child_size, self.child_type);
+        let pod = TypedPod::new(tail, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }
@@ -321,10 +320,10 @@ impl<'de, B> PodStream<'de> for Array<B>
 where
     B: Reader<'de>,
 {
-    type Item = TypedPod<Slice<'de>, PackedPod>;
+    type Item = TypedPod<Slice<'de>>;
 
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
         let Some(pod) = self.next() else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };

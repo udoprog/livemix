@@ -53,7 +53,7 @@ impl Ctxt {
             stream.extend(error.to_compile_error());
         }
 
-        stream.into()
+        stream
     }
 }
 
@@ -144,7 +144,7 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         ..
     } = &toks;
 
-    let fields = fields(&cx, &input.data)?;
+    let fields = fields(cx, &input.data)?;
 
     let (add, lt) = 'lt: {
         if let Some(lt) = generics.lifetimes().next() {

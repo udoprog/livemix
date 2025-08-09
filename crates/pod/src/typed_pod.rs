@@ -13,43 +13,29 @@ use crate::buf::AllocError;
 use crate::error::ErrorKind;
 use crate::read::{Array, Choice, Object, Sequence, Struct};
 use crate::{
-    AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, PaddedPod, Pod, PodItem, Pointer, ReadPod,
-    Reader, Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor,
-    Writer,
+    AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, Pod, PodItem, Pointer, Reader, Rectangle,
+    SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct TypedPod<B, P = PaddedPod> {
+pub struct TypedPod<B> {
     buf: B,
     size: usize,
     ty: Type,
-    kind: P,
 }
 
-impl<B> TypedPod<B, PackedPod> {
+impl<B> TypedPod<B> {
     /// Construct a new [`TypedPod`] arround the specified buffer `B` and
     /// a [`PackedPod`] kind.
     #[inline]
-    pub(crate) const fn packed(buf: B, size: usize, ty: Type) -> Self {
-        Self::with_kind(buf, size, ty, PackedPod)
+    pub(crate) const fn new(buf: B, size: usize, ty: Type) -> Self {
+        Self { buf, size, ty }
     }
 }
 
-impl<B, P> TypedPod<B, P> {
-    /// Construct a new [`TypedPod`] arround the specified buffer `B` and
-    /// specified kind `P`.
-    #[inline]
-    pub(crate) const fn with_kind(buf: B, size: usize, ty: Type, kind: P) -> Self {
-        TypedPod {
-            buf,
-            size,
-            ty,
-            kind,
-        }
-    }
-
+impl<B> TypedPod<B> {
     /// Get the type of the pod.
     ///
     /// # Examples
@@ -91,11 +77,7 @@ impl<B, P> TypedPod<B, P> {
     }
 }
 
-impl<'de, B, P> TypedPod<B, P>
-where
-    B: Reader<'de>,
-    P: Copy,
-{
+impl<'de> TypedPod<Slice<'de>> {
     /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
     ///
     /// # Examples
@@ -111,22 +93,29 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn from_reader(mut buf: B, kind: P) -> Result<Self, Error> {
+    pub fn from_reader<B>(mut buf: B) -> Result<(Self, B), Error>
+    where
+        B: Reader<'de>,
+    {
         let (size, ty) = buf.header()?;
 
-        Ok(TypedPod {
-            buf,
+        let Some(slice) = buf.split(size) else {
+            return Err(Error::new(ErrorKind::BufferUnderflow));
+        };
+
+        let pod = TypedPod {
+            buf: slice,
             size,
             ty,
-            kind,
-        })
+        };
+
+        Ok((pod, buf))
     }
 }
 
-impl<'de, B, P> TypedPod<B, P>
+impl<'de, B> TypedPod<B>
 where
     B: Reader<'de>,
-    P: ReadPod,
 {
     /// Skip a value in the pod.
     ///
@@ -148,7 +137,6 @@ where
     #[inline]
     pub fn skip(mut self) -> Result<usize, Error> {
         self.buf.skip(self.size)?;
-        self.kind.unpad(self.buf)?;
         Ok(self.size)
     }
 
@@ -214,14 +202,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn read_sized<T>(mut self) -> Result<T, Error>
+    pub fn read_sized<T>(self) -> Result<T, Error>
     where
         T: SizedReadable<'de>,
     {
         let value = match self.ty {
             Type::CHOICE => {
-                let pod = TypedPod::packed(self.buf.borrow_mut(), self.size, self.ty);
-                let mut choice = pod.read_choice()?;
+                let mut choice = self.read_choice()?;
 
                 if choice.choice_type() != ChoiceType::NONE {
                     return Err(Error::new(ErrorKind::InvalidChoiceType {
@@ -237,10 +224,9 @@ where
 
                 choice.read_sized()?
             }
-            _ => T::read_content(self.buf.borrow_mut(), self.ty, self.size)?,
+            _ => T::read_content(self.buf, self.ty, self.size)?,
         };
 
-        self.kind.unpad(self.buf)?;
         Ok(value)
     }
 
@@ -259,7 +245,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn visit_unsized<T, V>(mut self, visitor: V) -> Result<V::Ok, Error>
+    pub fn visit_unsized<T, V>(self, visitor: V) -> Result<V::Ok, Error>
     where
         T: ?Sized + UnsizedReadable<'de>,
         V: Visitor<'de, T>,
@@ -268,9 +254,7 @@ where
             return Err(Error::expected(T::TYPE, self.ty, self.size));
         }
 
-        let value = T::read_content(self.buf.borrow_mut(), self.size, visitor)?;
-        self.kind.unpad(self.buf)?;
-        Ok(value)
+        T::read_content(self.buf, self.size, visitor)
     }
 
     /// Read the next unsized value.
@@ -288,7 +272,7 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn read_unsized<T>(mut self) -> Result<&'de T, Error>
+    pub fn read_unsized<T>(self) -> Result<&'de T, Error>
     where
         T: ?Sized + UnsizedReadable<'de>,
     {
@@ -296,9 +280,7 @@ where
             return Err(Error::expected(T::TYPE, self.ty, self.size));
         }
 
-        let value = T::read_borrowed(self.buf.borrow_mut(), self.size)?;
-        self.kind.unpad(self.buf)?;
-        Ok(value)
+        T::read_borrowed(self.buf, self.size)
     }
 
     /// Read the next optional value.
@@ -330,12 +312,14 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn read_option(self) -> Result<Option<TypedPod<B, P>>, Error> {
+    pub fn read_option(self) -> Result<Option<TypedPod<Slice<'de>>>, Error> {
         match self.ty {
             Type::NONE => Ok(None),
-            _ => Ok(Some(TypedPod::with_kind(
-                self.buf, self.size, self.ty, self.kind,
-            ))),
+            _ => {
+                let size = self.size;
+                let ty = self.ty;
+                Ok(Some(TypedPod::new(self.split()?, size, ty)))
+            }
         }
     }
 
@@ -558,15 +542,13 @@ where
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        self.kind.unpad(self.buf)?;
         Ok(buf)
     }
 }
 
-impl<B, P> TypedPod<B, P>
+impl<B> TypedPod<B>
 where
     B: AsSlice,
-    P: Copy,
 {
     /// Coerce any pod into an owned pod.
     ///
@@ -582,27 +564,26 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
-    pub fn to_owned(&self) -> Result<TypedPod<DynamicBuf, P>, AllocError> {
+    #[inline]
+    pub fn to_owned(&self) -> Result<TypedPod<DynamicBuf>, AllocError> {
         Ok(TypedPod {
             buf: DynamicBuf::from_slice(self.buf.as_slice().as_bytes())?,
             size: self.size,
             ty: self.ty,
-            kind: self.kind,
         })
     }
 
     /// Convert the [`TypedPod`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> TypedPod<Slice<'_>, P> {
-        TypedPod::with_kind(self.buf.as_slice(), self.size, self.ty, self.kind)
+    pub fn as_ref(&self) -> TypedPod<Slice<'_>> {
+        TypedPod::new(self.buf.as_slice(), self.size, self.ty)
     }
 }
 
-impl<B, P> Clone for TypedPod<B, P>
+impl<B> Clone for TypedPod<B>
 where
     B: Clone,
-    P: Copy,
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -610,15 +591,11 @@ where
             size: self.size,
             ty: self.ty,
             buf: self.buf.clone(),
-            kind: self.kind,
         }
     }
 }
 
-impl<'de, P> PodItem<'de> for TypedPod<Slice<'de>, P>
-where
-    P: ReadPod,
-{
+impl<'de> PodItem<'de> for TypedPod<Slice<'de>> {
     #[inline]
     fn read<T>(self) -> Result<T, Error>
     where
@@ -659,21 +636,19 @@ where
     }
 }
 
-impl<'de, B, P> PodStream<'de> for TypedPod<B, P>
+impl<'de, B> PodStream<'de> for TypedPod<B>
 where
     B: Reader<'de>,
-    P: ReadPod,
 {
-    type Item = TypedPod<Slice<'de>, PackedPod>;
+    type Item = TypedPod<Slice<'de>>;
 
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>, PackedPod>, Error> {
+    fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
         let Some(buf) = self.buf.split(self.size) else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
-        self.kind.unpad(self.buf.borrow_mut())?;
-        let pod = TypedPod::packed(buf, self.size, self.ty);
+        let pod = TypedPod::new(buf, self.size, self.ty);
 
         // Since the typed pod is consumed now, it no longer has a size, nor
         // does it produce values. It effective contains `Type::NONE`.
@@ -722,10 +697,9 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B, P> UnsizedWritable for TypedPod<B, P>
+impl<B> UnsizedWritable for TypedPod<B>
 where
     B: AsSlice,
-    P: ReadPod,
 {
     const TYPE: Type = Type::POD;
 
@@ -747,12 +721,11 @@ where
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B, P] TypedPod<B, P> where B: AsSlice, P: ReadPod);
+crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsSlice);
 
-impl<B, P> fmt::Debug for TypedPod<B, P>
+impl<B> fmt::Debug for TypedPod<B>
 where
     B: AsSlice,
-    P: ReadPod,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
