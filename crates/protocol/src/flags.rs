@@ -185,10 +185,11 @@ pod::macros::flags! {
         DYNAMIC_DATA = 1 << 8;
     }
 
+    /// Describes `SPA_PARAM_INFO_*`.
     #[examples = [SERIAL, READ]]
     #[not_set = [WRITE]]
     #[module = protocol::flags]
-    pub struct ParamFlag(u32) {
+    pub struct ParamFlags(u32) {
         NONE;
         /// Flag to signal update even when the read/write flags don't change.
         #[constant = libspa_sys::SPA_PARAM_INFO_SERIAL]
@@ -381,7 +382,7 @@ pod::macros::flags! {
     }
 }
 
-impl ParamFlag {
+impl ParamFlags {
     /// Read and write flags combined.
     pub const READWRITE: Self = Self(Self::WRITE.0 | Self::READ.0);
 }

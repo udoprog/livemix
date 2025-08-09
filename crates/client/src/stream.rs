@@ -995,12 +995,11 @@ impl Stream {
 
         let what = if let Some(obj) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            node.parameters
-                .set_param(id, [obj.read_object()?.to_owned()?]);
+            node.parameters.set(id, [obj.read_object()?.to_owned()?]);
             NodeUpdateWhat::SetNodeParam(id)
         } else {
             tracing::trace!(?id, "remove");
-            node.parameters.remove_param(id);
+            node.parameters.remove(id);
             NodeUpdateWhat::RemoveNodeParam(id)
         };
 
@@ -1130,11 +1129,11 @@ impl Stream {
         let what = if let Some(param) = st.field()?.read_option()? {
             tracing::trace!(?id, flags, object = ?param.as_ref().read_object()?, "set");
             port.parameters
-                .set_param(id, [PortParam::with_flags(param.read_object()?, flags)])?;
+                .set(id, [PortParam::with_flags(param.read_object()?, flags)])?;
             NodeUpdateWhat::SetPortParam(direction, port_id, id)
         } else {
             tracing::trace!(?id, flags, "remove");
-            _ = port.parameters.remove_param(id);
+            _ = port.parameters.remove(id);
             NodeUpdateWhat::RemovePortParam(direction, port_id, id)
         };
 

@@ -24,7 +24,7 @@ use pod::Writable;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::Properties;
 use protocol::consts::{self, Direction};
-use protocol::flags::{ParamFlag, Status};
+use protocol::flags::{ParamFlags, Status};
 use protocol::id;
 use protocol::{ffi, flags, object};
 use tracing::Level;

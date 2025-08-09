@@ -152,8 +152,8 @@ impl Client {
             st.field().write_struct(|props| {
                 props.field().write(properties.len() as u32)?;
 
-                for (key, value) in properties.iter() {
-                    props.write((key, value))?;
+                for pair in properties {
+                    props.write(pair)?;
                 }
 
                 Ok(())
@@ -242,7 +242,7 @@ impl Client {
             node_change_mask |= flags::NodeChangeMask::PROPS;
         }
 
-        if !parameters.flags.is_empty() {
+        if parameters.flags().len() > 0 {
             node_change_mask |= flags::NodeChangeMask::PARAMS;
         }
 
@@ -252,9 +252,9 @@ impl Client {
             st.field().write_sized(change_mask)?;
 
             st.field()
-                .write_sized(parameters.values.values().map(|p| p.len()).sum::<usize>() as u32)?;
+                .write_sized(parameters.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
-            for params in parameters.values.values() {
+            for params in parameters.values() {
                 for param in params {
                     st.field().write(param.value.as_ref())?;
                 }
@@ -277,10 +277,10 @@ impl Client {
                         st.field().write(0u32)?;
                     }
 
-                    st.field().write_sized(parameters.flags.len() as u32)?;
+                    st.field().write_sized(parameters.flags().len() as u32)?;
 
-                    for (key, value) in &parameters.flags {
-                        st.write(key)?;
+                    for (id, value) in parameters.flags() {
+                        st.write(id)?;
                         st.write(value)?;
                     }
 
@@ -316,7 +316,7 @@ impl Client {
 
         let mut change_mask = flags::ClientNodePortUpdate::NONE;
 
-        if !parameters.values.is_empty() {
+        if parameters.values().len() > 0 {
             change_mask |= flags::ClientNodePortUpdate::PARAMS;
         }
 
@@ -344,9 +344,9 @@ impl Client {
             st.write(change_mask)?;
 
             // Parameters.
-            st.write(parameters.values.values().map(|p| p.len()).sum::<usize>() as u32)?;
+            st.write(parameters.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
-            for params in parameters.values.values() {
+            for params in parameters.values() {
                 for param in params {
                     st.field().write(param.value.as_ref())?;
                 }
@@ -363,8 +363,8 @@ impl Client {
                     if props_modified {
                         st.field().write_sized(properties.len() as u32)?;
 
-                        for (key, value) in properties.iter() {
-                            st.write((key, value))?;
+                        for pair in properties.iter() {
+                            st.write(pair)?;
                         }
                     } else {
                         st.write(0u32)?;
@@ -372,9 +372,9 @@ impl Client {
 
                     // Parameters.
                     if params_modified {
-                        st.write(parameters.flags.len() as u32)?;
+                        st.write(parameters.flags().len() as u32)?;
 
-                        for (id, flag) in &parameters.flags {
+                        for (id, flag) in parameters.flags() {
                             st.write((id, flag))?;
                         }
                     } else {

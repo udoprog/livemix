@@ -3,8 +3,7 @@ use core::mem;
 
 use alloc::vec::Vec;
 
-use std::collections::BTreeMap;
-use std::collections::btree_map::Entry;
+use std::collections::btree_map::{self, BTreeMap};
 
 use anyhow::Result;
 use pod::{AsSlice, DynamicBuf};
@@ -12,11 +11,26 @@ use protocol::{flags, id};
 
 use crate::PortParam;
 
+#[derive(Debug)]
+struct Entry {
+    values: Vec<PortParam<DynamicBuf>>,
+    flags: flags::ParamFlags,
+}
+
+impl Default for Entry {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            values: Vec::with_capacity(1),
+            flags: flags::ParamFlags::NONE,
+        }
+    }
+}
+
 /// A collection of parameters for pipewire objects.
 pub struct Parameters {
-    pub(crate) values: BTreeMap<id::Param, Vec<PortParam<DynamicBuf>>>,
-    pub(crate) flags: BTreeMap<id::Param, flags::ParamFlag>,
-    pub(crate) modified: bool,
+    values: BTreeMap<id::Param, Entry>,
+    modified: bool,
 }
 
 impl Parameters {
@@ -24,79 +38,79 @@ impl Parameters {
     pub fn new() -> Self {
         Self {
             values: BTreeMap::new(),
-            flags: BTreeMap::new(),
             modified: false,
         }
     }
 
     /// Test if the parameters collection has been modified.
-    pub fn is_modified(&self) -> bool {
+    pub(crate) fn is_modified(&self) -> bool {
         self.modified
     }
 
     /// Take the modified state of the parameters.
-    pub fn take_modified(&mut self) -> bool {
+    pub(crate) fn take_modified(&mut self) -> bool {
         mem::take(&mut self.modified)
     }
 
     /// Set a parameter flag.
-    pub fn set_read(&mut self, id: id::Param) {
-        self.set_flag(id, flags::ParamFlag::READ);
+    pub fn set_readable(&mut self, id: id::Param) {
+        self.values.entry(id).or_default().flags |= flags::ParamFlags::READ;
+        self.modified = true;
     }
 
     /// Set that a parameter is writable.
-    pub fn set_write(&mut self, id: id::Param) {
-        self.set_flag(id, flags::ParamFlag::WRITE);
+    pub fn set_writable(&mut self, id: id::Param) {
+        self.values.entry(id).or_default().flags |= flags::ParamFlags::WRITE;
+        self.modified = true;
     }
 
-    /// Set a parameter on the port to the given values.
+    /// Set a parameter.
+    ///
+    /// This overrides all values for the parameter and marks the collection as
+    /// modified.
     #[inline]
-    pub fn set_param<V, S>(&mut self, id: id::Param, values: V) -> Result<()>
+    pub fn set<V, S>(&mut self, id: id::Param, values: V) -> Result<()>
     where
         V: IntoIterator<IntoIter: ExactSizeIterator>,
         PortParam<S>: From<V::Item>,
         S: AsSlice,
     {
-        let mut iter = values.into_iter();
-        let mut params = Vec::with_capacity(iter.len());
+        let e = self.values.entry(id).or_default();
 
-        for param in iter {
+        for param in values {
             let param = PortParam::from(param);
 
-            params.push(PortParam::with_flags(
+            e.values.push(PortParam::with_flags(
                 param.value.as_ref().to_owned()?,
                 param.flags,
             ));
         }
 
-        self.values.insert(id, params);
-        self.set_flag(id, flags::ParamFlag::READ);
+        e.flags |= flags::ParamFlags::READ;
         self.modified = true;
         Ok(())
     }
 
     /// Push a parameter.
     ///
-    /// This will append the value to the existing set of parameters of the
-    /// given type.
+    /// This will append to the given parameter and mark the collection as
+    /// modified.
     #[inline]
-    pub fn push_param<S, V>(&mut self, value: V) -> Result<()>
+    pub fn push<S, V>(&mut self, value: V) -> Result<()>
     where
         S: AsSlice,
         PortParam<S>: From<V>,
     {
         let value = PortParam::from(value);
         let id = value.value.object_id();
+        let e = self.values.entry(id).or_default();
 
-        self.values
-            .entry(id)
-            .or_default()
-            .push(PortParam::with_flags(
-                value.value.as_ref().to_owned()?,
-                value.flags,
-            ));
+        e.values.push(PortParam::with_flags(
+            value.value.as_ref().to_owned()?,
+            value.flags,
+        ));
 
-        self.set_flag(id, flags::ParamFlag::READ);
+        e.flags |= flags::ParamFlags::READ;
         self.modified = true;
         Ok(())
     }
@@ -104,48 +118,34 @@ impl Parameters {
     /// Remove a parameter from the port and return the values of the removed
     /// parameter if it exists.
     #[inline]
-    pub fn remove_param(&mut self, id: id::Param) -> Option<Vec<PortParam>> {
-        let param = self.values.remove(&id)?;
+    pub fn remove(&mut self, id: id::Param) -> bool {
+        let e = self.values.entry(id).or_default();
+        let removed = !e.values.is_empty();
 
+        e.values.clear();
         // If we remove a parameter it is no longer readable.
-        let flag = self.flags.entry(id).or_default();
-        *flag ^= flags::ParamFlag::READ;
+        e.flags ^= flags::ParamFlags::READ;
 
         self.modified = true;
-        Some(param)
+        removed
     }
 
     /// Get the values of a parameter.
-    pub fn get_param(&self, id: id::Param) -> &[PortParam<DynamicBuf>] {
-        self.values.get(&id).map(Vec::as_slice).unwrap_or_default()
-    }
-
-    /// Get parameters from the port.
-    pub(crate) fn param_values(&self) -> &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>> {
-        &self.values
-    }
-
-    /// Get parameters from the port.
-    pub(crate) fn param_flags(&self) -> &BTreeMap<id::Param, flags::ParamFlag> {
-        &self.flags
-    }
-
-    /// Set a parameter flag.
-    fn set_flag(&mut self, id: id::Param, flag: flags::ParamFlag) {
-        match self.flags.entry(id) {
-            Entry::Vacant(e) => {
-                e.insert(flag);
-            }
-            Entry::Occupied(e) => {
-                if e.get().contains(flag) {
-                    return;
-                }
-
-                *e.into_mut() |= flag;
-            }
+    pub fn get(&self, id: id::Param) -> &[PortParam<DynamicBuf>] {
+        match self.values.get(&id) {
+            Some(entry) => entry.values.as_slice(),
+            None => &[],
         }
+    }
 
-        self.modified = true;
+    /// Get parameters from the port.
+    pub(crate) fn values(&self) -> impl ExactSizeIterator<Item = &[PortParam<DynamicBuf>]> {
+        self.values.values().map(|e| e.values.as_slice())
+    }
+
+    /// Get parameters from the port.
+    pub(crate) fn flags(&self) -> impl ExactSizeIterator<Item = (id::Param, flags::ParamFlags)> {
+        self.values.iter().map(|(id, e)| (*id, e.flags))
     }
 }
 
@@ -153,8 +153,7 @@ impl fmt::Debug for Parameters {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Parameters")
-            .field("param_values", &self.values.keys())
-            .field("param_flags", &self.flags)
+            .field("values", &self.values)
             .field("modified", &self.modified)
             .finish()
     }
