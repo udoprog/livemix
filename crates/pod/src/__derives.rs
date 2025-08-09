@@ -69,20 +69,20 @@
 //!
 //! ```
 //! use pod::{Readable, Writable};
-//! use protocol::id::{Format, ObjectType, Param, MediaSubType, MediaType, AudioFormat};
+//! use protocol::id::{FormatKey, ObjectType, Param, MediaSubType, MediaType, AudioFormat};
 //!
 //! #[derive(Debug, PartialEq, Readable, Writable)]
 //! #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
 //! struct RawFormat {
-//!     #[pod(property(key = Format::MEDIA_TYPE))]
+//!     #[pod(property(key = FormatKey::MEDIA_TYPE))]
 //!     media_type: MediaType,
-//!     #[pod(property(key = Format::MEDIA_SUB_TYPE))]
+//!     #[pod(property(key = FormatKey::MEDIA_SUB_TYPE))]
 //!     media_sub_type: MediaSubType,
-//!     #[pod(property(key = Format::AUDIO_FORMAT))]
+//!     #[pod(property(key = FormatKey::AUDIO_FORMAT))]
 //!     audio_format: AudioFormat,
-//!     #[pod(property(key = Format::AUDIO_CHANNELS))]
+//!     #[pod(property(key = FormatKey::AUDIO_CHANNELS))]
 //!     channels: u32,
-//!     #[pod(property(key = Format::AUDIO_RATE))]
+//!     #[pod(property(key = FormatKey::AUDIO_RATE))]
 //!     audio_rate: u32,
 //! }
 //! ```

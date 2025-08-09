@@ -302,7 +302,9 @@ pod::macros::id! {
         PARAMS = 0x80001,
     }
 
-    /// The representation of `enum spa_io_type`.
+    /// Different IO area types.
+    ///
+    /// Represents `enum spa_io_type`.
     #[example = BUFFERS]
     #[module = protocol::id]
     pub struct IoType {
@@ -343,9 +345,12 @@ pod::macros::id! {
         ASYNC_BUFFERS = 10,
     }
 
+    /// Properties for audio `SPA_TYPE_OBJECT_Format`.
+    ///
+    /// Represents `enum spa_format`.
     #[example = MEDIA_TYPE]
     #[module = protocol::id]
-    pub struct Format {
+    pub struct FormatKey {
         UNKNOWN,
         /// media type (Id enum spa_media_type).
         #[constant = libspa_sys::SPA_FORMAT_mediaType]
@@ -590,7 +595,7 @@ pod::macros::id! {
         NODE = 0x30002,
     }
 
-    /// Represents the `enum spa_data_type`.
+    /// Represents `enum spa_data_type`.
     #[example = MEM_FD]
     #[module = protocol::id]
     pub struct DataType {
@@ -616,7 +621,7 @@ pod::macros::id! {
         SYNC_OBJ = 5,
     }
 
-    /// Represents the `enum spa_meta_type`.
+    /// Represents `enum spa_meta_type`.
     #[example = BITMAP]
     #[module = protocol::id]
     pub struct Meta {
@@ -653,7 +658,7 @@ pod::macros::id! {
     /// Equivalent to `enum spa_param_buffers`.
     #[example = DATA_TYPE]
     #[module = protocol::id]
-    pub struct ParamBuffers {
+    pub struct ParamBuffersKey {
         UNKNOWN,
         /// Number of buffers (Int).
         #[constant = libspa_sys::SPA_PARAM_BUFFERS_buffers]
@@ -683,7 +688,7 @@ pod::macros::id! {
     /// Equivalent to `enum spa_param_meta`.
     #[example = TYPE]
     #[module = protocol::id]
-    pub struct ParamMeta {
+    pub struct ParamMetaKey {
         UNKNOWN,
         /// The type of the parameter, one of enum spa_param_meta (Id enum spa_param_meta).
         #[constant = libspa_sys::SPA_PARAM_META_type]
@@ -698,7 +703,7 @@ pod::macros::id! {
     /// This corresponds to `enum spa_param_io`.
     #[example = SIZE]
     #[module = protocol::id]
-    pub struct ParamIo {
+    pub struct ParamIoKey {
         UNKNOWN,
         /// type ID, uniquely identifies the io area (Id enum spa_io_type).
         #[constant = libspa_sys::SPA_PARAM_IO_id]

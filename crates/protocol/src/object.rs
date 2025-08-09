@@ -8,10 +8,10 @@ use crate::id;
 #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
 pub struct Format {
     /// The media type of the format.
-    #[pod(property(key = id::Format::MEDIA_TYPE))]
+    #[pod(property(key = id::FormatKey::MEDIA_TYPE))]
     pub media_type: id::MediaType,
     /// The media type of the format.
-    #[pod(property(key = id::Format::MEDIA_SUB_TYPE))]
+    #[pod(property(key = id::FormatKey::MEDIA_SUB_TYPE))]
     pub media_sub_type: id::MediaSubType,
 }
 
@@ -20,18 +20,18 @@ pub struct Format {
 #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
 pub struct AudioFormat {
     /// The media type of the format.
-    #[pod(property(key = id::Format::MEDIA_TYPE))]
+    #[pod(property(key = id::FormatKey::MEDIA_TYPE))]
     pub media_type: id::MediaType,
     /// The media type of the format.
-    #[pod(property(key = id::Format::MEDIA_SUB_TYPE))]
+    #[pod(property(key = id::FormatKey::MEDIA_SUB_TYPE))]
     pub media_sub_type: id::MediaSubType,
     /// The media type of the format.
-    #[pod(property(key = id::Format::AUDIO_FORMAT))]
+    #[pod(property(key = id::FormatKey::AUDIO_FORMAT))]
     pub format: id::AudioFormat,
     /// The media type of the format.
-    #[pod(property(key = id::Format::AUDIO_CHANNELS))]
+    #[pod(property(key = id::FormatKey::AUDIO_CHANNELS))]
     pub channels: u32,
     /// The media type of the format.
-    #[pod(property(key = id::Format::AUDIO_RATE))]
+    #[pod(property(key = id::FormatKey::AUDIO_RATE))]
     pub rate: u32,
 }

@@ -13,20 +13,20 @@ macro_rules! roundtrip {
 #[test]
 fn object() -> Result<(), Error> {
     use pod::{Readable, Writable};
-    use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
+    use protocol::id::{AudioFormat, FormatKey, MediaSubType, MediaType, ObjectType, Param};
 
     #[derive(Debug, PartialEq, Readable, Writable)]
     #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
     struct RawFormat {
-        #[pod(property(key = Format::MEDIA_TYPE))]
+        #[pod(property(key = FormatKey::MEDIA_TYPE))]
         media_type: MediaType,
-        #[pod(property(key = Format::MEDIA_SUB_TYPE))]
+        #[pod(property(key = FormatKey::MEDIA_SUB_TYPE))]
         media_sub_type: MediaSubType,
-        #[pod(property(key = Format::AUDIO_FORMAT))]
+        #[pod(property(key = FormatKey::AUDIO_FORMAT))]
         audio_format: AudioFormat,
-        #[pod(property(key = Format::AUDIO_CHANNELS))]
+        #[pod(property(key = FormatKey::AUDIO_CHANNELS))]
         channels: u32,
-        #[pod(property = Format::AUDIO_RATE)]
+        #[pod(property = FormatKey::AUDIO_RATE)]
         audio_rate: u32,
     }
 
@@ -56,12 +56,12 @@ fn empty_object() -> Result<(), Error> {
 #[test]
 fn choice_field() -> Result<(), Error> {
     use pod::{Readable, Writable};
-    use protocol::id::{Format, MediaType, ObjectType, Param};
+    use protocol::id::{FormatKey, MediaType, ObjectType, Param};
 
     #[derive(Debug, PartialEq, Readable, Writable)]
     #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
     struct RawFormat {
-        #[pod(property(key = Format::MEDIA_TYPE))]
+        #[pod(property(key = FormatKey::MEDIA_TYPE))]
         media_type: MediaType,
     }
 
@@ -69,7 +69,7 @@ fn choice_field() -> Result<(), Error> {
 
     pod.as_mut()
         .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-            obj.property(Format::MEDIA_TYPE)
+            obj.property(FormatKey::MEDIA_TYPE)
                 .write_choice(ChoiceType::NONE, Type::ID, |choice| {
                     choice.write((MediaType::AUDIO, MediaType::VIDEO, MediaType::APPLICATION))
                 })

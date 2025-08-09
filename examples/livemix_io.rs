@@ -11,13 +11,13 @@ use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
 use client::{ClientNode, MixId, Port, PortId, PortParam, Stats, Stream};
 use pod::buf::ArrayVec;
-use pod::{ChoiceType, Type};
+use pod::{ChoiceType, Readable, Type, Writable};
 use protocol::buf::RecvBuf;
 use protocol::consts::Direction;
 use protocol::flags::ChunkFlags;
 use protocol::id::{
-    self, AudioFormat, Format, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
-    ParamBuffers, ParamIo, ParamMeta,
+    self, AudioFormat, FormatKey, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
+    ParamBuffersKey, ParamIoKey, ParamMetaKey,
 };
 use protocol::poll::{Interest, PollEvent};
 use protocol::{Connection, Poll, TimerFd, ffi, object};
@@ -325,85 +325,93 @@ fn main() -> Result<()> {
 }
 
 fn add_port_params(port: &mut Port) -> Result<()> {
+    #[derive(Readable, Writable)]
+    #[pod(object(type = ObjectType::PARAM_IO, id = Param::IO))]
+    struct ParamIo {
+        #[pod(property(key = ParamIoKey::ID))]
+        ty: IoType,
+        #[pod(property(key = ParamIoKey::SIZE))]
+        size: usize,
+    }
+
+    #[derive(Readable, Writable)]
+    #[pod(object(type = ObjectType::PARAM_META, id = Param::META))]
+    struct ParamMeta {
+        #[pod(property(key = ParamMetaKey::TYPE))]
+        ty: Meta,
+        #[pod(property(key = ParamMetaKey::SIZE))]
+        size: usize,
+    }
+
     let mut pod = pod::array();
 
     let value = pod
         .clear_mut()
         .embed_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-            obj.property(Format::MEDIA_TYPE).write(MediaType::AUDIO)?;
-            obj.property(Format::MEDIA_SUB_TYPE)
+            obj.property(FormatKey::MEDIA_TYPE)
+                .write(MediaType::AUDIO)?;
+            obj.property(FormatKey::MEDIA_SUB_TYPE)
                 .write(MediaSubType::DSP)?;
-            obj.property(Format::AUDIO_FORMAT).write_choice(
+            obj.property(FormatKey::AUDIO_FORMAT).write_choice(
                 ChoiceType::ENUM,
                 Type::ID,
                 |choice| choice.write((AudioFormat::S16, AudioFormat::F32, AudioFormat::F32P)),
             )?;
-            obj.property(Format::AUDIO_CHANNELS).write(1)?;
-            obj.property(Format::AUDIO_RATE)
-                .write_choice(ChoiceType::RANGE, Type::INT, |c| {
-                    c.write((DEFAULT_RATE as u32, 44100, 48000))
-                })?;
+            obj.property(FormatKey::AUDIO_CHANNELS).write(1)?;
+            obj.property(FormatKey::AUDIO_RATE).write_choice(
+                ChoiceType::RANGE,
+                Type::INT,
+                |c| c.write((DEFAULT_RATE as u32, 44100, 48000)),
+            )?;
             Ok(())
         })?;
 
     port.set_param(Param::ENUM_FORMAT, [PortParam::new(value)])?;
 
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::PARAM_META, Param::META, |obj| {
-            obj.property(ParamMeta::TYPE).write(Meta::HEADER)?;
-            obj.property(ParamMeta::SIZE)
-                .write(mem::size_of::<ffi::MetaHeader>())?;
-            Ok(())
-        })?;
+    port.push_param(
+        Param::META,
+        PortParam::new(pod.clear_mut().embed(ParamMeta {
+            ty: Meta::HEADER,
+            size: mem::size_of::<ffi::MetaHeader>(),
+        })?),
+    )?;
 
-    port.set_param(Param::META, [PortParam::new(value)])?;
+    port.push_param(
+        Param::IO,
+        PortParam::new(pod.clear_mut().embed(ParamIo {
+            ty: IoType::BUFFERS,
+            size: mem::size_of::<ffi::IoBuffers>(),
+        })?),
+    )?;
 
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-            obj.property(ParamIo::ID).write(IoType::BUFFERS)?;
-            obj.property(ParamIo::SIZE)
-                .write(mem::size_of::<ffi::IoBuffers>())?;
-            Ok(())
-        })?;
+    port.push_param(
+        Param::IO,
+        PortParam::new(pod.clear_mut().embed(ParamIo {
+            ty: IoType::CLOCK,
+            size: mem::size_of::<ffi::IoClock>(),
+        })?),
+    )?;
 
-    port.push_param(Param::IO, PortParam::new(value))?;
-
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-            obj.property(ParamIo::ID).write(IoType::CLOCK)?;
-            obj.property(ParamIo::SIZE)
-                .write(mem::size_of::<ffi::IoClock>())?;
-            Ok(())
-        })?;
-
-    port.push_param(Param::IO, PortParam::new(value))?;
-
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::PARAM_IO, Param::IO, |obj| {
-            obj.property(ParamIo::ID).write(IoType::POSITION)?;
-            obj.property(ParamIo::SIZE)
-                .write(mem::size_of::<ffi::IoPosition>())?;
-            Ok(())
-        })?;
-
-    port.push_param(Param::IO, PortParam::new(value))?;
+    port.push_param(
+        Param::IO,
+        PortParam::new(pod.clear_mut().embed(ParamIo {
+            ty: IoType::POSITION,
+            size: mem::size_of::<ffi::IoPosition>(),
+        })?),
+    )?;
 
     let value = pod
         .clear_mut()
         .embed_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
-            obj.property(ParamBuffers::BUFFERS).write_choice(
+            obj.property(ParamBuffersKey::BUFFERS).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| choice.write((1, 1, 32)),
             )?;
 
-            obj.property(ParamBuffers::BLOCKS).write(1i32)?;
+            obj.property(ParamBuffersKey::BLOCKS).write(1i32)?;
 
-            obj.property(ParamBuffers::SIZE).write_choice(
+            obj.property(ParamBuffersKey::SIZE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| {
@@ -411,7 +419,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
                 },
             )?;
 
-            obj.property(ParamBuffers::STRIDE)
+            obj.property(ParamBuffersKey::STRIDE)
                 .write(mem::size_of::<f32>())?;
             Ok(())
         })?;
