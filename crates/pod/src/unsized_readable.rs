@@ -1,7 +1,6 @@
 use core::ffi::CStr;
 
-use crate::error::ErrorKind;
-use crate::{Bitmap, Error, Reader, Type, Visitor};
+use crate::{Bitmap, Error, ErrorKind, Reader, Type, Visitor};
 
 mod sealed {
     use core::ffi::CStr;

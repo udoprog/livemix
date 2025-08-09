@@ -7,10 +7,8 @@ use crate::PodStream;
 use crate::Readable;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::error::BufferUnderflow;
-use crate::error::ErrorKind;
-use crate::utils::array_remaining;
-use crate::{AsSlice, Error, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer};
+use crate::utils;
+use crate::{AsSlice, BufferUnderflow, Error, Reader, Slice, Type, UnsizedWritable, Value, Writer};
 
 /// A decoder for an array.
 ///
@@ -147,7 +145,7 @@ where
     #[inline]
     pub(crate) fn from_reader(mut buf: B) -> Result<Self, Error> {
         let (child_size, child_type) = buf.header()?;
-        let remaining = array_remaining(buf.len(), child_size)?;
+        let remaining = utils::array_remaining(buf.len(), child_size)?;
 
         Ok(Self {
             buf,
@@ -218,13 +216,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Result<Option<TypedPod<Slice<'de>>>, Error> {
+    pub fn next(&mut self) -> Result<Option<Value<Slice<'de>>>, Error> {
         if self.remaining == 0 {
             return Ok(None);
         }
 
         let tail = self.buf.split(self.child_size).ok_or(BufferUnderflow)?;
-        let pod = TypedPod::new(tail, self.child_size, self.child_type);
+        let pod = Value::new(tail, self.child_size, self.child_type);
         self.remaining -= 1;
         Ok(Some(pod))
     }
@@ -321,14 +319,11 @@ impl<'de, B> PodStream<'de> for Array<B>
 where
     B: Reader<'de>,
 {
-    type Item = TypedPod<Slice<'de>>;
+    type Item = Value<Slice<'de>>;
 
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
-        let Some(pod) = self.next()? else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+    fn next(&mut self) -> Result<Value<Slice<'de>>, Error> {
+        let pod = self.next()?.ok_or(BufferUnderflow)?;
         Ok(pod)
     }
 }
@@ -380,10 +375,7 @@ where
 
     #[inline]
     fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
-        let Ok(child_size) = u32::try_from(self.child_size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let child_size = utils::to_word(self.child_size)?;
         writer.write(&[child_size, self.child_type.into_u32()])?;
         writer.write(self.buf.as_slice().as_bytes())
     }

@@ -1,7 +1,7 @@
 use core::mem;
 
-use crate::error::ErrorKind;
-use crate::{BuildPod, Builder, ChildPod, Error, PADDING, Type, Writable, Writer};
+use crate::utils;
+use crate::{BuildPod, Builder, ChildPod, Error, ErrorKind, PADDING, Type, Writable, Writer};
 
 /// An encoder for an array.
 ///
@@ -91,9 +91,7 @@ where
         };
 
         let header = {
-            let Ok(child_size) = u32::try_from(child_size) else {
-                return Err(Error::new(ErrorKind::SizeOverflow));
-            };
+            let child_size = utils::to_word(child_size)?;
 
             writer.reserve(&[
                 mem::size_of::<[u32; 2]>() as u32,

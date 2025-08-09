@@ -4,8 +4,7 @@ use core::mem;
 use core::mem::MaybeUninit;
 use core::slice;
 
-use crate::Error;
-use crate::error::ErrorKind;
+use crate::{Error, ErrorKind, SizeOverflow, WordOverflow};
 
 /// Indicates a type which has all bit patterns inhabited.
 ///
@@ -129,4 +128,14 @@ pub(crate) fn array_remaining(size: usize, child_size: usize) -> Result<usize, E
     }
 
     Ok(size / child_size)
+}
+
+#[inline(always)]
+pub(crate) fn to_word(size: usize) -> Result<u32, WordOverflow> {
+    u32::try_from(size).map_err(|_| WordOverflow { size })
+}
+
+#[inline(always)]
+pub(crate) fn to_size(size: u32) -> Result<usize, SizeOverflow> {
+    usize::try_from(size).map_err(|_| SizeOverflow { size })
 }

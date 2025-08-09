@@ -1,6 +1,7 @@
-use crate::error::ErrorKind;
 use crate::utils::WordBytes;
-use crate::{Error, Fd, Fraction, Id, Pointer, RawId, Rectangle, Type, UnsizedWritable, Writer};
+use crate::{
+    Error, ErrorKind, Fd, Fraction, Id, Pointer, RawId, Rectangle, Type, UnsizedWritable, Writer,
+};
 
 /// A trait for types that can be encoded.
 pub trait SizedWritable

@@ -1,7 +1,10 @@
 use core::mem;
 
-use crate::error::ErrorKind;
-use crate::{Error, PADDING, RawId, Reader, SizedWritable, Type, UnsizedWritable, Writer};
+use crate::utils;
+use crate::{
+    BufferUnderflow, Error, ErrorKind, PADDING, RawId, Reader, SizedWritable, Type,
+    UnsizedWritable, Writer,
+};
 
 use super::Builder;
 
@@ -57,10 +60,7 @@ where
 
         self.check(ty, size)?;
 
-        let Ok(size) = u32::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let size = utils::to_word(size)?;
         Ok(size)
     }
 }
@@ -78,10 +78,7 @@ impl BuildPod for PaddedPod {
     where
         T: SizedWritable,
     {
-        let Ok(size) = u32::try_from(T::SIZE) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let size = utils::to_word(T::SIZE)?;
         buf.write(&[size, T::TYPE.into_u32()])?;
         value.write_sized(buf.borrow_mut())?;
         buf.pad(PADDING)?;
@@ -94,13 +91,10 @@ impl BuildPod for PaddedPod {
         T: ?Sized + UnsizedWritable,
     {
         let Some(size) = value.size() else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
+            return Err(Error::new(ErrorKind::UnsizedOverflow));
         };
 
-        let Ok(size) = u32::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let size = utils::to_word(size)?;
         buf.write(&[size, T::TYPE.into_u32()])?;
         value.write_unsized(buf.borrow_mut())?;
         buf.pad(PADDING)?;
@@ -136,7 +130,7 @@ impl BuildPod for ChildPod {
         T: ?Sized + UnsizedWritable,
     {
         let Some(size) = value.size() else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
+            return Err(Error::new(ErrorKind::UnsizedOverflow));
         };
 
         self.check(T::TYPE, size)?;
@@ -278,7 +272,7 @@ where
     Self: Copy + self::sealed::Sealed,
 {
     #[doc(hidden)]
-    fn unpad<'de>(&self, buf: impl Reader<'de>) -> Result<(), Error>;
+    fn unpad<'de>(&self, buf: impl Reader<'de>) -> Result<(), BufferUnderflow>;
 }
 
 /// A packed pod. This is used when unpacking packed fields, like those of
@@ -289,14 +283,14 @@ pub struct PackedPod;
 
 impl ReadPod for PaddedPod {
     #[inline]
-    fn unpad<'de>(&self, mut buf: impl Reader<'de>) -> Result<(), Error> {
+    fn unpad<'de>(&self, mut buf: impl Reader<'de>) -> Result<(), BufferUnderflow> {
         buf.unpad(PADDING)
     }
 }
 
 impl ReadPod for PackedPod {
     #[inline]
-    fn unpad<'de>(&self, _: impl Reader<'de>) -> Result<(), Error> {
+    fn unpad<'de>(&self, _: impl Reader<'de>) -> Result<(), BufferUnderflow> {
         Ok(())
     }
 }

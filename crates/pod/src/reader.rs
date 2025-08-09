@@ -1,8 +1,7 @@
 use core::mem::MaybeUninit;
 
-use crate::error::ErrorKind;
-use crate::utils::UninitAlign;
-use crate::{AsSlice, Error, Slice, Type, Visitor};
+use crate::utils::{self, UninitAlign};
+use crate::{AsSlice, BufferUnderflow, Error, Slice, Type, Visitor};
 
 mod sealed {
     use crate::{ArrayBuf, Reader, Slice};
@@ -37,16 +36,16 @@ where
     fn distance_from(&self, pos: &Self::Pos) -> usize;
 
     /// Skip the given number of bytes.
-    fn skip(&mut self, size: usize) -> Result<(), Error>;
+    fn skip(&mut self, size: usize) -> Result<(), BufferUnderflow>;
 
     /// Split off the head of the current buffer.
     fn split(&mut self, at: usize) -> Option<Slice<'de>>;
 
     /// Peek into the provided buffer without consuming the reader.
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error>;
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), BufferUnderflow>;
 
     /// Peek words into the provided buffer.
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error>;
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), BufferUnderflow>;
 
     /// Read the given number of bytes from the input.
     fn read_bytes<V>(&mut self, len: usize, visitor: V) -> Result<V::Ok, Error>
@@ -123,7 +122,7 @@ where
     /// assert_eq!(buf.as_bytes(), &[4]);
     /// # Ok::<_, pod::Error>(())
     /// ```
-    fn unpad(&mut self, align: usize) -> Result<(), Error>;
+    fn unpad(&mut self, align: usize) -> Result<(), BufferUnderflow>;
 
     /// Read an array of words.
     #[inline]
@@ -139,7 +138,7 @@ where
 
     /// Read type `T` from the reader.
     #[inline]
-    fn read<T>(&mut self) -> Result<T, Error>
+    fn read<T>(&mut self) -> Result<T, BufferUnderflow>
     where
         T: Copy,
     {
@@ -153,11 +152,7 @@ where
     fn header(&mut self) -> Result<(usize, Type), Error> {
         let [size, ty] = self.read::<[u32; 2]>()?;
         let ty = Type::new(ty);
-
-        let Ok(size) = usize::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let size = utils::to_size(size)?;
         Ok((size, ty))
     }
 }
@@ -189,7 +184,7 @@ where
     }
 
     #[inline]
-    fn skip(&mut self, size: usize) -> Result<(), Error> {
+    fn skip(&mut self, size: usize) -> Result<(), BufferUnderflow> {
         (**self).skip(size)
     }
 
@@ -199,12 +194,12 @@ where
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), BufferUnderflow> {
         (**self).peek_words_uninit(out)
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), BufferUnderflow> {
         (**self).read_words_uninit(out)
     }
 
@@ -232,7 +227,7 @@ where
     }
 
     #[inline]
-    fn unpad(&mut self, padding: usize) -> Result<(), Error> {
+    fn unpad(&mut self, padding: usize) -> Result<(), BufferUnderflow> {
         (**self).unpad(padding)
     }
 }

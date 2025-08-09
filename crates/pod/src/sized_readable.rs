@@ -12,11 +12,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::buf::ArrayVec;
-use crate::error::ErrorKind;
 use crate::utils::WordBytes;
 #[cfg(feature = "alloc")]
 use crate::{Bitmap, OwnedBitmap, UnsizedReadable};
-use crate::{Error, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type};
+use crate::{Error, ErrorKind, Fd, Fraction, Id, Pointer, RawId, Reader, Rectangle, Type};
 
 /// A trait for types that can be decoded.
 pub trait SizedReadable<'de>
@@ -291,8 +290,6 @@ crate::macros::decode_from_sized!(Fraction);
 /// Decoding a fixed-size array of the wrong size will return an error.
 ///
 /// ```
-/// use pod::Pod;
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(*b"hello")?;
 /// assert!(pod.as_ref().read_sized::<[u8; 42]>().is_err());
@@ -302,8 +299,6 @@ crate::macros::decode_from_sized!(Fraction);
 /// # Examples
 ///
 /// ```
-/// use pod::Pod;
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(*b"hello world")?;
 /// assert_eq!(pod.as_ref().read_sized::<[u8; 11]>()?, *b"hello world");

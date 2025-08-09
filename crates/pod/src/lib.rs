@@ -24,8 +24,8 @@ mod pod;
 #[doc(inline)]
 pub use self::pod::Pod;
 
-mod typed_pod;
-pub use self::typed_pod::TypedPod;
+mod value;
+pub use self::value::Value;
 
 mod pod_kind;
 pub use self::pod_kind::{
@@ -96,7 +96,8 @@ mod visitor;
 pub use self::visitor::Visitor;
 
 mod error;
-pub use self::error::Error;
+pub use self::error::{BufferUnderflow, Error};
+use self::error::{ErrorKind, SizeOverflow, WordOverflow};
 
 mod rectangle;
 pub use self::rectangle::Rectangle;

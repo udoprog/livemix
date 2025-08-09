@@ -10,6 +10,7 @@ pub(crate) mod macros;
 
 pub(crate) mod error;
 pub use self::error::Error;
+use self::error::ErrorKind;
 
 #[cfg(feature = "std")]
 mod connection;

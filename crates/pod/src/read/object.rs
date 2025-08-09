@@ -4,10 +4,9 @@ use core::mem;
 use crate::RawId;
 #[cfg(feature = "alloc")]
 use crate::buf::{AllocError, DynamicBuf};
-use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Error, PADDING, PodItem, PodStream, Property, Readable, Reader, SizedReadable, Slice,
-    Type, TypedPod, UnsizedReadable, UnsizedWritable, Writer,
+    AsSlice, BufferUnderflow, Error, ErrorKind, PADDING, PodItem, PodStream, Property, Readable,
+    Reader, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Value, Writer,
 };
 
 use super::Struct;
@@ -178,18 +177,10 @@ where
     /// ```
     #[inline]
     pub fn property(&mut self) -> Result<Property<Slice<'de>>, Error> {
-        if self.buf.is_empty() {
-            return Err(Error::new(ErrorKind::ObjectUnderflow));
-        }
-
         let [key, flags] = self.buf.read::<[u32; 2]>()?;
         let (size, ty) = self.buf.header()?;
-
-        let Some(head) = self.buf.split(size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
-        let pod = TypedPod::new(head, size, ty);
+        let head = self.buf.split(size).ok_or(BufferUnderflow)?;
+        let pod = Value::new(head, size, ty);
         self.buf.unpad(PADDING)?;
         Ok(Property::new(key, flags, pod))
     }
@@ -431,10 +422,7 @@ where
 
     #[inline]
     fn next(&mut self) -> Result<Self::Item, Error> {
-        let Some(buf) = self.buf.split(self.buf.len()) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+        let buf = self.buf.split(self.buf.len()).ok_or(BufferUnderflow)?;
         Ok(Object::new(buf, self.object_type, self.object_id))
     }
 }

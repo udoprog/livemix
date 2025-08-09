@@ -13,11 +13,10 @@ use crate::WriterSlice;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
 use crate::builder::{ArrayBuilder, ChoiceBuilder, ObjectBuilder, SequenceBuilder, StructBuilder};
-use crate::error::ErrorKind;
-use crate::{ArrayBuf, SizedWritable, Writable};
+use crate::utils;
 use crate::{
-    AsSlice, BuildPod, ChildPod, ChoiceType, Embeddable, Error, PaddedPod, Pod, RawId, Type,
-    TypedPod, UnsizedWritable, Writer,
+    ArrayBuf, AsSlice, BuildPod, ChildPod, ChoiceType, Embeddable, Error, PaddedPod, Pod, RawId,
+    SizedWritable, Type, UnsizedWritable, Value, Writable, Writer,
 };
 
 /// A POD (Plain Old Data) handler.
@@ -836,8 +835,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_pod(|pod| {
     ///     pod.as_mut().write_struct(|st| {
@@ -848,7 +845,7 @@ where
     ///     })
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.read_pod()?;
+    /// let pod = pod.as_ref().into_value()?.read_pod()?;
     /// let mut st = pod.as_ref().read_struct()?;
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
@@ -878,11 +875,7 @@ where
             .wrapping_sub(mem::size_of::<[u32; 2]>());
 
         self.kind.check(Type::POD, size)?;
-
-        let Ok(size) = u32::try_from(size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let size = utils::to_word(size)?;
         pod.buf.write_at(header, &[size, Type::POD.into_u32()])?;
         Ok(())
     }
@@ -986,7 +979,7 @@ where
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match TypedPod::from_reader(self.buf.as_slice()) {
+        match Value::from_reader(self.buf.as_slice()) {
             Ok((pod, _)) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }

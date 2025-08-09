@@ -6,10 +6,10 @@ use crate::DynamicBuf;
 use crate::PodStream;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::error::ErrorKind;
-use crate::utils::array_remaining;
+use crate::utils;
 use crate::{
-    AsSlice, ChoiceType, Error, Readable, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer,
+    AsSlice, BufferUnderflow, ChoiceType, Error, Readable, Reader, Slice, Type, UnsizedWritable,
+    Value, Writer,
 };
 
 /// A decoder for a choice.
@@ -167,13 +167,10 @@ where
     pub(crate) fn from_reader(mut buf: B) -> Result<Self, Error> {
         let [choice_type, flags, child_size, child_type] = buf.read::<[u32; 4]>()?;
 
-        let Ok(child_size) = usize::try_from(child_size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let child_size = utils::to_size(child_size)?;
         let choice_type = ChoiceType::from_u32(choice_type);
         let child_type = Type::new(child_type);
-        let remaining = array_remaining(buf.len(), child_size)?;
+        let remaining = utils::array_remaining(buf.len(), child_size)?;
 
         Ok(Self {
             buf,
@@ -292,13 +289,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>>> {
+    pub fn next(&mut self) -> Option<Value<Slice<'de>>> {
         if self.remaining == 0 {
             return None;
         }
 
         let head = self.buf.split(self.child_size)?;
-        let pod = TypedPod::new(head, self.child_size, self.child_type);
+        let pod = Value::new(head, self.child_size, self.child_type);
         self.remaining -= 1;
         Some(pod)
     }
@@ -402,14 +399,11 @@ impl<'de, B> PodStream<'de> for Choice<B>
 where
     B: Reader<'de>,
 {
-    type Item = TypedPod<Slice<'de>>;
+    type Item = Value<Slice<'de>>;
 
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
-        let Some(pod) = self.next() else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+    fn next(&mut self) -> Result<Value<Slice<'de>>, Error> {
+        let pod = self.next().ok_or(BufferUnderflow)?;
         Ok(pod)
     }
 }
@@ -472,9 +466,7 @@ where
 
     #[inline]
     fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
-        let Ok(child_size) = u32::try_from(self.child_size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
+        let child_size = utils::to_word(self.child_size)?;
 
         writer.write(&[
             self.choice_type.into_u32(),

@@ -3,8 +3,7 @@ use core::ffi::CStr;
 #[cfg(feature = "alloc")]
 use alloc::string::String;
 
-use crate::error::ErrorKind;
-use crate::{Bitmap, Error, Type, Writer};
+use crate::{Bitmap, Error, ErrorKind, Type, Writer};
 
 /// A trait for unsized types that can be encoded.
 pub trait UnsizedWritable {

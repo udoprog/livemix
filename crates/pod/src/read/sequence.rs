@@ -5,9 +5,9 @@ use core::mem;
 use crate::DynamicBuf;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::error::ErrorKind;
 use crate::{
-    AsSlice, Control, Error, PADDING, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer,
+    AsSlice, BufferUnderflow, Control, Error, PADDING, Reader, Slice, Type, UnsizedWritable, Value,
+    Writer,
 };
 
 /// A decoder for a sequence.
@@ -120,8 +120,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().write(1i32)?;
@@ -140,18 +138,10 @@ where
     /// ```
     #[inline]
     pub fn control(&mut self) -> Result<Control<Slice<'de>>, Error> {
-        if self.buf.is_empty() {
-            return Err(Error::new(ErrorKind::ObjectUnderflow));
-        }
-
         let [control_offset, control_type] = self.buf.read::<[u32; 2]>()?;
         let (size, ty) = self.buf.header()?;
-
-        let Some(head) = self.buf.split(size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
-        let pod = TypedPod::new(head, size, ty);
+        let head = self.buf.split(size).ok_or(BufferUnderflow)?;
+        let pod = Value::new(head, size, ty);
         self.buf.unpad(PADDING)?;
         Ok(Control::new(control_offset, control_type, pod))
     }
@@ -161,8 +151,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().write(1i32)?;
@@ -203,8 +191,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().write(1i32)?;
@@ -234,8 +220,6 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, TypedPod};
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_sequence(|seq| {
 ///     seq.control().write(1i32)?;

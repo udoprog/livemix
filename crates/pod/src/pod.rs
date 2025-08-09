@@ -2,11 +2,10 @@ use core::fmt;
 
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::error::ErrorKind;
 use crate::{
-    Array, ArrayBuf, AsSlice, Choice, Error, Object, PackedPod, PodStream, ReadPod, Readable,
-    Reader, Sequence, SizedReadable, Slice, Struct, Type, TypedPod, UnsizedReadable,
-    UnsizedWritable, Visitor, Writer,
+    Array, ArrayBuf, AsSlice, BufferUnderflow, Choice, Error, Object, PackedPod, PodStream,
+    ReadPod, Readable, Reader, Sequence, SizedReadable, Slice, Struct, Type, UnsizedReadable,
+    UnsizedWritable, Value, Visitor, Writer,
 };
 #[cfg(feature = "alloc")]
 use crate::{DynamicBuf, PaddedPod};
@@ -228,7 +227,7 @@ where
     /// ```
     #[inline]
     pub fn skip(self) -> Result<usize, Error> {
-        self.into_typed()?.skip()
+        self.into_value()?.skip()
     }
 
     /// Conveniently decode a value from the pod.
@@ -269,7 +268,7 @@ where
     where
         T: SizedReadable<'de>,
     {
-        self.into_typed()?.read_sized::<T>()
+        self.into_value()?.read_sized::<T>()
     }
 
     /// Read an unsized value from the pod.
@@ -289,7 +288,7 @@ where
     where
         T: ?Sized + UnsizedReadable<'de>,
     {
-        self.into_typed()?.read_unsized()
+        self.into_value()?.read_unsized()
     }
 
     /// Read an unsized value from the pod.
@@ -308,7 +307,7 @@ where
         T: ?Sized + UnsizedReadable<'de>,
         V: Visitor<'de, T>,
     {
-        self.into_typed()?.visit_unsized(visitor)
+        self.into_value()?.visit_unsized(visitor)
     }
 
     /// Read an optional value from the pod.
@@ -389,7 +388,7 @@ where
     /// ```
     #[inline]
     pub fn read_array(self) -> Result<Array<Slice<'de>>, Error> {
-        self.into_typed()?.read_array()
+        self.into_value()?.read_array()
     }
 
     /// Read a struct.
@@ -397,8 +396,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_struct(|st| {
     ///     st.field().write(1i32)?;
@@ -419,8 +416,6 @@ where
     /// Decoding an empty struct:
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_struct(|_| Ok(()))?;
     ///
@@ -430,7 +425,7 @@ where
     /// ```
     #[inline]
     pub fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
-        self.into_typed()?.read_struct()
+        self.into_value()?.read_struct()
     }
 
     /// Read an object.
@@ -484,7 +479,7 @@ where
     /// ```
     #[inline]
     pub fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
-        self.into_typed()?.read_object()
+        self.into_value()?.read_object()
     }
 
     /// Read a sequence.
@@ -538,7 +533,7 @@ where
     /// ```
     #[inline]
     pub fn read_sequence(self) -> Result<Sequence<Slice<'de>>, Error> {
-        self.into_typed()?.read_sequence()
+        self.into_value()?.read_sequence()
     }
 
     /// Read a choice.
@@ -579,7 +574,7 @@ where
     /// ```
     #[inline]
     pub fn read_choice(self) -> Result<Choice<Slice<'de>>, Error> {
-        self.into_typed()?.read_choice()
+        self.into_value()?.read_choice()
     }
 
     /// Read a nested pod.
@@ -587,8 +582,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_pod(|pod| {
     ///     pod.as_mut().write_struct(|st| {
@@ -610,7 +603,7 @@ where
     /// ```
     #[inline]
     pub fn read_pod(self) -> Result<Pod<Slice<'de>, PackedPod>, Error> {
-        self.into_typed()?.read_pod()
+        self.into_value()?.read_pod()
     }
 
     /// Borrow the current pod mutably, allowing multiple elements to be encoded
@@ -623,39 +616,18 @@ where
         Pod::with_kind(self.buf.borrow_mut(), self.kind)
     }
 
-    /// Convert the [`Pod`] into a [`TypedPod`] taking ownership of the current
-    /// buffer.
+    /// Convert the [`Pod`] into a [`Value`].
     ///
-    /// A typed pod knows about the size and type of the data it contains,
-    /// allowing it to be inspected through the relevant [`TypedPod::size`] and
-    /// [`TypedPod::ty`] APIs.
-    ///
-    /// # Errors
-    ///
-    /// This errors if the pod does not wrap a buffer containing a valid pod.
-    #[inline]
-    pub fn into_typed(self) -> Result<TypedPod<Slice<'de>>, Error> {
-        let (pod, buf) = TypedPod::from_reader(self.buf)?;
-        self.kind.unpad(buf)?;
-        Ok(pod)
-    }
-
-    /// Convert the [`Pod`] into a [`TypedPod`] mutably borrowing the current
-    /// buffer.
-    ///
-    /// A typed pod knows about the size and type of the data it contains,
-    /// allowing it to be inspected through the relevant [`TypedPod::size`] and
-    /// [`TypedPod::ty`] APIs.
+    /// A [`Value`] is an opaque representation of the value inside of a pod,
+    /// where we know about its size and type. It can be read using associated
+    /// methods.
     ///
     /// # Errors
     ///
     /// This errors if the pod does not wrap a buffer containing a valid pod.
     #[inline]
-    pub fn as_typed_mut(&mut self) -> Result<TypedPod<Slice<'de>>, Error>
-    where
-        P: Copy,
-    {
-        let (pod, buf) = TypedPod::from_reader(self.buf.borrow_mut())?;
+    pub fn into_value(self) -> Result<Value<Slice<'de>>, Error> {
+        let (pod, buf) = Value::from_reader(self.buf)?;
         self.kind.unpad(buf)?;
         Ok(pod)
     }
@@ -735,18 +707,14 @@ where
     B: Reader<'de>,
     P: ReadPod,
 {
-    type Item = TypedPod<Slice<'de>>;
+    type Item = Value<Slice<'de>>;
 
     #[inline]
     fn next(&mut self) -> Result<Self::Item, Error> {
         let (size, ty) = self.buf.header()?;
-
-        let Some(buf) = self.buf.split(size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+        let buf = self.buf.split(size).ok_or(BufferUnderflow)?;
         self.kind.unpad(self.buf.borrow_mut())?;
-        Ok(TypedPod::new(buf, size, ty))
+        Ok(Value::new(buf, size, ty))
     }
 }
 
@@ -816,7 +784,7 @@ where
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.as_ref().into_typed() {
+        match self.as_ref().into_value() {
             Ok(pod) => pod.fmt(f),
             Err(e) => e.fmt(f),
         }

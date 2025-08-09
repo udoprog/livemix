@@ -1,3 +1,4 @@
+use core::error;
 use core::fmt;
 
 #[cfg(feature = "alloc")]
@@ -76,14 +77,41 @@ where
     }
 }
 
+/// Indicate that the operation resulted in a buffer underflow.
+#[derive(Debug, PartialEq)]
 #[non_exhaustive]
-pub(crate) struct BufferUnderflow;
+pub struct BufferUnderflow;
+
+impl fmt::Display for BufferUnderflow {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Buffer underflow")
+    }
+}
+
+impl error::Error for BufferUnderflow {}
+
+/// Indicate that the operation resulted in a buffer underflow.
+#[non_exhaustive]
+pub(crate) struct SizeOverflow {
+    pub(crate) size: u32,
+}
+
+/// Indicate that the operation resulted in a buffer underflow.
+#[non_exhaustive]
+pub(crate) struct WordOverflow {
+    pub(crate) size: usize,
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum ErrorKind {
-    StructUnderflow,
-    ObjectUnderflow,
-    SizeOverflow,
+    UnsizedOverflow,
+    SizeOverflow {
+        size: u32,
+    },
+    WordOverflow {
+        size: usize,
+    },
     BufferUnderflow,
     NonTerminatedString,
     NullContainingString,
@@ -173,6 +201,20 @@ pub(crate) enum ErrorKind {
     AllocError(AllocError),
 }
 
+impl From<SizeOverflow> for ErrorKind {
+    #[inline]
+    fn from(SizeOverflow { size }: SizeOverflow) -> Self {
+        ErrorKind::SizeOverflow { size }
+    }
+}
+
+impl From<WordOverflow> for ErrorKind {
+    #[inline]
+    fn from(WordOverflow { size }: WordOverflow) -> Self {
+        ErrorKind::WordOverflow { size }
+    }
+}
+
 impl From<BufferUnderflow> for ErrorKind {
     #[inline]
     fn from(_: BufferUnderflow) -> Self {
@@ -216,9 +258,13 @@ impl fmt::Display for Error {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ErrorKind::StructUnderflow => write!(f, "Struct underflow"),
-            ErrorKind::ObjectUnderflow => write!(f, "Object underflow"),
-            ErrorKind::SizeOverflow => write!(f, "Size overflow"),
+            ErrorKind::UnsizedOverflow => write!(f, "Unsized type overflows usize"),
+            ErrorKind::SizeOverflow { size } => {
+                write!(f, "The size {size} overflows usize range 0-{}", usize::MAX)
+            }
+            ErrorKind::WordOverflow { size } => {
+                write!(f, "The size {size} overflows u32 range 0-{}", u32::MAX)
+            }
             ErrorKind::BufferUnderflow => write!(f, "Buffer underflow"),
             ErrorKind::NonTerminatedString => write!(f, "Non-terminated c-string"),
             ErrorKind::NullContainingString => write!(

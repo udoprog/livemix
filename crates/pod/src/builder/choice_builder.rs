@@ -1,7 +1,9 @@
 use core::mem;
 
-use crate::error::ErrorKind;
-use crate::{BuildPod, Builder, ChildPod, ChoiceType, Error, PADDING, Type, Writable, Writer};
+use crate::utils;
+use crate::{
+    BuildPod, Builder, ChildPod, ChoiceType, Error, ErrorKind, PADDING, Type, Writable, Writer,
+};
 
 /// An encoder for a choice.
 pub struct ChoiceBuilder<W, P>
@@ -38,9 +40,7 @@ where
         // Reserve space for the header of the choice which includes its size
         // that will be determined later.
         let header = {
-            let Ok(child_size) = u32::try_from(child_size) else {
-                return Err(Error::new(ErrorKind::SizeOverflow));
-            };
+            let child_size = utils::to_word(child_size)?;
 
             writer.reserve(&[
                 mem::size_of::<[u32; 4]>() as u32,

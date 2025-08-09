@@ -10,24 +10,25 @@ use crate::Readable;
 use crate::bstr::BStr;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
-use crate::error::ErrorKind;
 use crate::read::{Array, Choice, Object, Sequence, Struct};
+use crate::utils;
 use crate::{
-    AsSlice, Bitmap, Error, Fd, Fraction, Id, PackedPod, Pod, PodItem, Pointer, Reader, Rectangle,
-    SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable, Visitor, Writer,
+    AsSlice, Bitmap, BufferUnderflow, Error, ErrorKind, Fd, Fraction, Id, PackedPod, Pod, PodItem,
+    Pointer, Reader, Rectangle, SizedReadable, Slice, Type, UnsizedReadable, UnsizedWritable,
+    Visitor, Writer,
 };
 
-/// A POD (Plain Old Data) handler.
+/// A value inside of a [`Pod`].
 ///
 /// This is a wrapper that can be used for encoding and decoding data.
-pub struct TypedPod<B> {
+pub struct Value<B> {
     buf: B,
     size: usize,
     ty: Type,
 }
 
-impl<B> TypedPod<B> {
-    /// Construct a new [`TypedPod`] arround the specified buffer `B` and
+impl<B> Value<B> {
+    /// Construct a new [`Value`] arround the specified buffer `B` and
     /// a [`PackedPod`] kind.
     #[inline]
     pub(crate) const fn new(buf: B, size: usize, ty: Type) -> Self {
@@ -35,7 +36,7 @@ impl<B> TypedPod<B> {
     }
 }
 
-impl<B> TypedPod<B> {
+impl<B> Value<B> {
     /// Get the type of the pod.
     ///
     /// # Examples
@@ -46,7 +47,7 @@ impl<B> TypedPod<B> {
     /// let mut pod = pod::array();
     /// pod.as_mut().write(10i32)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert_eq!(pod.ty(), Type::INT);
     /// assert_eq!(pod.size(), 4);
     /// # Ok::<_, pod::Error>(())
@@ -61,12 +62,12 @@ impl<B> TypedPod<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write(10i32)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert_eq!(pod.ty(), Type::INT);
     /// assert_eq!(pod.size(), 4);
     /// # Ok::<_, pod::Error>(())
@@ -77,18 +78,16 @@ impl<B> TypedPod<B> {
     }
 }
 
-impl<'de> TypedPod<Slice<'de>> {
-    /// Construct a new [`TypedPod`] by reading and advancing the given buffer.
+impl<'de> Value<Slice<'de>> {
+    /// Construct a new [`Value`] by reading and advancing the given buffer.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write(10i32)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -98,12 +97,9 @@ impl<'de> TypedPod<Slice<'de>> {
         B: Reader<'de>,
     {
         let (size, ty) = buf.header()?;
+        let slice = buf.split(size).ok_or(BufferUnderflow)?;
 
-        let Some(slice) = buf.split(size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
-        let pod = TypedPod {
+        let pod = Value {
             buf: slice,
             size,
             ty,
@@ -113,7 +109,7 @@ impl<'de> TypedPod<Slice<'de>> {
     }
 }
 
-impl<'de, B> TypedPod<B>
+impl<'de, B> Value<B>
 where
     B: Reader<'de>,
 {
@@ -127,10 +123,10 @@ where
     /// pod.as_mut().write((1, 2, "hello world", 4));
     ///
     /// let mut pod = pod.as_ref();
-    /// assert_eq!(pod.as_mut().into_typed()?.read_sized::<i32>()?, 1);
-    /// assert_eq!(pod.as_mut().into_typed()?.read_sized::<i32>()?, 2);
-    /// assert_eq!(pod.as_mut().into_typed()?.skip()?, 12);
-    /// assert_eq!(pod.as_mut().into_typed()?.read_sized::<i32>()?, 4);
+    /// assert_eq!(pod.as_mut().into_value()?.read_sized::<i32>()?, 1);
+    /// assert_eq!(pod.as_mut().into_value()?.read_sized::<i32>()?, 2);
+    /// assert_eq!(pod.as_mut().into_value()?.skip()?, 12);
+    /// assert_eq!(pod.as_mut().into_value()?.read_sized::<i32>()?, 4);
     /// assert!(pod.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -153,7 +149,7 @@ where
     ///
     /// let mut pod = pod.as_ref();
     ///
-    /// assert_eq!(pod.into_typed()?.read::<(i32, Option<i32>)>()?, (10, None));
+    /// assert_eq!(pod.into_value()?.read::<(i32, Option<i32>)>()?, (10, None));
     /// # Ok::<_, pod::Error>(())
     /// ```
     ///
@@ -167,16 +163,16 @@ where
     ///
     /// let mut pod = pod.as_ref();
     ///
-    /// let a = pod.as_typed_mut()?.read::<i32>()?;
+    /// let a = pod.as_mut().into_value()?.read::<i32>()?;
     /// assert_eq!(a, 10i32);
     ///
-    /// let s = pod.as_typed_mut()?.read::<&str>()?;
+    /// let s = pod.as_mut().into_value()?.read::<&str>()?;
     /// assert_eq!(s, "hello world");
     ///
-    /// let a1 = pod.as_typed_mut()?.read::<u32>()?;
+    /// let a1 = pod.as_mut().into_value()?.read::<u32>()?;
     /// assert_eq!(a1, 1);
     ///
-    /// let a2 = pod.as_typed_mut()?.read::<u32>()?;
+    /// let a2 = pod.as_mut().into_value()?.read::<u32>()?;
     /// assert_eq!(a2, 2);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -192,12 +188,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write(10i32)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -218,10 +212,7 @@ where
                     }));
                 }
 
-                let Some(choice) = choice.next() else {
-                    return Err(Error::new(ErrorKind::BufferUnderflow));
-                };
-
+                let choice = choice.next().ok_or(BufferUnderflow)?;
                 choice.read_sized()?
             }
             _ => T::read_content(self.buf, self.ty, self.size)?,
@@ -235,12 +226,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert_eq!(pod.visit_unsized(<[u8]>::to_owned)?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -262,12 +251,10 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_unsized(&b"hello world"[..])?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert_eq!(pod.read_unsized::<[u8]>()?, b"hello world");
     /// # Ok::<_, pod::Error>(())
     /// ```
@@ -291,18 +278,16 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_none()?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// assert!(pod.read_option()?.is_none());
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write(true)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     ///
     /// let Some(mut pod) = pod.read_option()? else {
     ///     panic!("expected some value");
@@ -312,13 +297,13 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn read_option(self) -> Result<Option<TypedPod<Slice<'de>>>, Error> {
+    pub fn read_option(self) -> Result<Option<Value<Slice<'de>>>, Error> {
         match self.ty {
             Type::NONE => Ok(None),
             _ => {
                 let size = self.size;
                 let ty = self.ty;
-                Ok(Some(TypedPod::new(self.split()?, size, ty)))
+                Ok(Some(Value::new(self.split()?, size, ty)))
             }
         }
     }
@@ -328,7 +313,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     ///
@@ -339,7 +324,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?;
+    /// let pod = pod.as_ref().into_value()?;
     /// let mut array = pod.read_array()?;
     ///
     /// assert!(!array.is_empty());
@@ -366,8 +351,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_struct(|st| {
     ///     st.field().write(1i32)?;
@@ -376,7 +359,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut st = pod.as_ref().into_typed()?.read_struct()?;
+    /// let mut st = pod.as_ref().into_value()?.read_struct()?;
     /// assert!(!st.is_empty());
     /// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
     /// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
@@ -441,7 +424,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
@@ -451,7 +434,7 @@ where
     ///     Ok(())
     /// })?;
     ///
-    /// let mut seq = pod.as_ref().into_typed()?.read_sequence()?;
+    /// let mut seq = pod.as_ref().into_value()?.read_sequence()?;
     /// assert!(!seq.is_empty());
     ///
     /// let c = seq.control()?;
@@ -516,14 +499,12 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, TypedPod};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_pod(|pod| {
     ///     pod.as_mut().write_struct(|st| st.write((1, 2, 3)))
     /// })?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.read_pod()?;
+    /// let pod = pod.as_ref().into_value()?.read_pod()?;
     /// let mut st = pod.read_struct()?;
     /// assert_eq!(st.read::<(i32, i32, i32)>()?, (1, 2, 3));
     /// assert!(st.is_empty());
@@ -537,16 +518,13 @@ where
         }
     }
 
-    fn split(mut self) -> Result<Slice<'de>, Error> {
-        let Some(buf) = self.buf.split(self.size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
-        Ok(buf)
+    #[inline]
+    fn split(mut self) -> Result<Slice<'de>, BufferUnderflow> {
+        self.buf.split(self.size).ok_or(BufferUnderflow)
     }
 }
 
-impl<B> TypedPod<B>
+impl<B> Value<B>
 where
     B: AsSlice,
 {
@@ -558,36 +536,36 @@ where
     /// let mut pod = pod::array();
     /// pod.as_mut().write(10i32)?;
     ///
-    /// let pod = pod.as_ref().into_typed()?.to_owned()?;
+    /// let pod = pod.as_ref().into_value()?.to_owned()?;
     ///
     /// assert_eq!(pod.as_ref().read_sized::<i32>()?, 10i32);
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[cfg(feature = "alloc")]
     #[inline]
-    pub fn to_owned(&self) -> Result<TypedPod<DynamicBuf>, AllocError> {
-        Ok(TypedPod {
+    pub fn to_owned(&self) -> Result<Value<DynamicBuf>, AllocError> {
+        Ok(Value {
             buf: DynamicBuf::from_slice(self.buf.as_slice().as_bytes())?,
             size: self.size,
             ty: self.ty,
         })
     }
 
-    /// Convert the [`TypedPod`] into a one borrowing from but without modifying
+    /// Convert the [`Value`] into a one borrowing from but without modifying
     /// the current buffer.
     #[inline]
-    pub fn as_ref(&self) -> TypedPod<Slice<'_>> {
-        TypedPod::new(self.buf.as_slice(), self.size, self.ty)
+    pub fn as_ref(&self) -> Value<Slice<'_>> {
+        Value::new(self.buf.as_slice(), self.size, self.ty)
     }
 }
 
-impl<B> Clone for TypedPod<B>
+impl<B> Clone for Value<B>
 where
     B: Clone,
 {
     #[inline]
     fn clone(&self) -> Self {
-        TypedPod {
+        Value {
             size: self.size,
             ty: self.ty,
             buf: self.buf.clone(),
@@ -595,13 +573,13 @@ where
     }
 }
 
-impl<'de> PodItem<'de> for TypedPod<Slice<'de>> {
+impl<'de> PodItem<'de> for Value<Slice<'de>> {
     #[inline]
     fn read<T>(self) -> Result<T, Error>
     where
         T: Readable<'de>,
     {
-        TypedPod::read(self)
+        Value::read(self)
     }
 
     #[inline]
@@ -609,7 +587,7 @@ impl<'de> PodItem<'de> for TypedPod<Slice<'de>> {
     where
         T: SizedReadable<'de>,
     {
-        TypedPod::read_sized(self)
+        Value::read_sized(self)
     }
 
     #[inline]
@@ -617,38 +595,35 @@ impl<'de> PodItem<'de> for TypedPod<Slice<'de>> {
     where
         T: ?Sized + UnsizedReadable<'de>,
     {
-        TypedPod::read_unsized(self)
+        Value::read_unsized(self)
     }
 
     #[inline]
     fn read_struct(self) -> Result<Struct<Slice<'de>>, Error> {
-        TypedPod::read_struct(self)
+        Value::read_struct(self)
     }
 
     #[inline]
     fn read_object(self) -> Result<Object<Slice<'de>>, Error> {
-        TypedPod::read_object(self)
+        Value::read_object(self)
     }
 
     #[inline]
     fn read_option(self) -> Result<Option<Self>, Error> {
-        TypedPod::read_option(self)
+        Value::read_option(self)
     }
 }
 
-impl<'de, B> PodStream<'de> for TypedPod<B>
+impl<'de, B> PodStream<'de> for Value<B>
 where
     B: Reader<'de>,
 {
-    type Item = TypedPod<Slice<'de>>;
+    type Item = Value<Slice<'de>>;
 
     #[inline]
-    fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
-        let Some(buf) = self.buf.split(self.size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
-        let pod = TypedPod::new(buf, self.size, self.ty);
+    fn next(&mut self) -> Result<Value<Slice<'de>>, Error> {
+        let buf = self.buf.split(self.size).ok_or(BufferUnderflow)?;
+        let pod = Value::new(buf, self.size, self.ty);
 
         // Since the typed pod is consumed now, it no longer has a size, nor
         // does it produce values. It effective contains `Type::NONE`.
@@ -658,7 +633,7 @@ where
     }
 }
 
-/// [`UnsizedWritable`] implementation for [`TypedPod`].
+/// [`UnsizedWritable`] implementation for [`Value`].
 ///
 /// # Examples
 ///
@@ -674,7 +649,7 @@ where
 /// })?;
 ///
 /// let mut pod2 = pod::array();
-/// pod2.as_mut().write(pod.as_ref().into_typed()?)?;
+/// pod2.as_mut().write(pod.as_ref().into_value()?)?;
 ///
 /// let mut obj = pod2.as_ref().read_pod()?.read_object()?;
 /// assert!(!obj.is_empty());
@@ -697,7 +672,7 @@ where
 /// assert!(obj.is_empty());
 /// # Ok::<_, pod::Error>(())
 /// ```
-impl<B> UnsizedWritable for TypedPod<B>
+impl<B> UnsizedWritable for Value<B>
 where
     B: AsSlice,
 {
@@ -711,19 +686,16 @@ where
 
     #[inline]
     fn write_unsized(&self, mut writer: impl Writer) -> Result<(), Error> {
-        let Ok(size) = u32::try_from(self.size) else {
-            return Err(Error::new(ErrorKind::SizeOverflow));
-        };
-
+        let size = utils::to_word(self.size)?;
         writer.write(&[size, self.ty.into_u32()])?;
         writer.write(self.buf.as_slice().as_bytes())?;
         Ok(())
     }
 }
 
-crate::macros::encode_into_unsized!(impl [B] TypedPod<B> where B: AsSlice);
+crate::macros::encode_into_unsized!(impl [B] Value<B> where B: AsSlice);
 
-impl<B> fmt::Debug for TypedPod<B>
+impl<B> fmt::Debug for Value<B>
 where
     B: AsSlice,
 {
@@ -805,7 +777,7 @@ where
             Type::POINTER => decode!(Pointer, value => value.fmt(f)),
             Type::FD => decode!(Fd, value => value.fmt(f)),
             Type::CHOICE => tri!(self.as_ref().read_choice()).fmt(f),
-            Type::POD => tri!(tri!(self.as_ref().read_pod()).into_typed()).fmt(f),
+            Type::POD => tri!(tri!(self.as_ref().read_pod()).into_value()).fmt(f),
             ty => write!(f, "{{{ty:?}}}"),
         }
     }

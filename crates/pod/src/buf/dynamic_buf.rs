@@ -9,10 +9,9 @@ use alloc::alloc;
 
 use crate::Slice;
 use crate::SplitReader;
-use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
 use crate::writer::Pos;
-use crate::{AsSlice, Error, Writer};
+use crate::{AsSlice, Error, ErrorKind, Writer};
 
 use super::CapacityError;
 

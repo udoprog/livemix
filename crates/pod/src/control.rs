@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{AsSlice, TypedPod};
+use crate::{AsSlice, Value};
 
 /// A control item inside of a sequence.
 ///
@@ -26,12 +26,12 @@ use crate::{AsSlice, TypedPod};
 pub struct Control<B> {
     offset: u32,
     ty: u32,
-    value: TypedPod<B>,
+    value: Value<B>,
 }
 
 impl<B> Control<B> {
     #[inline]
-    pub(crate) fn new(offset: u32, ty: u32, value: TypedPod<B>) -> Self {
+    pub(crate) fn new(offset: u32, ty: u32, value: Value<B>) -> Self {
         Self { offset, ty, value }
     }
 
@@ -100,7 +100,7 @@ impl<B> Control<B> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn value(self) -> TypedPod<B> {
+    pub fn value(self) -> Value<B> {
         self.value
     }
 }

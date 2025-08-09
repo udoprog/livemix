@@ -8,12 +8,10 @@ use alloc::format;
 use alloc::string::String;
 
 use crate::buf::{ArrayVec, CapacityError};
-use crate::error::ErrorKind;
 use crate::{
-    ArrayBuf, AsSlice, Bitmap, Builder, DynamicBuf, Error, Fraction, OwnedBitmap, Pod, Rectangle,
-    Type, Writer,
+    ArrayBuf, AsSlice, Bitmap, BufferUnderflow, Builder, ChoiceType, DynamicBuf, Error, ErrorKind,
+    Fraction, OwnedBitmap, Pod, Reader, Rectangle, Type, Writer,
 };
-use crate::{ChoiceType, Reader};
 
 pub(crate) fn read(value: [u32; 2]) -> u64 {
     // SAFETY: Same size, same supported bit patterns.
@@ -96,15 +94,9 @@ fn test_slice_underflow() -> Result<(), Error> {
 
     assert_eq!(buf.read::<u8>()?, 1);
     assert_eq!(buf.read::<u8>()?, 2);
-    assert_eq!(
-        buf.read::<[u8; 2]>().unwrap_err().kind(),
-        ErrorKind::BufferUnderflow
-    );
+    assert_eq!(buf.read::<[u8; 2]>().unwrap_err(), BufferUnderflow);
     assert_eq!(buf.read::<u8>()?, 3);
-    assert_eq!(
-        buf.read::<u8>().unwrap_err().kind(),
-        ErrorKind::BufferUnderflow
-    );
+    assert_eq!(buf.read::<u8>().unwrap_err(), BufferUnderflow);
     Ok(())
 }
 
@@ -114,15 +106,9 @@ fn test_array_underflow() -> Result<(), Error> {
 
     assert_eq!(buf.read::<u8>()?, 1);
     assert_eq!(buf.read::<u8>()?, 2);
-    assert_eq!(
-        buf.read::<[u8; 2]>().unwrap_err().kind(),
-        ErrorKind::BufferUnderflow
-    );
+    assert_eq!(buf.read::<[u8; 2]>().unwrap_err(), BufferUnderflow);
     assert_eq!(buf.read::<u8>()?, 3);
-    assert_eq!(
-        buf.read::<u8>().unwrap_err().kind(),
-        ErrorKind::BufferUnderflow
-    );
+    assert_eq!(buf.read::<u8>().unwrap_err(), BufferUnderflow);
     Ok(())
 }
 

@@ -2,10 +2,9 @@ use core::fmt;
 use core::mem::{self, MaybeUninit};
 use core::slice;
 
-use crate::error::ErrorKind;
 use crate::utils::BytesInhabited;
 use crate::writer::Pos;
-use crate::{AsSlice, Error, Slice, SplitReader, Writer};
+use crate::{AsSlice, Error, ErrorKind, Slice, SplitReader, Writer};
 
 use super::CapacityError;
 

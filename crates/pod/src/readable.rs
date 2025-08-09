@@ -1,7 +1,6 @@
 use crate::buf::ArrayVec;
-use crate::error::ErrorKind;
 use crate::macros::{tuple_types, tuple_values};
-use crate::{Error, PodItem, PodStream};
+use crate::{Error, ErrorKind, PodItem, PodStream};
 
 /// Helper trait to more easily read values from a [`Pod`].
 ///

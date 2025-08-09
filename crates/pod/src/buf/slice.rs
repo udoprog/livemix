@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 use core::slice;
 
-use crate::error::ErrorKind;
+use crate::error::BufferUnderflow;
 use crate::{AsSlice, DynamicBuf, Error, Reader, SplitReader, Visitor};
 
 use super::AllocError;
@@ -245,11 +245,8 @@ impl<'de> Reader<'de> for Slice<'de> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    fn skip(&mut self, size: usize) -> Result<(), Error> {
-        let Some((_, tail)) = self.split_at_checked(size) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+    fn skip(&mut self, size: usize) -> Result<(), BufferUnderflow> {
+        let (_, tail) = self.split_at_checked(size).ok_or(BufferUnderflow)?;
         *self = tail;
         Ok(())
     }
@@ -274,7 +271,7 @@ impl<'de> Reader<'de> for Slice<'de> {
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    fn unpad(&mut self, align: usize) -> Result<(), Error> {
+    fn unpad(&mut self, align: usize) -> Result<(), BufferUnderflow> {
         debug_assert!(
             align <= u8::MAX as usize,
             "Alignments larger than 256 bytes are not supported"
@@ -289,7 +286,7 @@ impl<'de> Reader<'de> for Slice<'de> {
         let pad = align - remaining;
 
         if pad > self.len {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
+            return Err(BufferUnderflow);
         }
 
         self.len -= pad;
@@ -320,9 +317,9 @@ impl<'de> Reader<'de> for Slice<'de> {
     }
 
     #[inline]
-    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
+    fn peek_words_uninit(&self, out: &mut [MaybeUninit<u8>]) -> Result<(), BufferUnderflow> {
         if out.len() > self.len() {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
+            return Err(BufferUnderflow);
         }
 
         // SAFETY: The start pointer is valid since it hasn't reached the end yet.
@@ -336,9 +333,9 @@ impl<'de> Reader<'de> for Slice<'de> {
     }
 
     #[inline]
-    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
+    fn read_words_uninit(&mut self, out: &mut [MaybeUninit<u8>]) -> Result<(), BufferUnderflow> {
         if out.len() > self.len {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
+            return Err(BufferUnderflow);
         }
 
         // SAFETY: The start pointer is valid since it hasn't reached the end yet.
@@ -359,10 +356,7 @@ impl<'de> Reader<'de> for Slice<'de> {
     where
         V: Visitor<'de, [u8]>,
     {
-        let Some((head, tail)) = self.split_at_checked(len) else {
-            return Err(Error::new(ErrorKind::BufferUnderflow));
-        };
-
+        let (head, tail) = self.split_at_checked(len).ok_or(BufferUnderflow)?;
         // SAFETY: The head is guaranteed to be valid since it was split from the original slice.
         let ok = visitor.visit_borrowed(head.as_bytes())?;
         *self = tail;

@@ -14,11 +14,10 @@ use pod::IntoRaw;
 use pod::{AsSlice, Pod};
 use tracing::Level;
 
-use crate::Error;
 use crate::buf::{RecvBuf, SendBuf};
-use crate::error::ErrorKind;
 use crate::poll::{ChangeInterest, Interest};
 use crate::types::Header;
+use crate::{Error, ErrorKind};
 
 const ENVIRONS: &[&str] = &["PIPEWIRE_RUNTIME_DIR", "XDG_RUNTIME_DIR", "USERPROFILE"];
 const DEFAULT_PIPEWIRE_REMOTE: &str = "pipewire-0";
