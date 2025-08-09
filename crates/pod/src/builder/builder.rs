@@ -588,9 +588,9 @@ where
     /// })?;
     ///
     /// let mut array = pod.as_ref().read_array()?;
-    /// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "foo");
-    /// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "bar");
-    /// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "baz");
+    /// assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "foo");
+    /// assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "bar");
+    /// assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "baz");
     /// assert!(array.is_empty());
     /// # Ok::<_, pod::Error>(())
     /// ```

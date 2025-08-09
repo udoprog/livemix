@@ -345,9 +345,9 @@ where
     /// assert!(!array.is_empty());
     /// assert_eq!(array.len(), 3);
     ///
-    /// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
-    /// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
-    /// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
+    /// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 1i32);
+    /// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 2i32);
+    /// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 3i32);
     ///
     /// assert!(array.is_empty());
     /// assert_eq!(array.len(), 0);

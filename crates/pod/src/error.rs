@@ -76,6 +76,9 @@ where
     }
 }
 
+#[non_exhaustive]
+pub(crate) struct BufferUnderflow;
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum ErrorKind {
     StructUnderflow,
@@ -168,6 +171,13 @@ pub(crate) enum ErrorKind {
     CapacityError(CapacityError),
     #[cfg(feature = "alloc")]
     AllocError(AllocError),
+}
+
+impl From<BufferUnderflow> for ErrorKind {
+    #[inline]
+    fn from(_: BufferUnderflow) -> Self {
+        ErrorKind::BufferUnderflow
+    }
 }
 
 impl From<CapacityError> for ErrorKind {

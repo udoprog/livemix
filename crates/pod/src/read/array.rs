@@ -7,6 +7,7 @@ use crate::PodStream;
 use crate::Readable;
 #[cfg(feature = "alloc")]
 use crate::buf::AllocError;
+use crate::error::BufferUnderflow;
 use crate::error::ErrorKind;
 use crate::utils::array_remaining;
 use crate::{AsSlice, Error, Reader, Slice, Type, TypedPod, UnsizedWritable, Writer};
@@ -32,9 +33,9 @@ use crate::{AsSlice, Error, Reader, Slice, Type, TypedPod, UnsizedWritable, Writ
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
 ///
-/// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
-/// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
-/// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
+/// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 1i32);
+/// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 2i32);
+/// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 3i32);
 ///
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
@@ -58,9 +59,9 @@ use crate::{AsSlice, Error, Reader, Slice, Type, TypedPod, UnsizedWritable, Writ
 ///
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
-/// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "foo");
-/// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "bar");
-/// assert_eq!(array.next().unwrap().read_unsized::<str>()?, "baz");
+/// assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "foo");
+/// assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "bar");
+/// assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "baz");
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
 /// # Ok::<_, pod::Error>(())
@@ -207,7 +208,7 @@ where
     ///
     /// let mut count = 0;
     ///
-    /// while let Some(pod) = array.next() {
+    /// while let Some(pod) = array.next()? {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -217,15 +218,15 @@ where
     /// # Ok::<_, pod::Error>(())
     /// ```
     #[inline]
-    pub fn next(&mut self) -> Option<TypedPod<Slice<'de>>> {
+    pub fn next(&mut self) -> Result<Option<TypedPod<Slice<'de>>>, Error> {
         if self.remaining == 0 {
-            return None;
+            return Ok(None);
         }
 
-        let tail = self.buf.split(self.child_size)?;
+        let tail = self.buf.split(self.child_size).ok_or(BufferUnderflow)?;
         let pod = TypedPod::new(tail, self.child_size, self.child_type);
         self.remaining -= 1;
-        Some(pod)
+        Ok(Some(pod))
     }
 
     /// Coerce into an owned [`Array`].
@@ -249,7 +250,7 @@ where
     /// let mut count = 0;
     ///
     /// while !array.is_empty() {
-    ///     let pod = array.next().unwrap();
+    ///     let pod = array.next()?.unwrap();
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -296,7 +297,7 @@ where
     ///
     /// let mut count = 0;
     ///
-    /// while let Some(pod) = array.next() {
+    /// while let Some(pod) = array.next()? {
     ///     assert_eq!(pod.ty(), Type::INT);
     ///     assert_eq!(pod.size(), 4);
     ///     count += 1;
@@ -324,7 +325,7 @@ where
 
     #[inline]
     fn next(&mut self) -> Result<TypedPod<Slice<'de>>, Error> {
-        let Some(pod) = self.next() else {
+        let Some(pod) = self.next()? else {
             return Err(Error::new(ErrorKind::BufferUnderflow));
         };
 
@@ -357,9 +358,9 @@ where
 /// assert!(!array.is_empty());
 /// assert_eq!(array.len(), 3);
 ///
-/// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
-/// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
-/// assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
+/// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 1i32);
+/// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 2i32);
+/// assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 3i32);
 ///
 /// assert!(array.is_empty());
 /// assert_eq!(array.len(), 0);
@@ -408,8 +409,17 @@ where
 
                 let mut f = f.debug_list();
 
-                while let Some(child) = this.next() {
-                    f.entry(&child);
+                loop {
+                    match this.next() {
+                        Ok(Some(pod)) => {
+                            f.entry(&pod);
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            f.entry(&e);
+                            break;
+                        }
+                    };
                 }
 
                 f.finish()

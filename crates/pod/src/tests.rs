@@ -224,11 +224,11 @@ fn test_array() -> Result<(), Error> {
     let mut array = pod.as_ref().read_array()?;
 
     assert_eq!(array.len(), 3);
-    assert_eq!(array.next().unwrap().read_unsized::<CStr>()?, c"foo");
+    assert_eq!(array.next()?.unwrap().read_unsized::<CStr>()?, c"foo");
     assert_eq!(array.len(), 2);
-    assert_eq!(array.next().unwrap().read_unsized::<CStr>()?, c"bar");
+    assert_eq!(array.next()?.unwrap().read_unsized::<CStr>()?, c"bar");
     assert_eq!(array.len(), 1);
-    assert_eq!(array.next().unwrap().read_unsized::<CStr>()?, c"baz");
+    assert_eq!(array.next()?.unwrap().read_unsized::<CStr>()?, c"baz");
 
     assert!(array.is_empty());
     assert_eq!(array.len(), 0);
@@ -249,9 +249,9 @@ fn array_padded_decode() -> Result<(), Error> {
     let mut array = pod.as_ref().read_array()?;
 
     assert!(!array.is_empty());
-    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
-    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
-    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
+    assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 1i32);
+    assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 2i32);
+    assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 3i32);
     assert!(array.is_empty());
     Ok(())
 }
@@ -271,13 +271,13 @@ fn array_decode() -> Result<(), Error> {
 
     assert!(!array.is_empty());
     assert_eq!(array.len(), 3);
-    assert_eq!(array.next().unwrap().read_sized::<i64>()?, 1i64);
+    assert_eq!(array.next()?.unwrap().read_sized::<i64>()?, 1i64);
     assert_eq!(array.len(), 2);
-    assert_eq!(array.next().unwrap().read_sized::<i64>()?, 2i64);
+    assert_eq!(array.next()?.unwrap().read_sized::<i64>()?, 2i64);
     assert_eq!(array.len(), 1);
-    assert_eq!(array.next().unwrap().read_sized::<i64>()?, 3i64);
+    assert_eq!(array.next()?.unwrap().read_sized::<i64>()?, 3i64);
     assert!(array.is_empty());
-    assert!(array.next().is_none());
+    assert!(array.next()?.is_none());
     Ok(())
 }
 
@@ -352,14 +352,14 @@ fn array_string_decode() -> Result<(), Error> {
 
     let mut array = pod.as_ref().read_array()?;
     assert_eq!(array.len(), 3);
-    assert_eq!(array.next().unwrap().read_unsized::<str>()?, "foo");
+    assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "foo");
     assert_eq!(array.len(), 2);
-    assert_eq!(array.next().unwrap().read_unsized::<str>()?, "bar");
+    assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "bar");
     assert_eq!(array.len(), 1);
-    assert_eq!(array.next().unwrap().read_unsized::<str>()?, "baz");
+    assert_eq!(array.next()?.unwrap().read_unsized::<str>()?, "baz");
     assert_eq!(array.len(), 0);
     assert!(array.is_empty());
-    assert!(array.next().is_none());
+    assert!(array.next()?.is_none());
     Ok(())
 }
 
@@ -531,9 +531,9 @@ fn decode_bytes_array() -> Result<(), Error> {
     assert!(!array.is_empty());
     assert_eq!(array.len(), 3);
 
-    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 1i32);
-    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 2i32);
-    assert_eq!(array.next().unwrap().read_sized::<i32>()?, 3i32);
+    assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 1i32);
+    assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 2i32);
+    assert_eq!(array.next()?.unwrap().read_sized::<i32>()?, 3i32);
 
     assert!(array.is_empty());
     assert_eq!(array.len(), 0);
