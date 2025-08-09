@@ -266,28 +266,28 @@ fn main() -> Result<()> {
                     ObjectKind::Node(node_id) => {
                         let node = stream.node_mut(node_id)?;
 
-                        node.parameters.set_writable(id::Param::ENUM_FORMAT);
-                        node.parameters.set_writable(id::Param::FORMAT);
-                        node.parameters.set_writable(id::Param::PROP_INFO);
-                        node.parameters.set_writable(id::Param::PROPS);
-                        node.parameters.set_writable(id::Param::ENUM_PORT_CONFIG);
-                        node.parameters.set_writable(id::Param::PORT_CONFIG);
-                        node.parameters.set_writable(id::Param::LATENCY);
-                        node.parameters.set_writable(id::Param::PROCESS_LATENCY);
-                        node.parameters.set_writable(id::Param::TAG);
+                        node.params.set_writable(id::Param::ENUM_FORMAT);
+                        node.params.set_writable(id::Param::FORMAT);
+                        node.params.set_writable(id::Param::PROP_INFO);
+                        node.params.set_writable(id::Param::PROPS);
+                        node.params.set_writable(id::Param::ENUM_PORT_CONFIG);
+                        node.params.set_writable(id::Param::PORT_CONFIG);
+                        node.params.set_writable(id::Param::LATENCY);
+                        node.params.set_writable(id::Param::PROCESS_LATENCY);
+                        node.params.set_writable(id::Param::TAG);
 
                         let port = node.ports.insert(Direction::INPUT)?;
 
-                        port.properties.insert(prop::PORT_NAME, "input");
-                        port.properties
+                        port.props.insert(prop::PORT_NAME, "input");
+                        port.props
                             .insert(prop::FORMAT_DSP, "32 bit float mono audio");
 
                         add_port_params(port)?;
 
                         let port = node.ports.insert(Direction::OUTPUT)?;
 
-                        port.properties.insert(prop::PORT_NAME, "output");
-                        port.properties
+                        port.props.insert(prop::PORT_NAME, "output");
+                        port.props
                             .insert(prop::FORMAT_DSP, "32 bit float mono audio");
 
                         add_port_params(port)?;
@@ -312,7 +312,7 @@ fn main() -> Result<()> {
                     let node = stream.node(node_id)?;
                     let port = node.ports.get(direction, port_id)?;
 
-                    if let [param] = port.parameters.get(id::Param::FORMAT) {
+                    if let [param] = port.params.get(id::Param::FORMAT) {
                         let format = param.value.as_ref().read::<object::Format>()?;
 
                         match format.media_type {
@@ -362,7 +362,7 @@ fn main() -> Result<()> {
 fn add_port_params(port: &mut Port) -> Result<()> {
     let mut pod = pod::array();
 
-    port.parameters.push(pod.clear_mut().embed_object(
+    port.params.push(pod.clear_mut().embed_object(
         id::ObjectType::FORMAT,
         id::Param::ENUM_FORMAT,
         |obj| {
@@ -391,27 +391,27 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         },
     )?)?;
 
-    port.parameters.push(pod.clear_mut().embed(param::Meta {
+    port.params.push(pod.clear_mut().embed(param::Meta {
         ty: id::Meta::HEADER,
         size: mem::size_of::<ffi::MetaHeader>(),
     })?)?;
 
-    port.parameters.push(pod.clear_mut().embed(param::Io {
+    port.params.push(pod.clear_mut().embed(param::Io {
         ty: id::IoType::BUFFERS,
         size: mem::size_of::<ffi::IoBuffers>(),
     })?)?;
 
-    port.parameters.push(pod.clear_mut().embed(param::Io {
+    port.params.push(pod.clear_mut().embed(param::Io {
         ty: id::IoType::CLOCK,
         size: mem::size_of::<ffi::IoClock>(),
     })?)?;
 
-    port.parameters.push(pod.clear_mut().embed(param::Io {
+    port.params.push(pod.clear_mut().embed(param::Io {
         ty: id::IoType::POSITION,
         size: mem::size_of::<ffi::IoPosition>(),
     })?)?;
 
-    port.parameters.push(pod.clear_mut().embed_object(
+    port.params.push(pod.clear_mut().embed_object(
         id::ObjectType::PARAM_BUFFERS,
         id::Param::BUFFERS,
         |obj| {
@@ -437,6 +437,6 @@ fn add_port_params(port: &mut Port) -> Result<()> {
         },
     )?)?;
 
-    port.parameters.set_writable(id::Param::FORMAT);
+    port.params.set_writable(id::Param::FORMAT);
     Ok(())
 }

@@ -92,7 +92,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    pub fn new(connection: Connection, properties: Properties) -> Result<Self> {
+    pub fn new(connection: Connection, props: Properties) -> Result<Self> {
         let mut ids = IdSet::new();
 
         // Well-known identifiers.
@@ -101,7 +101,7 @@ impl Stream {
 
         let mut client = ClientState {
             id: GlobalId::INVALID,
-            properties,
+            props,
         };
 
         let mut tokens = IdSet::new();
@@ -194,7 +194,7 @@ impl Stream {
             match op {
                 Op::CoreHello => {
                     self.c.core_hello()?;
-                    self.c.client_update_properties(&self.client.properties)?;
+                    self.c.client_update_properties(&self.client.props)?;
                 }
                 Op::GetRegistry => {
                     let local_id =
@@ -220,8 +220,8 @@ impl Stream {
                             node.id,
                             node.max_input_ports,
                             node.max_output_ports,
-                            &mut node.properties,
-                            &node.parameters,
+                            &mut node.props,
+                            &node.params,
                         )?;
                     }
 
@@ -234,8 +234,8 @@ impl Stream {
                             node.id,
                             Direction::INPUT,
                             port.id,
-                            &mut port.properties,
-                            &mut port.parameters,
+                            &mut port.props,
+                            &mut port.params,
                         )?;
                     }
 
@@ -248,8 +248,8 @@ impl Stream {
                             node.id,
                             Direction::OUTPUT,
                             port.id,
-                            &mut port.properties,
-                            &mut port.parameters,
+                            &mut port.props,
+                            &mut port.params,
                         )?;
                     }
 
@@ -514,7 +514,7 @@ impl Stream {
     }
 
     #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
-    pub fn create_object(&mut self, kind: &str, properties: &Properties) -> Result<()> {
+    pub fn create_object(&mut self, kind: &str, props: &Properties) -> Result<()> {
         let Some(entry) = self
             .factories
             .get(kind)
@@ -523,12 +523,12 @@ impl Stream {
             bail!("No factory for {kind}");
         };
 
-        let Some(type_name) = entry.properties.get("factory.type.name") else {
+        let Some(type_name) = entry.props.get("factory.type.name") else {
             bail!("No factory type name for {kind}");
         };
 
         let Some(version) = entry
-            .properties
+            .props
             .get("factory.type.version")
             .and_then(|version| str::parse::<u32>(version).ok())
         else {
@@ -540,7 +540,7 @@ impl Stream {
                 let new_id = LocalId::new(self.ids.alloc().context("ran out of identifiers")?);
 
                 self.c
-                    .core_create_object(kind, type_name, version, new_id, properties)?;
+                    .core_create_object(kind, type_name, version, new_id, props)?;
 
                 let mut ports = Ports::new();
 
@@ -725,7 +725,7 @@ impl Stream {
 
             for _ in 0..n_items {
                 let (key, value) = props.read::<(String, String)>()?;
-                self.core.properties.insert(key, value);
+                self.core.props.insert(key, value);
             }
         }
 
@@ -822,9 +822,8 @@ impl Stream {
             let n_items = props.field()?.read_sized::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.read_unsized::<str>()?;
-                let value = props.field()?.read_unsized::<str>()?;
-                self.client.properties.insert(key, value);
+                let (key, value) = props.read::<(&str, &str)>()?;
+                self.client.props.insert(key, value);
             }
         }
 
@@ -855,18 +854,18 @@ impl Stream {
             permissions,
             ty,
             version,
-            properties: BTreeMap::new(),
+            props: Properties::new(),
         };
 
         for _ in 0..n_items {
             let (key, value) = props.read::<(&str, &str)>()?;
-            registry.properties.insert(key.to_owned(), value.to_owned());
+            registry.props.insert(key.to_owned(), value.to_owned());
         }
 
         if registry.ty == consts::INTERFACE_FACTORY
-            && let Some(name) = registry.properties.get("factory.name")
+            && let Some(name) = registry.props.get("factory.name")
         {
-            self.factories.insert(name.clone(), index);
+            self.factories.insert(name.to_owned(), index);
         }
 
         tracing::trace!(?id, ?registry, "Registry global event");
@@ -884,8 +883,8 @@ impl Stream {
                     if self
                         .client_nodes
                         .get_mut(node_id)?
-                        .properties
-                        .extend(&registry.properties)
+                        .props
+                        .extend(&registry.props)
                     {
                         self.ops.push_back(Op::NodeUpdate {
                             node_id,
@@ -995,11 +994,11 @@ impl Stream {
 
         let what = if let Some(obj) = st.field()?.read_option()? {
             tracing::trace!(?id, "set");
-            node.parameters.set(id, [obj.read_object()?.to_owned()?]);
+            node.params.set(id, [obj.read_object()?.to_owned()?]);
             NodeUpdateWhat::SetNodeParam(id)
         } else {
             tracing::trace!(?id, "remove");
-            node.parameters.remove(id);
+            node.params.remove(id);
             NodeUpdateWhat::RemoveNodeParam(id)
         };
 
@@ -1128,12 +1127,11 @@ impl Stream {
 
         let what = if let Some(value) = st.read::<Option<Object<Slice<'_>>>>()? {
             tracing::trace!(?id, flags, object = ?value, "set");
-            port.parameters
-                .set(id, [PortParam::with_flags(value, flags)])?;
+            port.params.set(id, [PortParam::with_flags(value, flags)])?;
             NodeUpdateWhat::SetPortParam(direction, port_id, id)
         } else {
             tracing::trace!(?id, flags, "remove");
-            _ = port.parameters.remove(id);
+            _ = port.params.remove(id);
             NodeUpdateWhat::RemovePortParam(direction, port_id, id)
         };
 
@@ -1417,21 +1415,21 @@ impl Stream {
 
         tracing::warn!(target: "io", ?direction, ?port_id, ?mix_id, ?peer_id, "SetMixInfo");
 
-        let mut props = st.read::<Struct<_>>()?;
-        let n_items = props.read::<u32>()?;
+        let mut st = st.read::<Struct<_>>()?;
+        let n_items = st.read::<u32>()?;
 
-        let mut values = BTreeMap::new();
+        let mut props = Properties::new();
 
         for _ in 0..n_items {
-            let (key, value) = props.read::<(String, String)>()?;
-            values.insert(key, value);
+            let (key, value) = st.read::<(String, String)>()?;
+            props.insert(key, value);
         }
 
         let node = self.client_nodes.get_mut(node_id)?;
         let port = node.ports.get_mut(direction, port_id)?;
 
         if let Some(peer_id) = peer_id {
-            port.mix_info.insert(mix_id, peer_id, values);
+            port.mix_info.insert(mix_id, peer_id, props);
         } else {
             port.mix_info.remove(mix_id);
         }
@@ -1459,13 +1457,13 @@ struct CoreState {
     host_name: String,
     version: String,
     name: String,
-    properties: BTreeMap<String, String>,
+    props: Properties,
 }
 
 #[derive(Debug)]
 struct ClientState {
     id: GlobalId,
-    properties: Properties,
+    props: Properties,
 }
 
 #[derive(Debug)]
@@ -1474,7 +1472,7 @@ struct RegistryEntry {
     permissions: i32,
     ty: String,
     version: u32,
-    properties: BTreeMap<String, String>,
+    props: Properties,
 }
 
 #[derive(Debug)]

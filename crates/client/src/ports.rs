@@ -405,21 +405,19 @@ pub struct Port {
     pub io_position: Option<Region<ffi::IoPosition>>,
     /// The IO buffers region for the port.
     pub mixes: PortMixes,
-    /// The audio format of the port.
-    pub format: Option<object::AudioFormat>,
     /// The mix information for the port.
     ///
     /// This tells you the peers are connected to the port.
     pub mix_info: PortMixInfo,
-    pub properties: Properties,
-    pub parameters: Parameters,
+    pub props: Properties,
+    pub params: Parameters,
 }
 
 impl Port {
     /// Take the modified state of the port.
     #[inline]
     pub(crate) fn is_modified(&mut self) -> bool {
-        self.properties.is_modified() || self.parameters.is_modified()
+        self.props.is_modified() || self.params.is_modified()
     }
 
     /// Replace the current set of buffers for this port.
@@ -453,7 +451,7 @@ pub struct PortMixInfoPeer {
     /// The connected peer.
     pub peer_id: PortId,
     /// The properties of the peer.
-    pub properties: BTreeMap<String, String>,
+    pub props: Properties,
 }
 
 #[derive(Default)]
@@ -463,11 +461,11 @@ pub struct PortMixInfo {
 
 impl PortMixInfo {
     /// Insert a peer ID for the given mix.
-    pub fn insert(&mut self, mix_id: MixId, peer_id: PortId, properties: BTreeMap<String, String>) {
+    pub fn insert(&mut self, mix_id: MixId, peer_id: PortId, props: Properties) {
         self.peers.push(PortMixInfoPeer {
             mix_id,
             peer_id,
-            properties,
+            props,
         });
     }
 
@@ -541,9 +539,8 @@ impl Ports {
             io_clock: None,
             io_position: None,
             mixes: PortMixes::default(),
-            format: None,
-            properties: Properties::new(),
-            parameters: Parameters::new(),
+            props: Properties::new(),
+            params: Parameters::new(),
             mix_info: PortMixInfo::default(),
         };
 
