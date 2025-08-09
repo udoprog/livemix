@@ -16,7 +16,7 @@ use protocol::{Connection, Properties};
 use tracing::Level;
 
 use crate::ports::PortParam;
-use crate::{Parameters, PortId};
+use crate::{LocalId, Parameters, PortId};
 
 #[derive(Debug)]
 pub struct Client {
@@ -74,12 +74,12 @@ impl Client {
     }
 
     /// Get registry.
-    pub fn core_get_registry(&mut self, new_id: u32) -> Result<()> {
+    pub fn core_get_registry(&mut self, new_id: LocalId) -> Result<()> {
         let mut pod = pod::array();
 
         pod.as_mut().write_struct(|st| {
-            st.field().write_sized(consts::REGISTRY_VERSION as i32)?;
-            st.field().write_sized(new_id)?;
+            st.field().write(consts::REGISTRY_VERSION as i32)?;
+            st.field().write(new_id.into_u32())?;
             Ok(())
         })?;
 
@@ -139,7 +139,8 @@ impl Client {
         factory_name: &str,
         ty: &str,
         version: u32,
-        new_id: u32,
+        new_id: LocalId,
+        properties: &Properties,
     ) -> Result<()> {
         let mut pod = pod::array();
 
@@ -149,11 +150,16 @@ impl Client {
             st.field().write_sized(version)?;
 
             st.field().write_struct(|props| {
-                props.field().write_sized(0u32)?;
+                props.field().write(properties.len() as u32)?;
+
+                for (key, value) in properties.iter() {
+                    props.write((key, value))?;
+                }
+
                 Ok(())
             })?;
 
-            st.field().write_sized(new_id)?;
+            st.field().write_sized(new_id.into_u32())?;
             Ok(())
         })?;
 
@@ -216,7 +222,7 @@ impl Client {
     #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     pub fn client_node_update(
         &mut self,
-        id: u32,
+        id: LocalId,
         max_input_ports: u32,
         max_output_ports: u32,
         properties: &mut Properties,
@@ -287,8 +293,12 @@ impl Client {
             Ok(())
         })?;
 
-        self.connection
-            .request(&mut self.outgoing, id, op::ClientNode::UPDATE, pod.as_ref())?;
+        self.connection.request(
+            &mut self.outgoing,
+            id.into_u32(),
+            op::ClientNode::UPDATE,
+            pod.as_ref(),
+        )?;
         Ok(())
     }
 
@@ -296,7 +306,7 @@ impl Client {
     #[tracing::instrument(skip(self), ret(level = Level::TRACE))]
     pub fn client_node_port_update(
         &mut self,
-        id: u32,
+        id: LocalId,
         direction: consts::Direction,
         port_id: PortId,
         properties: &mut Properties,
@@ -388,7 +398,7 @@ impl Client {
 
         self.connection.request(
             &mut self.outgoing,
-            id,
+            id.into_u32(),
             op::ClientNode::PORT_UPDATE,
             pod.as_ref(),
         )?;
@@ -396,14 +406,14 @@ impl Client {
     }
 
     /// Update the client.
-    pub fn client_node_set_active(&mut self, id: u32, active: bool) -> Result<()> {
+    pub fn client_node_set_active(&mut self, id: LocalId, active: bool) -> Result<()> {
         let mut pod = pod::array();
 
         pod.as_mut().write_struct(|st| st.write(active))?;
 
         self.connection.request(
             &mut self.outgoing,
-            id,
+            id.into_u32(),
             op::ClientNode::SET_ACTIVE,
             pod.as_ref(),
         )?;

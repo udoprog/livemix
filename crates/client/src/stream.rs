@@ -38,13 +38,16 @@ use tracing::Level;
 
 use crate::activation::PeerActivation;
 use crate::buffer::{self, Buffer};
-use crate::events::RemoveNodeParamEvent;
-use crate::events::{RemovePortParamEvent, SetNodeParamEvent, SetPortParamEvent, StreamEvent};
+use crate::events::{
+    ObjectKind, RemoveNodeParamEvent, RemovePortParamEvent, SetNodeParamEvent, SetPortParamEvent,
+    StreamEvent,
+};
 use crate::ports::PortMix;
 use crate::ports::PortParam;
 use crate::ptr::{atomic, volatile};
 use crate::{
-    Buffers, Client, ClientNode, ClientNodeId, ClientNodes, Memory, MixId, PortId, Ports, Region,
+    Buffers, Client, ClientNode, ClientNodeId, ClientNodes, GlobalId, LocalId, Memory, MixId,
+    PortId, Ports, Region,
 };
 
 const CREATE_CLIENT_NODE: i32 = 0x2000;
@@ -69,11 +72,11 @@ pub struct Stream {
     core: CoreState,
     client: ClientState,
     registries: Slab<RegistryEntry>,
-    id_to_registry: BTreeMap<u32, usize>,
+    id_to_registry: BTreeMap<GlobalId, usize>,
     factories: BTreeMap<String, usize>,
     globals: GlobalMap,
     client_nodes: ClientNodes,
-    local_id_to_kind: BTreeMap<u32, Kind>,
+    local_id_to_kind: BTreeMap<LocalId, Kind>,
     has_header: bool,
     header: Header,
     ids: IdSet,
@@ -193,27 +196,20 @@ impl Stream {
                     self.c.client_update_properties(&self.client.properties)?;
                 }
                 Op::GetRegistry => {
-                    let local_id = self.ids.alloc().context("ran out of identifiers")?;
+                    let local_id =
+                        LocalId::new(self.ids.alloc().context("ran out of identifiers")?);
                     self.c.core_get_registry(local_id)?;
                     self.local_id_to_kind.insert(local_id, Kind::Registry);
                     self.c.core_sync(GET_REGISTRY_SYNC)?;
                 }
+                Op::CoreStarted => {
+                    return Ok(Some(StreamEvent::Started));
+                }
                 Op::Pong { id, seq } => {
                     self.c.core_pong(id, seq)?;
                 }
-                Op::ConstructNode => {
-                    if let Err(error) = self.op_construct_node() {
-                        tracing_error!(error, "Failed to construct client node");
-                    }
-                }
-                Op::NodeCreated { node_id } => {
-                    let node = self.client_nodes.get_mut(node_id)?;
-                    self.c.client_node_set_active(node.id, true)?;
-                    self.ops.push_back(Op::NodeUpdate {
-                        node_id,
-                        what: None,
-                    });
-                    return Ok(Some(StreamEvent::NodeCreated(node_id)));
+                Op::ObjectCreated { kind } => {
+                    return Ok(Some(StreamEvent::ObjectCreated(kind)));
                 }
                 Op::NodeUpdate { node_id, what } => {
                     let node = self.client_nodes.get_mut(node_id)?;
@@ -505,46 +501,71 @@ impl Stream {
         Ok(Some(fd))
     }
 
+    /// Set a client node as active.
+    pub fn client_node_set_active(&mut self, node_id: ClientNodeId, active: bool) -> Result<()> {
+        let node = self.client_nodes.get(node_id)?;
+        self.c.client_node_set_active(node.id, active)?;
+
+        self.ops.push_back(Op::NodeUpdate {
+            node_id,
+            what: None,
+        });
+
+        Ok(())
+    }
+
     #[tracing::instrument(skip_all, ret(level = Level::TRACE))]
-    fn op_construct_node(&mut self) -> Result<()> {
-        let Some(registry) = self
+    pub fn create_object(&mut self, kind: &str, properties: &Properties) -> Result<()> {
+        let Some(entry) = self
             .factories
-            .get("client-node")
+            .get(kind)
             .and_then(|&id| self.registries.get(id))
         else {
-            bail!("No factory for client-node");
+            bail!("No factory for {kind}");
         };
 
-        let Some(type_name) = registry.properties.get("factory.type.name") else {
-            bail!("No factory type name for client-node");
+        let Some(type_name) = entry.properties.get("factory.type.name") else {
+            bail!("No factory type name for {kind}");
         };
 
-        let Some(version) = registry
+        let Some(version) = entry
             .properties
             .get("factory.type.version")
             .and_then(|version| str::parse::<u32>(version).ok())
         else {
-            bail!("No factory type version for client-node");
+            bail!("No factory type version for {kind}");
         };
 
-        let new_id = self.ids.alloc().context("ran out of identifiers")?;
+        let kind = match kind {
+            "client-node" => {
+                let new_id = LocalId::new(self.ids.alloc().context("ran out of identifiers")?);
 
-        self.c
-            .core_create_object("client-node", type_name, version, new_id)?;
+                self.c
+                    .core_create_object(kind, type_name, version, new_id, properties)?;
 
-        let mut ports = Ports::new();
+                let mut ports = Ports::new();
 
-        let write_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
-        let read_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
+                let write_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
+                let read_token = Token::new(self.tokens.alloc().context("no more tokens")? as u64);
 
-        let node_id =
-            self.client_nodes
-                .insert(ClientNode::new(new_id, ports, write_token, read_token)?);
+                let node_id = self.client_nodes.insert(ClientNode::new(
+                    new_id,
+                    ports,
+                    write_token,
+                    read_token,
+                )?);
 
-        self.local_id_to_kind
-            .insert(new_id, Kind::ClientNode(node_id));
+                self.local_id_to_kind
+                    .insert(new_id, Kind::ClientNode(node_id));
 
-        self.ops.push_back(Op::NodeCreated { node_id: node_id });
+                ObjectKind::Node(node_id)
+            }
+            kind => {
+                bail!("Unsupported object kind: {kind}");
+            }
+        };
+
+        self.ops.push_back(Op::ObjectCreated { kind });
         Ok(())
     }
 
@@ -625,7 +646,9 @@ impl Stream {
     }
 
     fn dynamic(&mut self, st: Struct<Slice<'_>>) -> Result<()> {
-        let Some(kind) = self.local_id_to_kind.get(&self.header.id()) else {
+        let id = LocalId::new(self.header.id());
+
+        let Some(kind) = self.local_id_to_kind.get(&id) else {
             tracing::warn!(?self.header, "Unknown receiver");
             return Ok(());
         };
@@ -723,7 +746,7 @@ impl Stream {
 
         match id {
             GET_REGISTRY_SYNC => {
-                self.ops.push_back(Op::ConstructNode);
+                self.ops.push_back(Op::CoreStarted);
                 tracing::trace!(id, seq, "Intitial registry sync done");
             }
             CREATE_CLIENT_NODE => {
@@ -760,11 +783,9 @@ impl Stream {
 
     #[tracing::instrument(skip_all)]
     fn core_bound_id_event(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
-        let local_id = st.field()?.read_sized::<u32>()?;
-        let global_id = st.field()?.read_sized::<u32>()?;
+        let (local_id, global_id) = st.read::<(LocalId, GlobalId)>()?;
         self.globals.insert(local_id, global_id);
-
-        tracing::debug!(local_id, global_id);
+        tracing::debug!(?local_id, ?global_id);
         Ok(())
     }
 
@@ -826,7 +847,8 @@ impl Stream {
 
     #[tracing::instrument(skip_all)]
     fn registry_global(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
-        let (id, permissions, ty, version, mut props) = st.read::<(_, _, _, _, Struct<_>)>()?;
+        let (id, permissions, ty, version, mut props) =
+            st.read::<(GlobalId, _, _, _, Struct<_>)>()?;
 
         let n_items = props.read::<u32>()?;
 
@@ -851,10 +873,9 @@ impl Stream {
             self.factories.insert(name.clone(), index);
         }
 
-        tracing::trace!(id, ?registry, "Registry global event");
+        tracing::trace!(?id, ?registry, "Registry global event");
 
         self.id_to_registry.insert(id, index);
-        self.registries.insert(registry);
 
         if let Some(kind) = self
             .globals
@@ -863,24 +884,32 @@ impl Stream {
         {
             match *kind {
                 Kind::Registry => {}
-                Kind::ClientNode(index) => {
-                    self.ops.push_back(Op::NodeUpdate {
-                        node_id: index,
-                        what: None,
-                    });
+                Kind::ClientNode(node_id) => {
+                    if self
+                        .client_nodes
+                        .get_mut(node_id)?
+                        .properties
+                        .extend(&registry.properties)
+                    {
+                        self.ops.push_back(Op::NodeUpdate {
+                            node_id,
+                            what: None,
+                        });
+                    }
                 }
             }
         }
 
+        self.registries.insert(registry);
         Ok(())
     }
 
     #[tracing::instrument(skip_all)]
     fn registry_global_remove(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
-        let id = st.field()?.read_sized::<u32>()?;
+        let id = st.read::<GlobalId>()?;
 
         let Some(registry_index) = self.id_to_registry.remove(&id) else {
-            tracing::warn!(id, "Tried to remove unknown registry");
+            tracing::warn!(?id, "Tried to remove unknown registry");
             return Ok(());
         };
 
@@ -892,7 +921,7 @@ impl Stream {
         tracing::debug!(?registry, "Removed registry");
 
         if let Some(local_id) = self.globals.remove_by_global(id) {
-            self.ids.unset(local_id);
+            self.ids.unset(local_id.into_u32());
 
             if let Some(kind) = self.local_id_to_kind.remove(&local_id) {
                 match kind {
@@ -1445,9 +1474,9 @@ struct ClientState {
     server_properties: BTreeMap<CString, CString>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct RegistryEntry {
-    id: u32,
+    id: GlobalId,
     permissions: i32,
     ty: String,
     version: u32,
@@ -1472,13 +1501,13 @@ enum NodeUpdateWhat {
 enum Op {
     CoreHello,
     GetRegistry,
+    CoreStarted,
     Pong {
         id: u32,
         seq: u32,
     },
-    ConstructNode,
-    NodeCreated {
-        node_id: ClientNodeId,
+    ObjectCreated {
+        kind: ObjectKind,
     },
     NodeUpdate {
         node_id: ClientNodeId,
@@ -1497,7 +1526,7 @@ enum Op {
 
 #[derive(Debug)]
 pub struct GlobalMap {
-    global_to_local: BTreeMap<u32, u32>,
+    global_to_local: BTreeMap<GlobalId, LocalId>,
 }
 
 impl GlobalMap {
@@ -1509,18 +1538,18 @@ impl GlobalMap {
     }
 
     #[inline]
-    fn insert(&mut self, local_id: u32, global_id: u32) {
+    fn insert(&mut self, local_id: LocalId, global_id: GlobalId) {
         self.global_to_local.insert(global_id, local_id);
     }
 
     /// Map a global to a local id.
     #[inline]
-    fn by_global(&self, global_id: u32) -> Option<u32> {
+    fn by_global(&self, global_id: GlobalId) -> Option<LocalId> {
         self.global_to_local.get(&global_id).copied()
     }
 
     #[inline]
-    fn remove_by_global(&mut self, global_id: u32) -> Option<u32> {
+    fn remove_by_global(&mut self, global_id: GlobalId) -> Option<LocalId> {
         self.global_to_local.remove(&global_id)
     }
 }

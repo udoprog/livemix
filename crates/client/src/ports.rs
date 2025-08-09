@@ -207,21 +207,15 @@ impl PortBuffers {
         }
 
         let id = unsafe { volatile!(mix.region, buffer_id).read() };
-
         let buffer = self.get_mut(mix.mix_id, id as u32)?;
-
-        Some(PortInputBuffer { io: mix, buffer })
+        Some(PortInputBuffer { mix, buffer })
     }
 
     /// Just get the specified buffer by id.
     pub(crate) fn get_mut(&mut self, mix_id: MixId, buffer_id: u32) -> Option<&mut Buffer> {
         let index = usize::try_from(buffer_id).ok()?;
-
-        self.buffers
-            .iter_mut()
-            .find(|b| b.mix_id == mix_id)?
-            .buffers
-            .get_mut(index)
+        let b = self.buffers.iter_mut().find(|b| b.mix_id == mix_id)?;
+        b.buffers.get_mut(index)
     }
 
     /// The given mix id has been removed, so clear any reservations that are present on it.
@@ -309,7 +303,7 @@ impl PortBuffers {
 #[must_use = "In order for the input buffer to be used again, `need_data` must be called"]
 pub struct PortInputBuffer<'io, 'buf> {
     /// The IO buffers for the port.
-    io: &'io mut PortMix,
+    mix: &'io mut PortMix,
     /// The buffer that is being read.
     buffer: &'buf mut Buffer,
 }
@@ -322,12 +316,12 @@ impl PortInputBuffer<'_, '_> {
 
     /// The mix the input buffer is associated with.
     pub fn mix_id(&self) -> MixId {
-        self.io.mix_id
+        self.mix.mix_id
     }
 
     /// Mark the input buffer as needing more data.
     pub fn need_data(self) -> Result<()> {
-        unsafe { volatile!(self.io.region, status).replace(flags::Status::NEED_DATA) };
+        unsafe { volatile!(self.mix.region, status).replace(flags::Status::NEED_DATA) };
         Ok(())
     }
 }

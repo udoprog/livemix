@@ -19,8 +19,7 @@ use crate::activation;
 use crate::memory::Region;
 use crate::ptr::{atomic, volatile};
 use crate::utils;
-use crate::{Parameters, Stats};
-use crate::{PeerActivation, Ports};
+use crate::{LocalId, Parameters, PeerActivation, Ports, Stats};
 
 /// Collection of data related to client nodes.
 pub struct ClientNodes {
@@ -128,7 +127,7 @@ impl fmt::Debug for ClientNodeId {
 #[non_exhaustive]
 pub struct ClientNode {
     /// The unique identifier for this node.
-    pub id: u32,
+    pub id: LocalId,
     /// Activation record for this node.
     pub activation: Option<Region<ffi::NodeActivation>>,
     /// Activation records for dependent nodes.
@@ -153,7 +152,7 @@ pub struct ClientNode {
 
 impl ClientNode {
     pub(crate) fn new(
-        id: u32,
+        id: LocalId,
         ports: Ports,
         write_token: Token,
         read_token: Token,

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use client::events::{RemovePortParamEvent, StreamEvent};
+use client::events::{ObjectKind, RemovePortParamEvent, StreamEvent};
 use client::{ClientNode, MixId, Port, PortId, Stats, Stream};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
@@ -250,46 +250,54 @@ fn main() -> Result<()> {
     loop {
         while let Some(ev) = stream.run(&mut poll, &mut recv)? {
             match ev {
-                StreamEvent::NodeCreated(node) => {
-                    let node = stream.node_mut(node)?;
+                StreamEvent::Started => {
+                    let mut properties = Properties::new();
 
-                    node.properties.insert(prop::NODE_NAME, "livemix10");
-                    node.properties
-                        .insert(prop::NODE_DESCRIPTION, "this is a description");
+                    properties.insert(prop::NODE_NAME, "livemix");
+                    properties.insert(prop::NODE_DESCRIPTION, "Livemix I/O node");
+                    properties.insert(prop::MEDIA_CLASS, "Audio/Duplex");
+                    properties.insert(prop::MEDIA_TYPE, "Audio");
+                    properties.insert(prop::MEDIA_CATEGORY, "Duplex");
+                    properties.insert(prop::MEDIA_ROLE, "DSP");
 
-                    node.properties.insert(prop::NODE_DESCRIPTION, "livemix");
-                    node.properties.insert(prop::NODE_NAME, "livemix_node");
-                    node.properties.insert(prop::MEDIA_CLASS, "Audio/Duplex");
-                    node.properties.insert(prop::MEDIA_TYPE, "Audio");
-                    node.properties.insert(prop::MEDIA_CATEGORY, "Duplex");
-                    node.properties.insert(prop::MEDIA_ROLE, "DSP");
-
-                    node.parameters.set_write(id::Param::ENUM_FORMAT);
-                    node.parameters.set_write(id::Param::FORMAT);
-                    node.parameters.set_write(id::Param::PROP_INFO);
-                    node.parameters.set_write(id::Param::PROPS);
-                    node.parameters.set_write(id::Param::ENUM_PORT_CONFIG);
-                    node.parameters.set_write(id::Param::PORT_CONFIG);
-                    node.parameters.set_write(id::Param::LATENCY);
-                    node.parameters.set_write(id::Param::PROCESS_LATENCY);
-                    node.parameters.set_write(id::Param::TAG);
-
-                    let port = node.ports.insert(Direction::INPUT)?;
-
-                    port.properties.insert(prop::PORT_NAME, "input");
-                    port.properties
-                        .insert(prop::FORMAT_DSP, "32 bit float mono audio");
-
-                    add_port_params(port)?;
-
-                    let port = node.ports.insert(Direction::OUTPUT)?;
-
-                    port.properties.insert(prop::PORT_NAME, "output");
-                    port.properties
-                        .insert(prop::FORMAT_DSP, "32 bit float mono audio");
-
-                    add_port_params(port)?;
+                    stream.create_object("client-node", &properties)?;
                 }
+                StreamEvent::ObjectCreated(kind) => match kind {
+                    ObjectKind::Node(node_id) => {
+                        let node = stream.node_mut(node_id)?;
+
+                        node.parameters.set_write(id::Param::ENUM_FORMAT);
+                        node.parameters.set_write(id::Param::FORMAT);
+                        node.parameters.set_write(id::Param::PROP_INFO);
+                        node.parameters.set_write(id::Param::PROPS);
+                        node.parameters.set_write(id::Param::ENUM_PORT_CONFIG);
+                        node.parameters.set_write(id::Param::PORT_CONFIG);
+                        node.parameters.set_write(id::Param::LATENCY);
+                        node.parameters.set_write(id::Param::PROCESS_LATENCY);
+                        node.parameters.set_write(id::Param::TAG);
+
+                        let port = node.ports.insert(Direction::INPUT)?;
+
+                        port.properties.insert(prop::PORT_NAME, "input");
+                        port.properties
+                            .insert(prop::FORMAT_DSP, "32 bit float mono audio");
+
+                        add_port_params(port)?;
+
+                        let port = node.ports.insert(Direction::OUTPUT)?;
+
+                        port.properties.insert(prop::PORT_NAME, "output");
+                        port.properties
+                            .insert(prop::FORMAT_DSP, "32 bit float mono audio");
+
+                        add_port_params(port)?;
+
+                        stream.client_node_set_active(node_id, true)?;
+                    }
+                    _ => {
+                        bail!("Unsupported object kind {kind:?}");
+                    }
+                },
                 StreamEvent::Process(node) => {
                     let node = stream.node_mut(node)?;
                     app.process(node).context("Processing node")?;

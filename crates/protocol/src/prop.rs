@@ -88,6 +88,20 @@ impl Borrow<Prop> for String {
     }
 }
 
+impl AsRef<Prop> for String {
+    #[inline]
+    fn as_ref(&self) -> &Prop {
+        Prop::new(self.as_str())
+    }
+}
+
+impl AsRef<Prop> for str {
+    #[inline]
+    fn as_ref(&self) -> &Prop {
+        Prop::new(self)
+    }
+}
+
 impl UnsizedWritable for Prop {
     const TYPE: pod::Type = str::TYPE;
 

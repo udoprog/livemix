@@ -38,13 +38,22 @@ pub struct RemovePortParamEvent {
     pub param: Param,
 }
 
+/// A kind of object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ObjectKind {
+    Node(ClientNodeId),
+}
+
 /// An event produced by a stream about things which might interest a client
 /// implementation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum StreamEvent {
+    /// The stream has been configured.
+    Started,
     Process(ClientNodeId),
-    NodeCreated(ClientNodeId),
+    ObjectCreated(ObjectKind),
     SetNodeParam(SetNodeParamEvent),
     RemoveNodeParam(RemoveNodeParamEvent),
     SetPortParam(SetPortParamEvent),
