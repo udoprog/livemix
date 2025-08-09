@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use client::events::StreamEvent;
+use client::events::{RemovePortParamEvent, StreamEvent};
 use client::{ClientNode, MixId, Port, PortId, Stats, Stream};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
@@ -173,7 +173,7 @@ impl ExampleApplication {
                 sample_format: hound::SampleFormat::Float,
             };
 
-            if b.buf.len() > 0 {
+            if !b.buf.is_empty() {
                 let file = PathBuf::from(format!("capture_{port_id}_{mix_id}.wav"));
 
                 let mut writer = 'writer: {
@@ -287,17 +287,19 @@ fn main() -> Result<()> {
                         _ => {}
                     }
                 }
-                StreamEvent::RemovePortParam(ev) => match ev.param {
-                    id::Param::FORMAT => {
-                        tracing::info!(
-                            "Removed format parameter from port {}/{}",
-                            ev.direction,
-                            ev.port_id
-                        );
-                        app.formats.remove(&(ev.direction, ev.port_id));
-                    }
-                    _ => {}
-                },
+                StreamEvent::RemovePortParam(RemovePortParamEvent {
+                    param: id::Param::FORMAT,
+                    direction,
+                    port_id,
+                    ..
+                }) => {
+                    tracing::info!(
+                        "Removed format parameter from port {}/{}",
+                        direction,
+                        port_id
+                    );
+                    app.formats.remove(&(direction, port_id));
+                }
                 _ => {
                     // Other events, ignore.
                 }
@@ -347,7 +349,7 @@ fn add_port_params(port: &mut Port) -> Result<()> {
             obj.property(id::Format::AUDIO_RATE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
-                |c| c.write((DEFAULT_RATE as u32, 44100, 48000)),
+                |c| c.write((DEFAULT_RATE, 44100, 48000)),
             )?;
             Ok(())
         },

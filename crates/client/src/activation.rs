@@ -69,7 +69,7 @@ impl PeerActivation {
     }
 
     // Port of `trigger_link_v0`.
-    pub unsafe fn signal_v0(&self, nsec: u64) -> Result<bool> {
+    unsafe fn signal_v0(&self, nsec: u64) -> Result<bool> {
         unsafe {
             if !self.decrement_pending() {
                 return Ok(false);
@@ -87,7 +87,7 @@ impl PeerActivation {
     }
 
     // Port of `trigger_link_v1`.
-    pub unsafe fn signal_v1(&self, nsec: u64) -> Result<bool> {
+    unsafe fn signal_v1(&self, nsec: u64) -> Result<bool> {
         unsafe {
             if !self.decrement_pending() {
                 return Ok(false);

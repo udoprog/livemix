@@ -75,6 +75,13 @@ impl ClientNodes {
     }
 }
 
+impl Default for ClientNodes {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A client node identifier.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]

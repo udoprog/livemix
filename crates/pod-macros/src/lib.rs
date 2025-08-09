@@ -1,6 +1,7 @@
 //! Macros used to interact with pods.
 
 #![no_std]
+#![allow(clippy::needless_late_init)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -24,10 +25,10 @@ pub fn derive_readable(input: TokenStream) -> TokenStream {
 
     let cx = pod::Ctxt::new();
 
-    if let Ok(stream) = pod::readable(&cx, input) {
-        if !cx.has_errors() {
-            return stream.into();
-        }
+    if let Ok(stream) = pod::readable(&cx, input)
+        && !cx.has_errors()
+    {
+        return stream.into();
     }
 
     cx.into_errors().into()
@@ -39,10 +40,10 @@ pub fn derive_writable(input: TokenStream) -> TokenStream {
 
     let cx = pod::Ctxt::new();
 
-    if let Ok(stream) = pod::writable(&cx, input) {
-        if !cx.has_errors() {
-            return stream.into();
-        }
+    if let Ok(stream) = pod::writable(&cx, input)
+        && !cx.has_errors()
+    {
+        return stream.into();
     }
 
     cx.into_errors().into()

@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::format;
 
 use syn::Token;
@@ -14,7 +15,7 @@ pub(crate) struct Object {
 pub(crate) enum Container {
     #[default]
     Struct,
-    Object(Object),
+    Object(Box<Object>),
 }
 
 #[derive(Default)]
@@ -95,10 +96,10 @@ pub(crate) fn container(cx: &Ctxt, inputs: &[syn::Attribute]) -> Result<Containe
                     )
                 })?;
 
-                attrs.container = Container::Object(Object {
+                attrs.container = Container::Object(Box::new(Object {
                     ty: object_type,
                     id: object_id,
-                });
+                }));
                 return Ok(());
             }
 

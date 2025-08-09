@@ -360,8 +360,8 @@ where
         Self {
             file: self.file.clone(),
             size: self.size.clone(),
-            ptr: self.ptr.clone(),
-            _marker: self._marker.clone(),
+            ptr: self.ptr,
+            _marker: self._marker,
         }
     }
 }

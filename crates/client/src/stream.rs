@@ -27,7 +27,7 @@ use protocol::buf::RecvBuf;
 use protocol::consts::{self, Activation, Direction};
 use protocol::ffi;
 use protocol::flags;
-use protocol::id::{self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
+use protocol::id;
 use protocol::ids::IdSet;
 use protocol::op::{self, ClientEvent, ClientNodeEvent, CoreEvent, RegistryEvent};
 use protocol::poll::{ChangeInterest, Interest, PollEvent, Token};
@@ -972,7 +972,7 @@ impl Stream {
     ) -> Result<()> {
         let node = self.client_nodes.get_mut(node_id)?;
 
-        let id = st.field()?.read_sized::<Param>()?;
+        let id = st.field()?.read_sized::<id::Param>()?;
         let _flags = st.field()?.read_sized::<i32>()?;
 
         let what = if let Some(obj) = st.field()?.read_option()? {
@@ -1103,7 +1103,7 @@ impl Stream {
 
         let direction = st.field()?.read::<Direction>()?;
         let port_id = st.field()?.read::<PortId>()?;
-        let id = st.field()?.read_sized::<Param>()?;
+        let id = st.field()?.read_sized::<id::Param>()?;
         let flags = st.field()?.read_sized::<u32>()?;
 
         let port = node.ports.get_mut(direction, port_id)?;
@@ -1472,10 +1472,10 @@ struct ReceivedFd {
 
 #[derive(Debug)]
 enum NodeUpdateWhat {
-    SetNodeParam(Param),
-    RemoveNodeParam(Param),
-    SetPortParam(Direction, PortId, Param),
-    RemovePortParam(Direction, PortId, Param),
+    SetNodeParam(id::Param),
+    RemoveNodeParam(id::Param),
+    SetPortParam(Direction, PortId, id::Param),
+    RemovePortParam(Direction, PortId, id::Param),
 }
 
 #[derive(Debug)]

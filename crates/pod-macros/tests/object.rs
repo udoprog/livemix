@@ -13,27 +13,27 @@ macro_rules! roundtrip {
 #[test]
 fn object() -> Result<(), Error> {
     use pod::{Readable, Writable};
-    use protocol::id::{AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param};
+    use protocol::id;
 
     #[derive(Debug, PartialEq, Readable, Writable)]
-    #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
+    #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
     struct RawFormat {
-        #[pod(property(key = Format::MEDIA_TYPE))]
-        media_type: MediaType,
-        #[pod(property(key = Format::MEDIA_SUB_TYPE))]
-        media_sub_type: MediaSubType,
-        #[pod(property(key = Format::AUDIO_FORMAT))]
-        audio_format: AudioFormat,
-        #[pod(property(key = Format::AUDIO_CHANNELS))]
+        #[pod(property(key = id::Format::MEDIA_TYPE))]
+        media_type: id::MediaType,
+        #[pod(property(key = id::Format::MEDIA_SUB_TYPE))]
+        media_sub_type: id::MediaSubType,
+        #[pod(property(key = id::Format::AUDIO_FORMAT))]
+        audio_format: id::AudioFormat,
+        #[pod(property(key = id::Format::AUDIO_CHANNELS))]
         channels: u32,
-        #[pod(property = Format::AUDIO_RATE)]
+        #[pod(property = id::Format::AUDIO_RATE)]
         audio_rate: u32,
     }
 
     roundtrip!(RawFormat {
-        media_type: MediaType::AUDIO,
-        media_sub_type: MediaSubType::DSP,
-        audio_format: AudioFormat::F32,
+        media_type: id::MediaType::AUDIO,
+        media_sub_type: id::MediaSubType::DSP,
+        audio_format: id::AudioFormat::F32,
         channels: 2,
         audio_rate: 44100
     })?;
@@ -43,10 +43,10 @@ fn object() -> Result<(), Error> {
 #[test]
 fn empty_object() -> Result<(), Error> {
     use pod::{Readable, Writable};
-    use protocol::id::{ObjectType, Param};
+    use protocol::id;
 
     #[derive(Debug, PartialEq, Readable, Writable)]
-    #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
+    #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
     struct RawObject {}
 
     roundtrip!(RawObject {})?;
@@ -56,23 +56,30 @@ fn empty_object() -> Result<(), Error> {
 #[test]
 fn choice_field() -> Result<(), Error> {
     use pod::{Readable, Writable};
-    use protocol::id::{Format, MediaType, ObjectType, Param};
+    use protocol::id;
 
     #[derive(Debug, PartialEq, Readable, Writable)]
-    #[pod(object(type = ObjectType::FORMAT, id = Param::FORMAT))]
+    #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::FORMAT))]
     struct RawFormat {
-        #[pod(property(key = Format::MEDIA_TYPE))]
-        media_type: MediaType,
+        #[pod(property(key = id::Format::MEDIA_TYPE))]
+        media_type: id::MediaType,
     }
 
     let mut pod = pod::array();
 
     pod.as_mut()
-        .write_object(ObjectType::FORMAT, Param::FORMAT, |obj| {
-            obj.property(Format::MEDIA_TYPE)
-                .write_choice(ChoiceType::NONE, Type::ID, |choice| {
-                    choice.write((MediaType::AUDIO, MediaType::VIDEO, MediaType::APPLICATION))
-                })
+        .write_object(id::ObjectType::FORMAT, id::Param::FORMAT, |obj| {
+            obj.property(id::Format::MEDIA_TYPE).write_choice(
+                ChoiceType::NONE,
+                Type::ID,
+                |choice| {
+                    choice.write((
+                        id::MediaType::AUDIO,
+                        id::MediaType::VIDEO,
+                        id::MediaType::APPLICATION,
+                    ))
+                },
+            )
         })?;
 
     let read = pod.as_ref().read::<RawFormat>()?;
@@ -80,7 +87,7 @@ fn choice_field() -> Result<(), Error> {
     assert_eq!(
         read,
         RawFormat {
-            media_type: MediaType::AUDIO,
+            media_type: id::MediaType::AUDIO,
         }
     );
     Ok(())

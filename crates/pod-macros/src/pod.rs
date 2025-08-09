@@ -147,7 +147,7 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
     let fields = fields(&cx, &input.data)?;
 
     let (add, lt) = 'lt: {
-        for lt in generics.lifetimes() {
+        if let Some(lt) = generics.lifetimes().next() {
             break 'lt (false, lt.lifetime.clone());
         }
 
@@ -190,7 +190,9 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                 })
             };
         }
-        attrs::Container::Object(attrs::Object { ty, id }) => {
+        attrs::Container::Object(o) => {
+            let attrs::Object { ty, id } = &*o;
+
             let mut keys = Vec::new();
             let mut vars = Vec::new();
             let mut types = Vec::new();
@@ -214,10 +216,8 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                 fallback.push(quote!(<#ty as #default_t>::default()));
             }
 
-            let match_fields;
-
-            if !keys.is_empty() {
-                match_fields = quote! {
+            let match_fields = if !keys.is_empty() {
+                quote! {
                     match #raw_id_t::from_id(#property::key(&prop)) {
                         #(#keys => {
                             #vars = #option::Some(#pod_item_t::read(#property::value(prop))?);
@@ -226,8 +226,8 @@ pub fn readable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
                     }
                 }
             } else {
-                match_fields = quote!();
-            }
+                quote!()
+            };
 
             let accessor = fields.iter().map(|f| &f.accessor);
 
@@ -301,7 +301,7 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
         ..
     } = &toks;
 
-    let fields = fields(&cx, &input.data)?;
+    let fields = fields(cx, &input.data)?;
     let accessor = fields.iter().map(|f| &f.accessor).collect::<Vec<_>>();
 
     let inner;
@@ -320,7 +320,9 @@ pub fn writable(cx: &Ctxt, input: syn::DeriveInput) -> Result<TokenStream, ()> {
 
             impl_embeddable = None;
         }
-        attrs::Container::Object(attrs::Object { ty, id }) => {
+        attrs::Container::Object(o) => {
+            let attrs::Object { ty, id } = &*o;
+
             let mut keys = Vec::new();
 
             for f in &fields {

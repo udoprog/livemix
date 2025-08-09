@@ -24,10 +24,7 @@ use pod::Writable;
 use pod::{ChoiceType, DynamicBuf, Object, Type};
 use protocol::consts::{self, Direction};
 use protocol::flags::{ParamFlag, Status};
-use protocol::id::{
-    self, AudioFormat, Format, MediaSubType, MediaType, ObjectType, Param, ParamBuffers, ParamIo,
-    ParamMeta,
-};
+use protocol::id;
 use protocol::{ffi, flags, object};
 use tracing::Level;
 
@@ -318,7 +315,7 @@ pub struct PortInputBuffer<'io, 'buf> {
 impl PortInputBuffer<'_, '_> {
     /// Access the underlying buffer mutably.
     pub fn buffer_mut(&mut self) -> &mut Buffer {
-        &mut self.buffer
+        self.buffer
     }
 
     /// The mix the input buffer is associated with.
@@ -421,8 +418,8 @@ pub struct Port {
     /// This tells you the peers are connected to the port.
     pub mix_info: PortMixInfo,
     modified: bool,
-    param_values: BTreeMap<Param, Vec<PortParam<DynamicBuf>>>,
-    param_flags: BTreeMap<Param, ParamFlag>,
+    param_values: BTreeMap<id::Param, Vec<PortParam<DynamicBuf>>>,
+    param_flags: BTreeMap<id::Param, ParamFlag>,
 }
 
 impl Port {
@@ -433,7 +430,7 @@ impl Port {
     }
 
     /// Set a parameter flag.
-    fn set_flag(&mut self, id: Param, flag: flags::ParamFlag) {
+    fn set_flag(&mut self, id: id::Param, flag: flags::ParamFlag) {
         match self.param_flags.entry(id) {
             Entry::Vacant(e) => {
                 e.insert(flag);
@@ -451,12 +448,12 @@ impl Port {
     }
 
     /// Set a parameter flag.
-    pub fn set_read(&mut self, id: Param) {
+    pub fn set_read(&mut self, id: id::Param) {
         self.set_flag(id, flags::ParamFlag::READ);
     }
 
     /// Set that a parameter is writable.
-    pub fn set_write(&mut self, id: Param) {
+    pub fn set_write(&mut self, id: id::Param) {
         self.set_flag(id, flags::ParamFlag::WRITE);
     }
 
@@ -464,7 +461,7 @@ impl Port {
     #[inline]
     pub fn set_param(
         &mut self,
-        id: Param,
+        id: id::Param,
         values: impl IntoIterator<Item = PortParam<impl AsSlice>, IntoIter: ExactSizeIterator>,
     ) -> Result<()> {
         let mut iter = values.into_iter();
@@ -512,7 +509,7 @@ impl Port {
     /// Remove a parameter from the port and return the values of the removed
     /// parameter if it exists.
     #[inline]
-    pub fn remove_param(&mut self, id: Param) -> Option<Vec<PortParam>> {
+    pub fn remove_param(&mut self, id: id::Param) -> Option<Vec<PortParam>> {
         let param = self.param_values.remove(&id)?;
 
         // If we remove a parameter it is no longer readable.
@@ -524,7 +521,7 @@ impl Port {
     }
 
     /// Get the values of a parameter.
-    pub fn get_param(&self, id: Param) -> &[PortParam<DynamicBuf>] {
+    pub fn get_param(&self, id: id::Param) -> &[PortParam<DynamicBuf>] {
         self.param_values
             .get(&id)
             .map(Vec::as_slice)
@@ -532,12 +529,12 @@ impl Port {
     }
 
     /// Get parameters from the port.
-    pub(crate) fn param_values(&self) -> &BTreeMap<Param, Vec<PortParam<impl AsSlice>>> {
+    pub(crate) fn param_values(&self) -> &BTreeMap<id::Param, Vec<PortParam<impl AsSlice>>> {
         &self.param_values
     }
 
     /// Get parameters from the port.
-    pub(crate) fn param_flags(&self) -> &BTreeMap<Param, flags::ParamFlag> {
+    pub(crate) fn param_flags(&self) -> &BTreeMap<id::Param, flags::ParamFlag> {
         &self.param_flags
     }
 

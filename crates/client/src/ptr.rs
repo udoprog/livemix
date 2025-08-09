@@ -157,39 +157,50 @@ impl<T> Atomic<T>
 where
     T: IntoAtomic,
 {
+    /// Create a new `Atomic` pointer from a raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to a validly inhabited value of type `T`.
     #[inline]
     pub unsafe fn new_unchecked(ptr: *const T) -> Self {
+        debug_assert!(!ptr.is_null(), "Atomic pointer cannot be null");
+        debug_assert!(
+            ptr.align_offset(align_of::<T>()) == 0,
+            "Atomic pointer must be aligned"
+        );
+
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.cast_mut().cast()) },
         }
     }
 
     #[inline]
-    pub unsafe fn store(&self, value: T) {
+    pub fn store(&self, value: T) {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { (*self.ptr.as_ptr()).store(T::into_repr(value)) }
     }
 
     #[inline]
-    pub unsafe fn swap(&self, value: T) -> T {
+    pub fn swap(&self, value: T) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).swap(T::into_repr(value))) }
     }
 
     #[inline]
-    pub unsafe fn fetch_sub(&self, value: T) -> T {
+    pub fn fetch_sub(&self, value: T) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).fetch_sub(T::into_repr(value))) }
     }
 
     #[inline]
-    pub unsafe fn load(&self) -> T {
+    pub fn load(&self) -> T {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { T::from_repr((*self.ptr.as_ptr()).load()) }
     }
 
     #[inline]
-    pub unsafe fn compare_exchange(&self, current: T, new: T) -> bool {
+    pub fn compare_exchange(&self, current: T, new: T) -> bool {
         // SAFETY: We are assuming that the pointer is valid and aligned.
         unsafe { (*self.ptr.as_ptr()).compare_exchange(T::into_repr(current), T::into_repr(new)) }
     }
@@ -212,27 +223,53 @@ pub struct Volatile<T> {
 }
 
 impl<T> Volatile<T> {
+    /// Create a new `Volatile` pointer from a raw pointer.
     #[inline]
     pub unsafe fn new_unchecked(ptr: *const T) -> Self {
+        debug_assert!(!ptr.is_null(), "Volatile pointer cannot be null");
+        debug_assert!(
+            ptr.align_offset(align_of::<T>()) == 0,
+            "Volatile pointer must be aligned"
+        );
+
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr.cast_mut()) },
         }
     }
 
     /// Read the value.
-    pub unsafe fn read(&self) -> T {
+    ///
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring that the data being pointed to is
+    /// a validly initialized value of type `T`.
+    pub fn read(&self) -> T
+    where
+        T: Copy,
+    {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe { self.ptr.as_ptr().read_volatile() }
     }
 
     /// Write a value.
-    pub fn write(&self, value: T) {
+    ///
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring that the data being pointed to is
+    /// aligned and sized for the type `T`.
+    pub fn write(&self, value: T)
+    where
+        T: Copy,
+    {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe { self.ptr.as_ptr().write_volatile(value) };
     }
 
     /// Replace a value and return the old one.
-    pub fn replace(&self, value: T) -> T {
+    pub fn replace(&self, value: T) -> T
+    where
+        T: Copy,
+    {
         // SAFETY: We are assuming that the field pointer is valid.
         unsafe {
             let old = self.ptr.as_ptr().read_volatile();

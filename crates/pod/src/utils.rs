@@ -7,30 +7,12 @@ use core::slice;
 use crate::Error;
 use crate::error::ErrorKind;
 
-/// Trait implemented for types which are word-sized and can inhabit all bit
-/// patterns.
-pub unsafe trait AlignableWith
-where
-    Self: Sized,
-{
-    /// The size of the word in the alignment.
-    #[doc(hidden)]
-    const WORD_SIZE: usize = {
-        assert!(mem::size_of::<Self>() >= mem::size_of::<u64>());
-        assert!(mem::size_of::<Self>() % mem::size_of::<u64>() == 0);
-        // Helper types to deal with alignment assumes that alignment is less than or equal to 8.
-        assert!(mem::align_of::<Self>() <= 8);
-        mem::size_of::<Self>() / mem::size_of::<u64>()
-    };
-}
-
-unsafe impl AlignableWith for u64 {}
-unsafe impl<const N: usize> AlignableWith for [u64; N] {}
-unsafe impl AlignableWith for [u32; 2] {}
-unsafe impl AlignableWith for [u32; 4] {}
-unsafe impl AlignableWith for [u32; 6] {}
-
 /// Indicates a type which has all bit patterns inhabited.
+///
+/// # Safety
+///
+/// This is unsafe to implement since it requires information about the type, in
+/// particular that all bit patterns are inhabitable.
 pub unsafe trait BytesInhabited
 where
     Self: 'static + Copy,

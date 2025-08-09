@@ -39,12 +39,12 @@ fn with_lifetime() -> Result<(), Error> {
 #[test]
 fn object() -> Result<(), Error> {
     use pod::{Readable, Writable};
-    use protocol::id::{Format, ObjectType, Param};
+    use protocol::id;
 
     #[derive(Debug, PartialEq, Readable, Writable)]
-    #[pod(object(type = ObjectType::FORMAT, id = Param::ENUM_FORMAT))]
+    #[pod(object(type = id::ObjectType::FORMAT, id = id::Param::ENUM_FORMAT))]
     struct RawFormat {
-        #[pod(property(key = Format::AUDIO_CHANNELS))]
+        #[pod(property(key = id::Format::AUDIO_CHANNELS))]
         channels: u32,
     }
 
