@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use client::events::{ObjectKind, RemovePortParamEvent, StreamEvent};
+use client::events::{ObjectKind, RemovePortParamEvent, SetPortParamEvent, StreamEvent};
 use client::{ClientNode, MixId, Port, PortId, Stats, Stream};
 use pod::buf::ArrayVec;
 use pod::{ChoiceType, Type};
@@ -302,30 +302,29 @@ fn main() -> Result<()> {
                     let node = stream.node_mut(node)?;
                     app.process(node).context("Processing node")?;
                 }
-                StreamEvent::SetPortParam(ev) => {
-                    // Decode a received parameter.
-                    match ev.param {
-                        id::Param::FORMAT => {
-                            let node = stream.node(ev.node_id)?;
-                            let port = node.ports.get(ev.direction, ev.port_id)?;
+                StreamEvent::SetPortParam(SetPortParamEvent {
+                    param: id::Param::FORMAT,
+                    node_id,
+                    direction,
+                    port_id,
+                    ..
+                }) => {
+                    let node = stream.node(node_id)?;
+                    let port = node.ports.get(direction, port_id)?;
 
-                            if let [param] = port.parameters.get_param(ev.param) {
-                                let format = param.value.as_ref().read::<object::Format>()?;
+                    if let [param] = port.parameters.get_param(id::Param::FORMAT) {
+                        let format = param.value.as_ref().read::<object::Format>()?;
 
-                                match format.media_type {
-                                    id::MediaType::AUDIO => {
-                                        let audio_format =
-                                            param.value.as_ref().read::<object::AudioFormat>()?;
-                                        app.formats
-                                            .insert((ev.direction, ev.port_id), audio_format);
-                                    }
-                                    other => {
-                                        tracing::error!(?other, "Unsupported media type on port");
-                                    }
-                                }
+                        match format.media_type {
+                            id::MediaType::AUDIO => {
+                                let audio_format =
+                                    param.value.as_ref().read::<object::AudioFormat>()?;
+                                app.formats.insert((direction, port_id), audio_format);
+                            }
+                            other => {
+                                tracing::error!(?other, "Unsupported media type on port");
                             }
                         }
-                        _ => {}
                     }
                 }
                 StreamEvent::RemovePortParam(RemovePortParamEvent {
@@ -334,11 +333,7 @@ fn main() -> Result<()> {
                     port_id,
                     ..
                 }) => {
-                    tracing::info!(
-                        "Removed format parameter from port {}/{}",
-                        direction,
-                        port_id
-                    );
+                    tracing::info!("Removed format parameter from port {direction}/{port_id}");
                     app.formats.remove(&(direction, port_id));
                 }
                 _ => {

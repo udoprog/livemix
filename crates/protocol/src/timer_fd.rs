@@ -104,7 +104,7 @@ impl TimerFd {
             }
 
             if n != 8 {
-                return Err(io::Error::new(io::ErrorKind::Other, "expected 8 bytes"));
+                return Err(io::Error::other("expected 8 bytes"));
             }
 
             Ok(Some(value.assume_init()))

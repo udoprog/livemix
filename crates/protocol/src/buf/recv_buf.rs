@@ -45,7 +45,7 @@ impl RecvBuf {
     /// ```
     #[inline]
     pub const fn new() -> Self {
-        RecvBuf {
+        Self {
             data: ptr::NonNull::<u64>::dangling().cast(),
             cap: 0,
             read: 0,
@@ -477,5 +477,12 @@ impl fmt::Debug for RecvBuf {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.as_bytes()).finish()
+    }
+}
+
+impl Default for RecvBuf {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }

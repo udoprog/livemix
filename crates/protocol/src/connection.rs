@@ -168,8 +168,8 @@ impl Connection {
             assert!(mem::align_of::<MaybeUninit<[u64; 64]>>() >= mem::align_of::<libc::cmsghdr>());
         }
 
-        let fd_len = mem::size_of::<RawFd>() * fds.len();
-        let size = unsafe { libc::CMSG_SPACE(fd_len as u32) as usize };
+        let fd_size = mem::size_of_val(fds);
+        let size = unsafe { libc::CMSG_SPACE(fd_size as u32) as usize };
 
         let mut buf = MaybeUninit::<[u64; 64]>::uninit();
         assert!(mem::size_of_val(&buf) >= size);
@@ -241,7 +241,7 @@ impl Connection {
 
                         debug_assert!(data_offset >= 0);
 
-                        let data_byte_count = c.cmsg_len as usize - data_offset as usize;
+                        let data_byte_count = c.cmsg_len - data_offset as usize;
 
                         debug_assert!(c.cmsg_len as isize >= data_offset);
                         debug_assert!(data_byte_count % mem::size_of::<RawFd>() == 0);

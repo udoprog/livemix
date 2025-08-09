@@ -427,7 +427,7 @@ where
     }
 }
 
-impl<'de, B> fmt::Debug for Object<B>
+impl<B> fmt::Debug for Object<B>
 where
     B: AsSlice,
 {
@@ -463,7 +463,7 @@ where
         let mut f = f.debug_struct("Object");
         f.field("object_type", &self.object_type::<u32>());
         f.field("object_id", &self.object_id::<u32>());
-        f.field("properties", &Properties(&self));
+        f.field("properties", &Properties(self));
         f.finish()
     }
 }

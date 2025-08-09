@@ -81,13 +81,13 @@ where
         child_size: usize,
         child_type: Type,
     ) -> Result<Self, Error> {
-        if let Some(size) = child_type.size() {
-            if size != child_size {
-                return Err(Error::new(ErrorKind::ChildSizeMismatch {
-                    actual: child_size,
-                    expected: size,
-                }));
-            }
+        if let Some(size) = child_type.size()
+            && size != child_size
+        {
+            return Err(Error::new(ErrorKind::ChildSizeMismatch {
+                actual: child_size,
+                expected: size,
+            }));
         };
 
         let header = {

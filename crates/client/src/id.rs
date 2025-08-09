@@ -68,3 +68,8 @@ id! {
     pub struct LocalId;
     pub struct GlobalId;
 }
+
+impl GlobalId {
+    /// An invalid global ID.
+    pub const INVALID: Self = Self(u32::MAX);
+}

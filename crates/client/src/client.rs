@@ -344,13 +344,7 @@ impl Client {
             st.write(change_mask)?;
 
             // Parameters.
-            st.write(
-                parameters
-                    .values
-                    .iter()
-                    .map(|(_, p)| p.len())
-                    .sum::<usize>() as u32,
-            )?;
+            st.write(parameters.values.values().map(|p| p.len()).sum::<usize>() as u32)?;
 
             for params in parameters.values.values() {
                 for param in params {

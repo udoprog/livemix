@@ -13,7 +13,7 @@ use crate::Prop;
 /// Collection of properties.
 #[derive(Default)]
 pub struct Properties {
-    properties: BTreeMap<String, String>,
+    data: BTreeMap<String, String>,
     modified: bool,
 }
 
@@ -21,7 +21,7 @@ impl Properties {
     /// Create a new empty collection of properties.
     pub const fn new() -> Self {
         Self {
-            properties: BTreeMap::new(),
+            data: BTreeMap::new(),
             modified: false,
         }
     }
@@ -38,12 +38,17 @@ impl Properties {
 
     /// Get the number of properties in the collection.
     pub fn len(&self) -> usize {
-        self.properties.len()
+        self.data.len()
+    }
+
+    /// Test if the collection of properties is empty.
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 
     /// Iterate over the properties in the collection.
-    pub fn iter(&self) -> impl Iterator<Item = (&Prop, &str)> {
-        self.properties
+    pub fn iter(&self) -> Iter<'_> {
+        self.data
             .iter()
             .map(|(k, v)| (Prop::new(k.as_str()), v.as_str()))
     }
@@ -53,9 +58,7 @@ impl Properties {
         let key = key.as_ref().as_str();
         let value = value.as_ref();
 
-        let old = self
-            .properties
-            .insert(String::from(key), String::from(value));
+        let old = self.data.insert(String::from(key), String::from(value));
 
         let Some(old) = old else {
             self.modified = true;
@@ -76,7 +79,7 @@ impl Properties {
         K: ?Sized + Ord,
         String: Borrow<K>,
     {
-        let value = self.properties.remove(key);
+        let value = self.data.remove(key);
         self.modified |= value.is_some();
         value
     }
@@ -87,7 +90,7 @@ impl Properties {
         K: ?Sized + Ord,
         String: Borrow<K>,
     {
-        self.properties.get(key).map(|s| s.as_str())
+        self.data.get(key).map(|s| s.as_str())
     }
 
     /// Extend this collection of properties with another.
@@ -138,7 +141,7 @@ impl Properties {
 impl fmt::Debug for Properties {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.properties.fmt(f)
+        self.data.fmt(f)
     }
 }
 
@@ -152,7 +155,7 @@ impl<'a> IntoIterator for &'a Properties {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.properties
+        self.data
             .iter()
             .map(|(k, v)| (Prop::new(k.as_str()), v.as_str()))
     }

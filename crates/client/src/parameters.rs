@@ -159,3 +159,10 @@ impl fmt::Debug for Parameters {
             .finish()
     }
 }
+
+impl Default for Parameters {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}

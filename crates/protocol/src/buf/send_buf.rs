@@ -38,7 +38,7 @@ impl SendBuf {
     /// ```
     #[inline]
     pub const fn new() -> Self {
-        SendBuf {
+        Self {
             data: ptr::NonNull::<u64>::dangling().cast(),
             cap: 0,
             read: 0,
@@ -416,5 +416,12 @@ impl fmt::Debug for SendBuf {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SendBuf").field("len", &self.len()).finish()
+    }
+}
+
+impl Default for SendBuf {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }

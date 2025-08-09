@@ -224,6 +224,10 @@ pub struct Volatile<T> {
 
 impl<T> Volatile<T> {
     /// Create a new `Volatile` pointer from a raw pointer.
+    ///
+    /// # Safety
+    ///
+    /// The pointer must point to a validly initialized value of type `T`.
     #[inline]
     pub unsafe fn new_unchecked(ptr: *const T) -> Self {
         debug_assert!(!ptr.is_null(), "Volatile pointer cannot be null");

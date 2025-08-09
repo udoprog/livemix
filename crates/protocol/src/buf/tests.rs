@@ -7,7 +7,7 @@ fn test_as_bytes_mut() -> Result<(), Error> {
     let expected = [1, 2, 3, 4, 5, 6, 7, 8];
 
     let mut buf = RecvBuf::new();
-    assert!(buf.as_bytes_mut()?.len() > 0);
+    assert!(!buf.as_bytes_mut()?.is_empty());
 
     buf.as_bytes_mut()?[..3].copy_from_slice(&[1, 2, 3]);
 

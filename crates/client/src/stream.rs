@@ -99,9 +99,10 @@ impl Stream {
         ids.set(consts::CORE_ID);
         ids.set(consts::CLIENT_ID);
 
-        let mut client = ClientState::default();
-
-        client.properties = properties;
+        let mut client = ClientState {
+            id: GlobalId::INVALID,
+            properties,
+        };
 
         let mut tokens = IdSet::new();
         let connection_token = Token::new(tokens.alloc().context("no more tokens")? as u64);
@@ -325,11 +326,11 @@ impl Stream {
 
     #[tracing::instrument(skip(self, recv))]
     fn process_messages(&mut self, recv: &mut RecvBuf) -> Result<bool> {
-        if !self.has_header {
-            if let Some(h) = recv.read::<Header>() {
-                self.header = h;
-                self.has_header = true;
-            }
+        if !self.has_header
+            && let Some(h) = recv.read::<Header>()
+        {
+            self.header = h;
+            self.has_header = true;
         }
 
         if !self.has_header {
@@ -362,10 +363,8 @@ impl Stream {
             );
 
             if n_fds > 0 {
-                for fd in self.fds.drain(..n_fds) {
-                    if let Some(fd) = fd {
-                        tracing::warn!("Dropping unused file descriptor: {fd:?}");
-                    }
+                for fd in self.fds.drain(..n_fds).flatten() {
+                    tracing::warn!("Closing unused file descriptor: {fd:?}");
                 }
 
                 tracing::trace!(n_fds, fds_after = ?self.fds, "Freed file descriptors");
@@ -814,7 +813,7 @@ impl Stream {
 
     #[tracing::instrument(skip_all)]
     fn client_info(&mut self, mut st: Struct<Slice<'_>>) -> Result<()> {
-        let id = st.field()?.read_sized::<u32>()?;
+        let id = st.field()?.read::<GlobalId>()?;
         let change_mask = st.field()?.read_sized::<u64>()?;
 
         let mut props = st.field()?.read_struct()?;
@@ -823,12 +822,9 @@ impl Stream {
             let n_items = props.field()?.read_sized::<i32>()?;
 
             for _ in 0..n_items {
-                let key = props.field()?.read_unsized::<CStr>()?;
-                let value = props.field()?.read_unsized::<CStr>()?;
-
-                self.client
-                    .server_properties
-                    .insert(key.to_owned(), value.to_owned());
+                let key = props.field()?.read_unsized::<str>()?;
+                let value = props.field()?.read_unsized::<str>()?;
+                self.client.properties.insert(key, value);
             }
         }
 
@@ -1467,11 +1463,10 @@ struct CoreState {
     properties: BTreeMap<String, String>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct ClientState {
-    id: u32,
+    id: GlobalId,
     properties: Properties,
-    server_properties: BTreeMap<CString, CString>,
 }
 
 #[derive(Debug)]

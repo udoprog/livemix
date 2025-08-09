@@ -1,4 +1,6 @@
 #![no_std]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::module_inception)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
