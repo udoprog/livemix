@@ -33,8 +33,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_struct(|st| st.write((1, 2, 3)))?;
     ///
@@ -55,8 +53,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_struct(|st| {
     ///     st.field().write(1i32)?;

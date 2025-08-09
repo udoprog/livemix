@@ -92,7 +92,7 @@ macro_rules! __id {
             #[doc = concat!(" Unknown identifiers will be decoded as the default value ", stringify!($default), ".")]
             ///
             /// ```
-            /// use pod::{Pod, Id};
+            /// use pod::Id;
             #[doc = concat!(" use ", stringify!($module), "::", stringify!($ty), ";")]
             ///
             /// let mut pod = pod::array();

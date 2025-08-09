@@ -492,7 +492,7 @@ where
     ///   `child_type`.
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// assert!(pod.as_mut().write_array(Type::STRING, |_| Ok(())).is_err());
@@ -508,7 +508,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// let mut array = pod.as_mut().write_array(Type::INT, |array| {
@@ -551,8 +551,7 @@ where
     ///   bytes of `len`.
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// assert!(pod.write_unsized_array(Type::INT, 5, |_| Ok(())).is_err());
@@ -574,10 +573,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
-    ///
     /// pod.as_mut().write_unsized_array(Type::STRING, 4, |array| {
     ///     // Note: strings are null-terminated, so the length is 4.
     ///     array.child().write_unsized("foo")?;
@@ -613,8 +611,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_struct(|st| {
     ///     st.field().write(1i32)?;
@@ -638,8 +634,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// let st = pod.as_mut().embed_struct(|st| {
     ///     st.field().write(1i32)?;
@@ -672,8 +666,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).write(1i32)?;
@@ -687,8 +679,6 @@ where
     /// Using the return value to immediately read the object back:
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     ///
     /// let mut obj = pod.as_mut().write_object(10, 20, |obj| {
@@ -715,8 +705,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     ///
     /// let obj = pod.as_mut().embed_object(10, 20, |obj| {
@@ -779,8 +767,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().write(1i32)?;
@@ -904,8 +890,6 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_object(10, 20, |obj| {
 ///     obj.property(1).flags(0b001).write(1i32)?;

@@ -20,8 +20,6 @@ impl<B> Property<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).write(1i32)?;
@@ -46,8 +44,6 @@ impl<B> Property<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).flags(0b001).write(1i32)?;
@@ -69,8 +65,6 @@ impl<B> Property<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).write(1i32)?;

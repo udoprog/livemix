@@ -7,8 +7,6 @@ use crate::{AsSlice, Value};
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_sequence(|seq| {
 ///     seq.control().offset(1).ty(10).write(1i32)?;
@@ -40,8 +38,6 @@ impl<B> Control<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().offset(42).write(1i32)?;
@@ -63,8 +59,6 @@ impl<B> Control<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().ty(10).write(1i32)?;
@@ -86,8 +80,6 @@ impl<B> Control<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().write(1i32)?;

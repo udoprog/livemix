@@ -241,6 +241,30 @@ where
 
 crate::macros::encode_into_unsized!(impl [B] Struct<B> where B: AsSlice);
 
+/// The [`Readable`] implementation for [`Struct`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Struct, Slice};
+///
+/// let mut pod = pod::array();
+/// pod.as_mut().write_struct(|st| {
+///     st.field().write(1i32)?;
+///     st.field().write(2i32)?;
+///     st.field().write(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut st = pod.as_ref().read::<Struct<Slice<'_>>>()?;
+///
+/// assert!(!st.is_empty());
+/// assert_eq!(st.field()?.read_sized::<i32>()?, 1i32);
+/// assert_eq!(st.field()?.read_sized::<i32>()?, 2i32);
+/// assert_eq!(st.field()?.read_sized::<i32>()?, 3i32);
+/// assert!(st.is_empty());
+/// # Ok::<_, pod::Error>(())
+/// ```
 impl<'de> Readable<'de> for Struct<Slice<'de>> {
     #[inline]
     fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {

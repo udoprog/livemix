@@ -42,7 +42,7 @@ impl<B> Value<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write(10i32)?;
@@ -380,8 +380,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).flags(0b001).write(1i32)?;
@@ -424,8 +422,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::Type;
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().offset(1).ty(10).write(1i32)?;
@@ -638,8 +634,6 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_object(10, 20, |obj| {
 ///     obj.property(1).flags(0b001).write(1i32)?;

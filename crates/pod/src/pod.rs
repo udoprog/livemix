@@ -347,10 +347,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
-    ///
     /// pod.as_mut().write_array(Type::INT, |array| {
     ///     array.child().write(1i32)?;
     ///     array.child().write(2i32)?;
@@ -375,7 +374,7 @@ where
     /// Encoding an empty array:
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |_| Ok(()))?;
@@ -433,8 +432,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).flags(0b001).write(1i32)?;
@@ -468,8 +465,6 @@ where
     /// Decoding an empty object:
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |_| Ok(()))?;
     ///
@@ -487,8 +482,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|seq| {
     ///     seq.control().offset(1).ty(10).write(1i32)?;
@@ -522,8 +515,6 @@ where
     /// Encoding an empty sequence:
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_sequence(|_| Ok(()))?;
     ///
@@ -642,7 +633,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
     /// let mut pod = pod::array();
     ///
     /// pod.as_mut().write(1);
@@ -723,8 +713,6 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_object(10, 20, |obj| {
 ///     obj.property(1).flags(0b001).write(1i32)?;

@@ -45,7 +45,7 @@ crate::macros::encode_into_sized!(bool);
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Id};
+/// use pod::Id;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(Id(142u32))?;
@@ -273,7 +273,7 @@ crate::macros::encode_into_sized!(f64);
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Rectangle};
+/// use pod::Rectangle;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(Rectangle::new(100, 200))?;
@@ -297,7 +297,7 @@ crate::macros::encode_into_sized!(Rectangle);
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Fraction};
+/// use pod::Fraction;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(Fraction::new(800, 600))?;
@@ -321,7 +321,7 @@ crate::macros::encode_into_sized!(Fraction);
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Fraction};
+/// use pod::Fraction;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(*b"hello world")?;
@@ -345,7 +345,7 @@ crate::macros::encode_into_sized!(impl [const N: usize] [u8; N]);
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Pointer};
+/// use pod::Pointer;
 ///
 /// let value = 1u32;
 ///
@@ -376,7 +376,7 @@ crate::macros::encode_into_sized!(Pointer);
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Fd};
+/// use pod::Fd;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(Fd::new(4))?;

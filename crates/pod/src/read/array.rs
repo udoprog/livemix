@@ -15,10 +15,9 @@ use crate::{AsSlice, BufferUnderflow, Error, Reader, Slice, Type, UnsizedWritabl
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
+/// use pod::Type;
 ///
 /// let mut pod = pod::array();
-///
 /// pod.as_mut().write_array(Type::INT, |array| {
 ///     array.child().write(1i32)?;
 ///     array.child().write(2i32)?;
@@ -43,7 +42,7 @@ use crate::{AsSlice, BufferUnderflow, Error, Reader, Slice, Type, UnsizedWritabl
 /// Decoding unsized items:
 ///
 /// ```
-/// use pod::{Pod, Type};
+/// use pod::Type;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_unsized_array(Type::STRING, 4, |array| {
@@ -83,10 +82,9 @@ impl<B> Array<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
-    ///
     /// pod.as_mut().write_array(Type::INT, |array| {
     ///     array.child().write(1i32)?;
     ///     Ok(())
@@ -107,7 +105,7 @@ impl<B> Array<B> {
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |_| Ok(()))?;
@@ -160,10 +158,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
-    ///
     /// pod.as_mut().write_array(Type::INT, |array| {
     ///     array.child().write(1)?;
     ///     array.child().write(2)?;
@@ -192,7 +189,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |array| {
@@ -232,7 +229,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |array| {
@@ -280,7 +277,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |array| {
@@ -333,10 +330,9 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
+/// use pod::Type;
 ///
 /// let mut pod = pod::array();
-///
 /// pod.as_mut().write_array(Type::INT, |array| {
 ///     array.child().write(1i32)?;
 ///     array.child().write(2i32)?;

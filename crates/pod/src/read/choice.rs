@@ -187,7 +187,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |array| {
@@ -210,7 +210,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_array(Type::INT, |_| Ok(()))?;

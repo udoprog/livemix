@@ -1126,10 +1126,10 @@ impl Stream {
 
         let port = node.ports.get_mut(direction, port_id)?;
 
-        let what = if let Some(param) = st.field()?.read_option()? {
-            tracing::trace!(?id, flags, object = ?param.as_ref().read_object()?, "set");
+        let what = if let Some(value) = st.read::<Option<Object<Slice<'_>>>>()? {
+            tracing::trace!(?id, flags, object = ?value, "set");
             port.parameters
-                .set(id, [PortParam::with_flags(param.read_object()?, flags)])?;
+                .set(id, [PortParam::with_flags(value, flags)])?;
             NodeUpdateWhat::SetPortParam(direction, port_id, id)
         } else {
             tracing::trace!(?id, flags, "remove");

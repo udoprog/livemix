@@ -34,7 +34,7 @@ impl RawId for u32 {
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Id};
+/// use pod::Id;
 ///
 /// let mut pod = pod::array();
 /// pod.as_mut().write(Id(142u32))?;

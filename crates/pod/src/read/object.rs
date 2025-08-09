@@ -103,7 +103,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
@@ -144,7 +144,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
+    /// use pod::Type;
     ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
@@ -190,8 +190,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).flags(0b001).write(1i32)?;
@@ -232,6 +230,15 @@ where
             object_id: self.object_id,
         })
     }
+
+    #[inline]
+    fn into_slice(self) -> Object<Slice<'de>> {
+        Object {
+            buf: Slice::new(self.buf.as_bytes()),
+            object_type: self.object_type,
+            object_id: self.object_id,
+        }
+    }
 }
 
 impl<B> Object<B>
@@ -245,8 +252,6 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pod::{Pod, Type};
-    ///
     /// let mut pod = pod::array();
     /// pod.as_mut().write_object(10, 20, |obj| {
     ///     obj.property(1).flags(0b001).write(1i32)?;
@@ -289,8 +294,6 @@ where
 /// # Examples
 ///
 /// ```
-/// use pod::{Pod, Type};
-///
 /// let mut pod = pod::array();
 /// pod.as_mut().write_object(10, 20, |obj| {
 ///     obj.property(1).flags(0b001).write(1i32)?;
@@ -424,6 +427,49 @@ where
     fn next(&mut self) -> Result<Self::Item, Error> {
         let buf = self.buf.split(self.buf.len()).ok_or(BufferUnderflow)?;
         Ok(Object::new(buf, self.object_type, self.object_id))
+    }
+}
+
+/// The [`Readable`] implementation for [`Object`].
+///
+/// # Examples
+///
+/// ```
+/// use pod::{Object, Slice};
+///
+/// let mut pod = pod::array();
+/// pod.as_mut().write_object(10, 20, |obj| {
+///     obj.property(1).flags(0b001).write(1i32)?;
+///     obj.property(2).flags(0b010).write(2i32)?;
+///     obj.property(3).flags(0b100).write(3i32)?;
+///     Ok(())
+/// })?;
+///
+/// let mut obj = pod.as_ref().read::<Object<Slice<'_>>>()?;
+/// assert!(!obj.is_empty());
+///
+/// let p = obj.property()?;
+/// assert_eq!(p.key::<u32>(), 1);
+/// assert_eq!(p.flags(), 0b001);
+/// assert_eq!(p.value().read_sized::<i32>()?, 1);
+///
+/// let p = obj.property()?;
+/// assert_eq!(p.key::<u32>(), 2);
+/// assert_eq!(p.flags(), 0b010);
+/// assert_eq!(p.value().read_sized::<i32>()?, 2);
+///
+/// let p = obj.property()?;
+/// assert_eq!(p.key::<u32>(), 3);
+/// assert_eq!(p.flags(), 0b100);
+/// assert_eq!(p.value().read_sized::<i32>()?, 3);
+///
+/// assert!(obj.is_empty());
+/// # Ok::<_, pod::Error>(())
+/// ```
+impl<'de> Readable<'de> for Object<Slice<'de>> {
+    #[inline]
+    fn read_from(pod: &mut impl PodStream<'de>) -> Result<Self, Error> {
+        Ok(pod.next()?.read_object()?.into_slice())
     }
 }
 
