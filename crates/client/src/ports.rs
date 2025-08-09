@@ -133,20 +133,13 @@ impl<'de> Readable<'de> for MixId {
 }
 
 /// A port parameter with associated flags.
-#[derive(Debug)]
 #[non_exhaustive]
-pub struct PortParam<B = DynamicBuf>
-where
-    B: AsSlice,
-{
+pub struct PortParam<B = DynamicBuf> {
     pub value: Object<B>,
     pub flags: u32,
 }
 
-impl<B> PortParam<B>
-where
-    B: AsSlice,
-{
+impl<B> PortParam<B> {
     /// Construct a port parameter with empty flags.
     #[inline]
     pub fn new(value: Object<B>) -> Self {
@@ -157,6 +150,26 @@ where
     #[inline]
     pub fn with_flags(value: Object<B>, flags: u32) -> Self {
         Self { value, flags }
+    }
+}
+
+impl<B> From<Object<B>> for PortParam<B> {
+    #[inline]
+    fn from(value: Object<B>) -> Self {
+        Self::new(value)
+    }
+}
+
+impl<B> fmt::Debug for PortParam<B>
+where
+    B: AsSlice,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PortParam")
+            .field("value", &self.value)
+            .field("flags", &self.flags)
+            .finish()
     }
 }
 
@@ -475,7 +488,14 @@ impl Port {
     /// This will append the value to the existing set of parameters of the
     /// given type.
     #[inline]
-    pub fn push_param(&mut self, id: Param, value: PortParam<impl AsSlice>) -> Result<()> {
+    pub fn push_param<S, V>(&mut self, value: V) -> Result<()>
+    where
+        S: AsSlice,
+        PortParam<S>: From<V>,
+    {
+        let value = PortParam::from(value);
+        let id = value.value.object_id();
+
         self.param_values
             .entry(id)
             .or_default()

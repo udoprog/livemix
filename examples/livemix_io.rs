@@ -9,18 +9,15 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use client::events::StreamEvent;
-use client::{ClientNode, MixId, Port, PortId, PortParam, Stats, Stream};
+use client::{ClientNode, MixId, Port, PortId, Stats, Stream};
 use pod::buf::ArrayVec;
-use pod::{ChoiceType, Readable, Type, Writable};
+use pod::{ChoiceType, Type};
 use protocol::buf::RecvBuf;
 use protocol::consts::Direction;
 use protocol::flags::ChunkFlags;
-use protocol::id::{
-    self, AudioFormat, FormatKey, IoType, MediaSubType, MediaType, Meta, ObjectType, Param,
-    ParamBuffersKey, ParamIoKey, ParamMetaKey,
-};
+use protocol::id;
 use protocol::poll::{Interest, PollEvent};
-use protocol::{Connection, Poll, TimerFd, ffi, object};
+use protocol::{Connection, Poll, TimerFd, ffi, object, param};
 
 const BUFFER_SAMPLES: u32 = 128;
 const M_PI_M2: f32 = std::f32::consts::PI * 2.0;
@@ -56,7 +53,7 @@ impl ExampleApplication {
                 continue;
             };
 
-            if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
+            if format.channels != 1 || format.format != id::AudioFormat::F32P || format.rate == 0 {
                 tracing::warn!(?format, "Unsupported format on output port");
                 continue;
             }
@@ -112,7 +109,7 @@ impl ExampleApplication {
                 continue;
             };
 
-            if format.channels != 1 || format.format != AudioFormat::F32P || format.rate == 0 {
+            if format.channels != 1 || format.format != id::AudioFormat::F32P || format.rate == 0 {
                 tracing::warn!(?format, "Unsupported format on output port");
                 continue;
             }
@@ -164,7 +161,7 @@ impl ExampleApplication {
         }
 
         for (&(port_id, mix_id), b) in &mut self.inputs {
-            if b.format.format != AudioFormat::F32P {
+            if b.format.format != id::AudioFormat::F32P {
                 b.buf.clear();
                 continue;
             }
@@ -275,7 +272,7 @@ fn main() -> Result<()> {
                                 let format = param.value.as_ref().read::<object::Format>()?;
 
                                 match format.media_type {
-                                    MediaType::AUDIO => {
+                                    id::MediaType::AUDIO => {
                                         let audio_format =
                                             param.value.as_ref().read::<object::AudioFormat>()?;
                                         app.formats
@@ -325,93 +322,70 @@ fn main() -> Result<()> {
 }
 
 fn add_port_params(port: &mut Port) -> Result<()> {
-    #[derive(Readable, Writable)]
-    #[pod(object(type = ObjectType::PARAM_IO, id = Param::IO))]
-    struct ParamIo {
-        #[pod(property(key = ParamIoKey::ID))]
-        ty: IoType,
-        #[pod(property(key = ParamIoKey::SIZE))]
-        size: usize,
-    }
-
-    #[derive(Readable, Writable)]
-    #[pod(object(type = ObjectType::PARAM_META, id = Param::META))]
-    struct ParamMeta {
-        #[pod(property(key = ParamMetaKey::TYPE))]
-        ty: Meta,
-        #[pod(property(key = ParamMetaKey::SIZE))]
-        size: usize,
-    }
-
     let mut pod = pod::array();
 
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::FORMAT, Param::ENUM_FORMAT, |obj| {
-            obj.property(FormatKey::MEDIA_TYPE)
-                .write(MediaType::AUDIO)?;
-            obj.property(FormatKey::MEDIA_SUB_TYPE)
-                .write(MediaSubType::DSP)?;
-            obj.property(FormatKey::AUDIO_FORMAT).write_choice(
+    port.push_param(pod.clear_mut().embed_object(
+        id::ObjectType::FORMAT,
+        id::Param::ENUM_FORMAT,
+        |obj| {
+            obj.property(id::FormatKey::MEDIA_TYPE)
+                .write(id::MediaType::AUDIO)?;
+            obj.property(id::FormatKey::MEDIA_SUB_TYPE)
+                .write(id::MediaSubType::DSP)?;
+            obj.property(id::FormatKey::AUDIO_FORMAT).write_choice(
                 ChoiceType::ENUM,
                 Type::ID,
-                |choice| choice.write((AudioFormat::S16, AudioFormat::F32, AudioFormat::F32P)),
+                |choice| {
+                    choice.write((
+                        id::AudioFormat::S16,
+                        id::AudioFormat::F32,
+                        id::AudioFormat::F32P,
+                    ))
+                },
             )?;
-            obj.property(FormatKey::AUDIO_CHANNELS).write(1)?;
-            obj.property(FormatKey::AUDIO_RATE).write_choice(
+            obj.property(id::FormatKey::AUDIO_CHANNELS).write(1)?;
+            obj.property(id::FormatKey::AUDIO_RATE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |c| c.write((DEFAULT_RATE as u32, 44100, 48000)),
             )?;
             Ok(())
-        })?;
+        },
+    )?)?;
 
-    port.set_param(Param::ENUM_FORMAT, [PortParam::new(value)])?;
+    port.push_param(pod.clear_mut().embed(param::Meta {
+        ty: id::Meta::HEADER,
+        size: mem::size_of::<ffi::MetaHeader>(),
+    })?)?;
 
-    port.push_param(
-        Param::META,
-        PortParam::new(pod.clear_mut().embed(ParamMeta {
-            ty: Meta::HEADER,
-            size: mem::size_of::<ffi::MetaHeader>(),
-        })?),
-    )?;
+    port.push_param(pod.clear_mut().embed(param::Io {
+        ty: id::IoType::BUFFERS,
+        size: mem::size_of::<ffi::IoBuffers>(),
+    })?)?;
 
-    port.push_param(
-        Param::IO,
-        PortParam::new(pod.clear_mut().embed(ParamIo {
-            ty: IoType::BUFFERS,
-            size: mem::size_of::<ffi::IoBuffers>(),
-        })?),
-    )?;
+    port.push_param(pod.clear_mut().embed(param::Io {
+        ty: id::IoType::CLOCK,
+        size: mem::size_of::<ffi::IoClock>(),
+    })?)?;
 
-    port.push_param(
-        Param::IO,
-        PortParam::new(pod.clear_mut().embed(ParamIo {
-            ty: IoType::CLOCK,
-            size: mem::size_of::<ffi::IoClock>(),
-        })?),
-    )?;
+    port.push_param(pod.clear_mut().embed(param::Io {
+        ty: id::IoType::POSITION,
+        size: mem::size_of::<ffi::IoPosition>(),
+    })?)?;
 
-    port.push_param(
-        Param::IO,
-        PortParam::new(pod.clear_mut().embed(ParamIo {
-            ty: IoType::POSITION,
-            size: mem::size_of::<ffi::IoPosition>(),
-        })?),
-    )?;
-
-    let value = pod
-        .clear_mut()
-        .embed_object(ObjectType::PARAM_BUFFERS, Param::BUFFERS, |obj| {
-            obj.property(ParamBuffersKey::BUFFERS).write_choice(
+    port.push_param(pod.clear_mut().embed_object(
+        id::ObjectType::PARAM_BUFFERS,
+        id::Param::BUFFERS,
+        |obj| {
+            obj.property(id::ParamBuffersKey::BUFFERS).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| choice.write((1, 1, 32)),
             )?;
 
-            obj.property(ParamBuffersKey::BLOCKS).write(1i32)?;
+            obj.property(id::ParamBuffersKey::BLOCKS).write(1i32)?;
 
-            obj.property(ParamBuffersKey::SIZE).write_choice(
+            obj.property(id::ParamBuffersKey::SIZE).write_choice(
                 ChoiceType::RANGE,
                 Type::INT,
                 |choice| {
@@ -419,12 +393,12 @@ fn add_port_params(port: &mut Port) -> Result<()> {
                 },
             )?;
 
-            obj.property(ParamBuffersKey::STRIDE)
+            obj.property(id::ParamBuffersKey::STRIDE)
                 .write(mem::size_of::<f32>())?;
             Ok(())
-        })?;
+        },
+    )?)?;
 
-    port.set_param(Param::BUFFERS, [PortParam::new(value)])?;
-    port.set_write(Param::FORMAT);
+    port.set_write(id::Param::FORMAT);
     Ok(())
 }

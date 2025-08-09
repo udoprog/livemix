@@ -38,6 +38,7 @@ pub mod ids;
 pub mod flags;
 pub mod id;
 pub mod object;
+pub mod param;
 
 #[cfg(feature = "alloc")]
 pub mod buf;

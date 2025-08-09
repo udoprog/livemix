@@ -1217,7 +1217,7 @@ impl Stream {
         }
 
         tracing::warn!(
-            name: "io",
+            target: "io",
             ?direction,
             ?port_id,
             ?mix_id,
@@ -1268,7 +1268,7 @@ impl Stream {
         let mem_id = u32::try_from(mem_id).ok();
 
         tracing::warn!(
-            name: "io",
+            target: "io",
             ?direction,
             ?port_id,
             ?mix_id,
@@ -1396,7 +1396,7 @@ impl Stream {
         let peer_id = st.read::<i32>()?;
         let peer_id = u32::try_from(peer_id).ok().map(PortId::new);
 
-        tracing::warn!(?direction, ?port_id, ?mix_id, ?peer_id, "SetMixInfo");
+        tracing::warn!(target: "io", ?direction, ?port_id, ?mix_id, ?peer_id, "SetMixInfo");
 
         let mut props = st.read::<Struct<_>>()?;
         let n_items = props.read::<u32>()?;
